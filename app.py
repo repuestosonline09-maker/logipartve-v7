@@ -1,0 +1,301 @@
+# app.py
+# Aplicación principal LogiPartVE Pro v7.0
+
+import streamlit as st
+from pathlib import Path
+
+# Configuración de la página
+st.set_page_config(
+    page_title="LogiPartVE Pro",
+    page_icon="🔧",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Importar módulos
+from database.db_manager import DBManager
+from services.auth_manager import AuthManager
+from components.header import show_header
+from views.login_view import show_login
+from views.admin_panel import show_admin_panel
+
+# CSS global responsive
+st.markdown("""
+    <style>
+    /* Estilos generales */
+    .main {
+        padding: 1rem;
+    }
+    
+    /* Footer */
+    .footer {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        background-color: #f8f9fa;
+        text-align: center;
+        padding: 0.8rem;
+        color: #6c757d;
+        font-size: 0.9rem;
+        border-top: 1px solid #dee2e6;
+        z-index: 999;
+    }
+    
+    /* Ajuste para contenido con footer fijo */
+    .block-container {
+        padding-bottom: 4rem !important;
+    }
+    
+    /* Responsive móvil */
+    @media (max-width: 768px) {
+        .main {
+            padding: 0.5rem;
+        }
+        .footer {
+            font-size: 0.75rem;
+            padding: 0.5rem;
+        }
+    }
+    
+    /* Botón scroll to top */
+    .scroll-top {
+        position: fixed;
+        bottom: 60px;
+        right: 20px;
+        background-color: #1f77b4;
+        color: white;
+        border: none;
+        border-radius: 50%;
+        width: 50px;
+        height: 50px;
+        font-size: 24px;
+        cursor: pointer;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        z-index: 1000;
+        display: none;
+    }
+    
+    .scroll-top:hover {
+        background-color: #155a8a;
+    }
+    </style>
+    
+    <script>
+    // Scroll to top functionality
+    window.onscroll = function() {
+        var btn = document.querySelector('.scroll-top');
+        if (btn) {
+            if (document.body.scrollTop > 300 || document.documentElement.scrollTop > 300) {
+                btn.style.display = "block";
+            } else {
+                btn.style.display = "none";
+            }
+        }
+    };
+    
+    function scrollToTop() {
+        window.scrollTo({top: 0, behavior: 'smooth'});
+    }
+    </script>
+    
+    <button class="scroll-top" onclick="scrollToTop()">↑</button>
+""", unsafe_allow_html=True)
+
+# Inicializar base de datos
+DBManager.init_database()
+
+def main():
+    """Función principal de la aplicación."""
+    
+    # Verificar si el usuario está logueado
+    if not AuthManager.is_logged_in():
+        # Mostrar pantalla de login
+        show_login()
+    else:
+        # Usuario logueado - mostrar aplicación principal
+        show_main_app()
+    
+    # Footer fijo
+    st.markdown("""
+        <div class="footer">
+            LogiPartVE Pro v7.0 © 2026 - Todos los derechos reservados
+        </div>
+    """, unsafe_allow_html=True)
+
+
+def show_main_app():
+    """Muestra la aplicación principal después del login."""
+    
+    # Mostrar header
+    show_header()
+    
+    # Sidebar con información del usuario
+    with st.sidebar:
+        user = AuthManager.get_current_user()
+        
+        st.markdown("---")
+        
+        # Información del usuario
+        role_icon = "👑" if user['role'] == "admin" else "👤"
+        role_label = "Administrador" if user['role'] == "admin" else "Analista"
+        
+        st.markdown(f"### {role_icon} {user['full_name']}")
+        st.caption(f"Rol: {role_label}")
+        
+        st.markdown("---")
+        
+        # Menú de navegación
+        st.markdown("### 📋 Menú")
+        
+        menu_options = []
+        
+        if user['role'] == "admin":
+            menu_options = [
+                "🏠 Inicio",
+                "🔧 Panel de Administración",
+                "📝 Crear Cotización",
+                "📊 Mis Cotizaciones"
+            ]
+        else:
+            menu_options = [
+                "🏠 Inicio",
+                "📝 Crear Cotización",
+                "📊 Mis Cotizaciones"
+            ]
+        
+        selected_menu = st.radio("", menu_options, label_visibility="collapsed")
+        
+        st.markdown("---")
+        
+        # Botón de cerrar sesión
+        if st.button("🚪 Cerrar Sesión", use_container_width=True):
+            AuthManager.logout()
+            st.rerun()
+    
+    # Contenido principal según la opción seleccionada
+    if selected_menu == "🏠 Inicio":
+        show_home()
+    elif selected_menu == "🔧 Panel de Administración":
+        show_admin_panel()
+    elif selected_menu == "📝 Crear Cotización":
+        show_create_quote()
+    elif selected_menu == "📊 Mis Cotizaciones":
+        show_my_quotes()
+
+
+def show_home():
+    """Muestra la pantalla de inicio."""
+    
+    user = AuthManager.get_current_user()
+    
+    st.markdown(f"## ¡Bienvenido, {user['full_name']}! 👋")
+    
+    st.markdown("""
+        <div style="background-color: #d4edda; padding: 1.5rem; border-radius: 8px; border-left: 4px solid #28a745;">
+            <h3 style="color: #155724; margin-top: 0;">✅ Fase 1 Completa: Sistema de autenticación funcionando correctamente</h3>
+            <p style="color: #155724; margin-bottom: 0;">
+                El login, header y estructura base están operativos y aprobados.
+            </p>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("---")
+    
+    st.markdown("### 📋 Próximas Fases:")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("""
+            **✅ Fase 2: Panel de Administración (ACTUAL)**
+            - ✅ Gestión de usuarios
+            - ✅ Configuración del sistema
+            - ✅ Reportes básicos
+        """)
+        
+        st.markdown("""
+            **🔄 Fase 3: Panel de Analista**
+            - Creación de cotizaciones
+            - Gestión de items ilimitados
+            - Auto-detección de origen
+            - Sistema de caché
+        """)
+    
+    with col2:
+        st.markdown("""
+            **⏳ Fase 4: Motor de Cálculo de Precios**
+            - Traducción de fórmulas Excel a Python
+            - Variables editables por admin
+            - Cálculo dinámico
+            - Factores de ganancia
+        """)
+        
+        st.markdown("""
+            **⏳ Fase 5: Generador de Documentos**
+            - Generación de PDF (email)
+            - Generación de JPEG 1080x1920 (WhatsApp/Instagram)
+            - Diseño profesional responsive
+        """)
+    
+    st.markdown("---")
+    
+    # Información del sistema
+    with st.expander("ℹ️ Información del Sistema"):
+        st.markdown("""
+            **LogiPartVE Pro v7.0**
+            
+            Sistema de cotización profesional para autopartes con:
+            - 🔐 Autenticación multi-usuario (admin/analista)
+            - 💾 Base de datos SQLite (migrable a PostgreSQL)
+            - 📱 Diseño responsive (PC, laptops, TV, tablets, móviles)
+            - 📄 Generación dual: PDF + JPEG
+            - 🤖 Integración con IA (próximamente)
+            - ☁️ Caché inteligente de repuestos
+            
+            **Tecnologías:**
+            - Framework: Streamlit (Python)
+            - Base de datos: SQLite → PostgreSQL
+            - Autenticación: bcrypt
+            - Generación: ReportLab (PDF) + Pillow (JPEG)
+        """)
+
+
+def show_create_quote():
+    """Muestra el módulo de creación de cotizaciones (Fase 3)."""
+    
+    st.markdown("## 📝 Crear Nueva Cotización")
+    
+    st.info("""
+        🚧 **Módulo en Desarrollo - Fase 3**
+        
+        Este módulo estará disponible en la próxima fase e incluirá:
+        - Formulario de datos del cliente
+        - Gestión de items ilimitados
+        - Auto-detección de origen (Miami/Madrid)
+        - Sistema de caché de repuestos
+        - Cálculo automático de precios
+        - Vista previa de cotización
+    """)
+
+
+def show_my_quotes():
+    """Muestra el módulo de gestión de cotizaciones (Fase 3)."""
+    
+    st.markdown("## 📊 Mis Cotizaciones")
+    
+    st.info("""
+        🚧 **Módulo en Desarrollo - Fase 3**
+        
+        Este módulo estará disponible en la próxima fase e incluirá:
+        - Lista de todas tus cotizaciones
+        - Filtros por fecha, cliente, estado
+        - Búsqueda rápida
+        - Edición de cotizaciones
+        - Generación de PDF/JPEG
+        - Envío por email
+    """)
+
+
+if __name__ == "__main__":
+    main()
