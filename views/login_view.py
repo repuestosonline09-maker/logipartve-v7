@@ -24,7 +24,7 @@ def show_login():
         }
         .login-logo {
             max-width: 120px;
-            margin: 0 auto 1rem auto;
+            margin: 0 auto 0.8rem auto;
             display: block;
         }
         .login-title {
@@ -34,11 +34,16 @@ def show_login():
         }
         /* Responsive móvil */
         @media (max-width: 768px) {
+            .login-header {
+                margin-bottom: 1rem;
+            }
             .login-logo {
-                max-width: 100px;
+                max-width: 70px;
+                margin: 0 auto 0.5rem auto;
             }
             .login-title {
-                font-size: 1.2rem;
+                font-size: 1rem;
+                margin-bottom: 0.5rem;
             }
         }
         </style>
