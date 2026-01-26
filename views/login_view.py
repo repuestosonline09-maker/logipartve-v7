@@ -23,8 +23,8 @@ def show_login():
             margin-bottom: 2rem;
         }
         .login-logo {
-            max-width: 200px;
-            margin: 0 auto 1.5rem auto;
+            max-width: 120px;
+            margin: 0 auto 1rem auto;
             display: block;
         }
         .login-title {
@@ -35,7 +35,7 @@ def show_login():
         /* Responsive móvil */
         @media (max-width: 768px) {
             .login-logo {
-                max-width: 150px;
+                max-width: 100px;
             }
             .login-title {
                 font-size: 1.2rem;
