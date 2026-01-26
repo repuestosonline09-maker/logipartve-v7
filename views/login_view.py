@@ -35,15 +35,21 @@ def show_login():
         /* Responsive móvil */
         @media (max-width: 768px) {
             .login-header {
-                margin-bottom: 1rem;
+                margin-bottom: 0.5rem;
+                margin-top: 0.5rem;
             }
             .login-logo {
-                max-width: 70px;
-                margin: 0 auto 0.5rem auto;
+                max-width: 60px;
+                margin: 0 auto 0.3rem auto;
             }
             .login-title {
-                font-size: 1rem;
-                margin-bottom: 0.5rem;
+                font-size: 0.9rem;
+                margin-bottom: 0.3rem;
+                line-height: 1.2;
+            }
+            /* Reducir espaciado de inputs en móvil */
+            .stTextInput, .stButton {
+                margin-bottom: 0.5rem !important;
             }
         }
         </style>
