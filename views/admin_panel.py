@@ -342,6 +342,68 @@ def show_system_configuration():
                 st.rerun()
     
     st.markdown("---")
+    st.markdown("#### Tarifas de Flete")
+    
+    # Obtener tarifas actuales
+    freight_rates = DBManager.get_all_freight_rates()
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.markdown("**Miami Aéreo**")
+        miami_air_rate = next((r['rate'] for r in freight_rates if r['origin'] == 'Miami' and r['shipping_type'] == 'Aéreo'), 9.0)
+        with st.form("miami_air_form"):
+            miami_air = st.number_input(
+                "Tarifa ($/lb)",
+                min_value=0.0,
+                value=float(miami_air_rate),
+                step=0.1,
+                help="Costo por libra para envío aéreo desde Miami"
+            )
+            submit_miami_air = st.form_submit_button("💾 Guardar", use_container_width=True)
+            if submit_miami_air:
+                DBManager.update_freight_rate('Miami', 'Aéreo', miami_air, st.session_state.user_id)
+                st.success("✅ Tarifa actualizada")
+                DBManager.log_activity(st.session_state.user_id, "update_freight_rate", "Actualizó tarifa Miami Aéreo")
+                st.rerun()
+    
+    with col2:
+        st.markdown("**Miami Marítimo**")
+        miami_sea_rate = next((r['rate'] for r in freight_rates if r['origin'] == 'Miami' and r['shipping_type'] == 'Marítimo'), 40.0)
+        with st.form("miami_sea_form"):
+            miami_sea = st.number_input(
+                "Tarifa ($/ft³)",
+                min_value=0.0,
+                value=float(miami_sea_rate),
+                step=0.5,
+                help="Costo por pie cúbico para envío marítimo desde Miami"
+            )
+            submit_miami_sea = st.form_submit_button("💾 Guardar", use_container_width=True)
+            if submit_miami_sea:
+                DBManager.update_freight_rate('Miami', 'Marítimo', miami_sea, st.session_state.user_id)
+                st.success("✅ Tarifa actualizada")
+                DBManager.log_activity(st.session_state.user_id, "update_freight_rate", "Actualizó tarifa Miami Marítimo")
+                st.rerun()
+    
+    with col3:
+        st.markdown("**Madrid Aéreo**")
+        madrid_air_rate = next((r['rate'] for r in freight_rates if r['origin'] == 'Madrid' and r['shipping_type'] == 'Aéreo'), 25.0)
+        with st.form("madrid_air_form"):
+            madrid_air = st.number_input(
+                "Tarifa ($/kg)",
+                min_value=0.0,
+                value=float(madrid_air_rate),
+                step=0.5,
+                help="Costo por kilogramo para envío aéreo desde Madrid"
+            )
+            submit_madrid_air = st.form_submit_button("💾 Guardar", use_container_width=True)
+            if submit_madrid_air:
+                DBManager.update_freight_rate('Madrid', 'Aéreo', madrid_air, st.session_state.user_id)
+                st.success("✅ Tarifa actualizada")
+                DBManager.log_activity(st.session_state.user_id, "update_freight_rate", "Actualizó tarifa Madrid Aéreo")
+                st.rerun()
+    
+    st.markdown("---")
     st.markdown("#### Opciones de Garantías")
     
     with st.form("warranties_form"):

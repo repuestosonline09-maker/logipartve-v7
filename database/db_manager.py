@@ -129,6 +129,21 @@ class DBManager:
             )
         """)
         
+        # Tabla 8: freight_rates (tarifas de flete)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS freight_rates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                origin TEXT NOT NULL CHECK(origin IN ('Miami', 'Madrid')),
+                shipping_type TEXT NOT NULL CHECK(shipping_type IN ('Aéreo', 'Marítimo')),
+                rate REAL NOT NULL,
+                unit TEXT NOT NULL,
+                updated_by INTEGER,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (updated_by) REFERENCES users(id),
+                UNIQUE(origin, shipping_type)
+            )
+        """)
+        
         conn.commit()
         
         # Crear usuario admin por defecto si no existe
@@ -159,6 +174,24 @@ class DBManager:
                     INSERT INTO system_config (key, value, description)
                     VALUES (?, ?, ?)
                 """, (key, value, description))
+        
+        # Insertar tarifas de flete por defecto si no existen
+        default_freight_rates = [
+            ("Miami", "Aéreo", 9.0, "$/lb"),
+            ("Miami", "Marítimo", 40.0, "$/ft³"),
+            ("Madrid", "Aéreo", 25.0, "$/kg")
+        ]
+        
+        for origin, shipping_type, rate, unit in default_freight_rates:
+            cursor.execute(
+                "SELECT COUNT(*) FROM freight_rates WHERE origin = ? AND shipping_type = ?",
+                (origin, shipping_type)
+            )
+            if cursor.fetchone()[0] == 0:
+                cursor.execute("""
+                    INSERT INTO freight_rates (origin, shipping_type, rate, unit)
+                    VALUES (?, ?, ?, ?)
+                """, (origin, shipping_type, rate, unit))
         
         conn.commit()
         conn.close()
@@ -426,3 +459,50 @@ class DBManager:
             'by_status': by_status,
             'by_analyst': by_analyst
         }
+
+    # ========== MÉTODOS PARA FREIGHT_RATES ==========
+    
+    @staticmethod
+    def get_all_freight_rates() -> List[Dict]:
+        """Obtiene todas las tarifas de flete."""
+        conn = DBManager.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, origin, shipping_type, rate, unit, updated_at
+            FROM freight_rates
+            ORDER BY origin, shipping_type
+        """)
+        rows = cursor.fetchall()
+        conn.close()
+        return [dict(row) for row in rows]
+    
+    @staticmethod
+    def get_freight_rate(origin: str, shipping_type: str) -> Optional[float]:
+        """Obtiene la tarifa de flete para un origen y tipo de envío específico."""
+        conn = DBManager.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT rate FROM freight_rates 
+            WHERE origin = ? AND shipping_type = ?
+        """, (origin, shipping_type))
+        row = cursor.fetchone()
+        conn.close()
+        return row['rate'] if row else None
+    
+    @staticmethod
+    def update_freight_rate(origin: str, shipping_type: str, rate: float, updated_by: int = None) -> bool:
+        """Actualiza una tarifa de flete."""
+        try:
+            conn = DBManager.get_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE freight_rates 
+                SET rate = ?, updated_by = ?, updated_at = ?
+                WHERE origin = ? AND shipping_type = ?
+            """, (rate, updated_by, datetime.now(), origin, shipping_type))
+            conn.commit()
+            conn.close()
+            return True
+        except Exception as e:
+            print(f"Error updating freight rate: {e}")
+            return False
