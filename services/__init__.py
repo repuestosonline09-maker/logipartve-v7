@@ -8,14 +8,5 @@ Este módulo contiene los servicios core del sistema de cotización:
 - AIParser: Parseo de respuestas de IA
 """
 
-from .url_validator import URLValidator
-from .calculation_service import CalculationService
-from .ai_service import AIService
-from .ai_parser import AIParser
-
-__all__ = [
-    'URLValidator',
-    'CalculationService',
-    'AIService',
-    'AIParser'
-]
+# No importamos automáticamente para evitar errores de dependencias
+# Los imports se hacen directamente en los módulos que los necesitan
