@@ -18,6 +18,7 @@ from services.auth_manager import AuthManager
 from components.header import show_header
 from views.login_view import show_login
 from views.admin_panel import show_admin_panel
+from views.analyst_panel import render_analyst_panel
 
 # CSS global responsive
 st.markdown("""
@@ -264,19 +265,8 @@ def show_home():
 def show_create_quote():
     """Muestra el módulo de creación de cotizaciones (Fase 3)."""
     
-    st.markdown("## 📝 Crear Nueva Cotización")
-    
-    st.info("""
-        🚧 **Módulo en Desarrollo - Fase 3**
-        
-        Este módulo estará disponible en la próxima fase e incluirá:
-        - Formulario de datos del cliente
-        - Gestión de items ilimitados
-        - Auto-detección de origen (Miami/Madrid)
-        - Sistema de caché de repuestos
-        - Cálculo automático de precios
-        - Vista previa de cotización
-    """)
+    # Renderizar el panel de analista
+    render_analyst_panel()
 
 
 def show_my_quotes():
