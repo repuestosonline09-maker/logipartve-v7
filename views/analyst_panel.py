@@ -3,11 +3,6 @@ Panel de Analista - LogiPartVE Pro v7.0
 Interfaz principal para generar cotizaciones de repuestos
 """
 import streamlit as st
-import sys
-import os
-
-# Agregar el directorio padre al path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from services.url_validator import URLValidator
 from services.calculation_service import CalculationService

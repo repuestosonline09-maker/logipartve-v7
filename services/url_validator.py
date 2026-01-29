@@ -3,11 +3,6 @@ Servicio de validación de URLs contra lista blanca
 """
 import re
 from urllib.parse import urlparse
-import sys
-import os
-
-# Agregar el directorio padre al path para importar prompts
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from prompts.omni_parts_prompt import WHITELIST_SITES
 
 

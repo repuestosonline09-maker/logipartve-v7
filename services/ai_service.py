@@ -3,10 +3,6 @@ Servicio de IA para análisis de repuestos
 Integra Gemini (primario) y OpenAI (fallback)
 """
 import os
-import sys
-
-# Agregar el directorio padre al path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 try:
     import google.generativeai as genai

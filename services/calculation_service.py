@@ -1,19 +1,11 @@
 """
 Servicio de cálculos de flete y peso volumétrico
 """
-import sys
-import os
-
-# Agregar el directorio padre al path para importar database
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from database.db_manager import DatabaseManager
+from database.db_manager import DBManager
 
 
 class CalculationService:
     """Servicio para cálculos de logística y flete"""
-    
-    def __init__(self):
-        self.db = DatabaseManager()
     
     def calculate_volumetric_weight(self, length_cm: float, width_cm: float, 
                                    height_cm: float) -> float:
@@ -47,7 +39,7 @@ class CalculationService:
                 'shipping_type': str
             }
         """
-        rate = self.db.get_freight_rate(origin, shipping_type)
+        rate = DBManager.get_freight_rate(origin, shipping_type)
         
         if not rate:
             return {
@@ -58,11 +50,17 @@ class CalculationService:
                 'error': 'Tarifa no encontrada'
             }
         
+        # Determinar unidad según origen y tipo
+        if shipping_type == "Aéreo":
+            unit = "$/lb" if origin == "Miami" else "$/kg"
+        else:  # Marítimo
+            unit = "$/ft³"
+        
         return {
-            'rate': rate['rate_per_unit'],
-            'unit': rate['unit'],
-            'origin': rate['origin'],
-            'shipping_type': rate['shipping_type']
+            'rate': rate,
+            'unit': unit,
+            'origin': origin,
+            'shipping_type': shipping_type
         }
     
     def calculate_freight_cost(self, origin: str, shipping_type: str,
