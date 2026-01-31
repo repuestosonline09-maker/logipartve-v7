@@ -1,6 +1,7 @@
 """
 Panel de Analista - LogiPartVE Pro v7.0
 Interfaz principal para generar cotizaciones de repuestos
+Flujo: Completar ítem → Ver resultado → Agregar otro ítem
 """
 import streamlit as st
 
@@ -16,9 +17,13 @@ def render_analyst_panel():
     st.title("📋 Panel de Analista")
     st.markdown("---")
     
-    # Inicializar estado de ítems PRIMERO (antes de servicios)
-    if 'items' not in st.session_state:
-        st.session_state.items = []
+    # Inicializar estado de ítems completados PRIMERO
+    if 'completed_items' not in st.session_state:
+        st.session_state.completed_items = []
+    
+    # Inicializar estado del ítem actual
+    if 'current_item_analyzed' not in st.session_state:
+        st.session_state.current_item_analyzed = False
     
     # Inicializar servicios (con manejo de errores)
     try:
@@ -34,345 +39,345 @@ def render_analyst_panel():
         st.error(f"Error al inicializar servicios: {str(e)}")
         st.info("Algunas funcionalidades pueden estar limitadas.")
     
-    # SECCIÓN 1: DATOS DEL CLIENTE
-    st.subheader("👤 Datos del Cliente")
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        cliente_nombre = st.text_input("Nombre del Cliente", key="cliente_nombre")
-    with col2:
-        cliente_email = st.text_input("Email", key="cliente_email")
-    with col3:
-        cliente_telefono = st.text_input("Teléfono", key="cliente_telefono")
-    
-    st.markdown("---")
-    
-    # SECCIÓN 2: DATOS DE ENVÍO
-    st.subheader("🚢 Datos de Envío")
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        origen = st.selectbox(
-            "Puerto de Origen",
-            ["Miami", "Madrid", "Dubai"],
-            key="origen_envio"
-        )
-    with col2:
-        tipo_envio = st.selectbox(
-            "Tipo de Envío",
-            ["Aéreo", "Marítimo"],
-            key="tipo_envio"
-        )
-    
-    st.markdown("---")
-    
-    # SECCIÓN 3: ÍTEMS DE COTIZACIÓN
-    st.subheader("📦 Ítems de la Cotización")
-    
-    # 🔍 DEBUG: Mostrar estado actual
-    st.info(f"🔍 DEBUG: Total de ítems en memoria: {len(st.session_state.items)}")
-    if len(st.session_state.items) > 0:
-        st.success(f"✅ Hay {len(st.session_state.items)} ítem(s) agregado(s)")
-    
-    # Botón para agregar nuevo ítem
-    col_btn, col_space = st.columns([1, 3])
-    with col_btn:
-        if st.button("➕ Agregar Nuevo Ítem", type="primary", use_container_width=True):
-            st.write("🔍 DEBUG: ¡Botón clickeado!")
-            new_item = {
-                'id': len(st.session_state.items),
-                'vehiculo': '',
-                'repuesto': '',
-                'numero_parte': '',
-                'url': '',
-                'cantidad': 1,
-                'analizado': False,
-                'resultado': None
-            }
-            st.write(f"🔍 DEBUG: Nuevo ítem creado con ID: {new_item['id']}")
-            st.session_state.items.append(new_item)
-            st.write(f"🔍 DEBUG: Ítem agregado. Total ahora: {len(st.session_state.items)}")
-            st.write("🔍 DEBUG: Ejecutando st.rerun()...")
-            st.rerun()
-    
-    # 🔍 DEBUG: Verificar qué se va a renderizar
-    st.write(f"🔍 DEBUG: Verificando renderizado... Total ítems: {len(st.session_state.items)}")
-    
-    # Renderizar cada ítem
-    if len(st.session_state.items) == 0:
-        st.info("👆 Haz clic en 'Agregar Nuevo Ítem' para comenzar")
-    else:
-        st.success(f"📋 Mostrando {len(st.session_state.items)} ítem(s):")
-        for idx, item in enumerate(st.session_state.items):
-            st.write(f"🔍 DEBUG: Renderizando ítem #{idx}")
-            try:
-                render_item_form(idx, item, origen, tipo_envio)
-                st.write(f"✅ DEBUG: Ítem #{idx} renderizado exitosamente")
-            except Exception as e:
-                st.error(f"❌ DEBUG: Error al renderizar ítem #{idx}: {str(e)}")
-                st.exception(e)
-    
-    st.markdown("---")
-    
-    # SECCIÓN 4: RESUMEN Y TOTALES
-    if len(st.session_state.items) > 0:
-        render_summary()
-    
-    # SECCIÓN 5: ACCIONES
-    if len(st.session_state.items) > 0:
-        col1, col2, col3 = st.columns([1, 1, 2])
+    # SECCIÓN 1: DATOS DEL CLIENTE (solo la primera vez)
+    if len(st.session_state.completed_items) == 0:
+        st.subheader("👤 Datos del Cliente")
+        col1, col2, col3 = st.columns(3)
         
         with col1:
-            if st.button("🗑️ Limpiar Todo", type="secondary"):
-                st.session_state.items = []
-                st.rerun()
+            cliente_nombre = st.text_input(
+                "Nombre del Cliente",
+                key="cliente_nombre"
+            )
         
         with col2:
-            if st.button("💾 Guardar Cotización", type="primary"):
-                st.info("Funcionalidad de guardado en desarrollo (Fase 4)")
+            cliente_email = st.text_input(
+                "Email",
+                key="cliente_email"
+            )
         
         with col3:
-            if st.button("📄 Generar PDF", type="primary"):
-                st.info("Funcionalidad de PDF en desarrollo (Fase 5)")
-
-
-def render_item_form(idx, item, origen, tipo_envio):
-    """Renderiza el formulario para un ítem individual"""
-    
-    with st.expander(f"📦 Ítem #{idx + 1}", expanded=not item['analizado']):
-        col1, col2 = st.columns([5, 1])
+            cliente_telefono = st.text_input(
+                "Teléfono",
+                key="cliente_telefono"
+            )
         
-        with col2:
-            if st.button("🗑️", key=f"delete_{idx}", help="Eliminar ítem"):
-                st.session_state.items.pop(idx)
-                st.rerun()
+        st.markdown("---")
         
-        # Formulario de entrada
+        # SECCIÓN 2: DATOS DE ENVÍO (solo la primera vez)
+        st.subheader("🚢 Datos de Envío")
         col1, col2 = st.columns(2)
         
         with col1:
-            vehiculo = st.text_input(
-                "Vehículo",
-                value=item['vehiculo'],
-                key=f"vehiculo_{idx}",
-                placeholder="Ej: TOYOTA COROLLA 2020"
-            )
-            repuesto = st.text_input(
-                "Repuesto",
-                value=item['repuesto'],
-                key=f"repuesto_{idx}",
-                placeholder="Ej: FILTRO DE ACEITE"
+            origen = st.selectbox(
+                "Puerto de Origen",
+                options=["Miami", "Madrid"],
+                key="origen"
             )
         
         with col2:
-            numero_parte = st.text_input(
-                "Número de Parte",
-                value=item['numero_parte'],
-                key=f"numero_parte_{idx}",
-                placeholder="Ej: 90915-YZZD2"
-            )
-            cantidad = st.number_input(
-                "Cantidad",
-                min_value=1,
-                value=item['cantidad'],
-                key=f"cantidad_{idx}"
-            )
+            if origen == "Miami":
+                tipo_envio = st.selectbox(
+                    "Tipo de Envío",
+                    options=["Aéreo", "Marítimo"],
+                    key="tipo_envio"
+                )
+            else:  # Madrid
+                tipo_envio = "Aéreo"
+                st.selectbox(
+                    "Tipo de Envío",
+                    options=["Aéreo"],
+                    key="tipo_envio_madrid",
+                    disabled=True
+                )
         
-        url = st.text_input(
-            "URL del Producto (Opcional)",
-            value=item['url'],
-            key=f"url_{idx}",
-            placeholder="https://www.amazon.com/..."
-        )
+        st.markdown("---")
+    else:
+        # Recuperar datos guardados
+        cliente_nombre = st.session_state.get("cliente_nombre", "")
+        cliente_email = st.session_state.get("cliente_email", "")
+        cliente_telefono = st.session_state.get("cliente_telefono", "")
+        origen = st.session_state.get("origen", "Miami")
+        tipo_envio = st.session_state.get("tipo_envio", "Aéreo")
+    
+    # SECCIÓN 3: ÍTEM ACTUAL
+    item_number = len(st.session_state.completed_items) + 1
+    st.subheader(f"📦 Ítem #{item_number}")
+    
+    # Si ya se analizó el ítem actual, mostrar resultado
+    if st.session_state.current_item_analyzed and 'current_item_result' in st.session_state:
+        render_item_result(st.session_state.current_item_result, item_number)
         
-        # Validar URL si se proporciona
-        if url:
-            validation = st.session_state.url_validator.validate(url)
-            if not validation['whitelisted']:
-                st.warning(f"⚠️ {validation['message']}")
+        # Botón para agregar otro ítem
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            if st.button("➕ AGREGAR OTRO ÍTEM", type="primary", use_container_width=True):
+                # Guardar ítem actual en completados
+                st.session_state.completed_items.append(st.session_state.current_item_result)
+                # Resetear estado
+                st.session_state.current_item_analyzed = False
+                if 'current_item_result' in st.session_state:
+                    del st.session_state.current_item_result
+                st.rerun()
         
-        # Botón para analizar
-        if st.button(f"🚀 Analizar con IA", key=f"analyze_{idx}", type="primary"):
-            if not vehiculo or not repuesto or not numero_parte:
-                st.error("❌ Por favor completa los campos: Vehículo, Repuesto y Número de Parte")
-            else:
-                analyze_item(idx, vehiculo, repuesto, numero_parte, url, cantidad, origen, tipo_envio)
+        st.markdown("---")
         
-        # Mostrar resultados si ya fue analizado
-        if item['analizado'] and item['resultado']:
-            render_item_results(item['resultado'])
+        # Botón para finalizar cotización
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            if st.button("✅ FINALIZAR COTIZACIÓN", type="secondary", use_container_width=True):
+                # Guardar último ítem
+                st.session_state.completed_items.append(st.session_state.current_item_result)
+                st.session_state.current_item_analyzed = False
+                if 'current_item_result' in st.session_state:
+                    del st.session_state.current_item_result
+                st.rerun()
+    
+    else:
+        # Mostrar formulario para nuevo ítem
+        render_item_form(origen, tipo_envio, item_number)
+    
+    # SECCIÓN 4: RESUMEN DE ÍTEMS COMPLETADOS
+    if len(st.session_state.completed_items) > 0 and not st.session_state.current_item_analyzed:
+        st.markdown("---")
+        render_summary(st.session_state.completed_items, origen, tipo_envio)
 
 
-def analyze_item(idx, vehiculo, repuesto, numero_parte, url, cantidad, origen, tipo_envio):
-    """Analiza un ítem usando los servicios de IA"""
+def render_item_form(origen, tipo_envio, item_number):
+    """Renderiza el formulario para un ítem"""
     
-    with st.spinner("🔍 Analizando con IA..."):
-        # Llamar al servicio de IA
-        if url:
-            result = st.session_state.ai_service.analyze_part_with_url(
-                vehiculo, repuesto, numero_parte, url, origen, tipo_envio
-            )
-        else:
-            result = st.session_state.ai_service.analyze_part_without_url(
-                vehiculo, repuesto, numero_parte, origen, tipo_envio
-            )
-        
-        if not result['success']:
-            st.error(f"❌ Error: {result.get('error', 'Error desconocido')}")
-            return
-        
-        # Parsear la respuesta
-        parsed_data = st.session_state.ai_parser.parse_response(result['response'])
-        
-        # Validar respuesta
-        validation = st.session_state.ai_parser.validate_response(parsed_data)
-        
-        # Calcular costos si tenemos datos
-        if parsed_data['peso_kg'] and all(parsed_data['embalaje'].values()):
-            peso_vol = st.session_state.calc_service.calculate_volumetric_weight(
-                parsed_data['embalaje']['largo_cm'],
-                parsed_data['embalaje']['ancho_cm'],
-                parsed_data['embalaje']['alto_cm']
-            )
-            
-            freight_calc = st.session_state.calc_service.calculate_freight_cost(
-                origen,
-                tipo_envio,
-                parsed_data['peso_kg'],
-                peso_vol,
-                parsed_data['embalaje']['largo_cm'],
-                parsed_data['embalaje']['ancho_cm'],
-                parsed_data['embalaje']['alto_cm']
-            )
-            
-            parsed_data['peso_volumetrico'] = peso_vol
-            parsed_data['freight_cost'] = freight_calc.get('freight_cost', 0)
-            parsed_data['freight_details'] = freight_calc
-        
-        # Guardar resultado
-        st.session_state.items[idx]['vehiculo'] = vehiculo
-        st.session_state.items[idx]['repuesto'] = repuesto
-        st.session_state.items[idx]['numero_parte'] = numero_parte
-        st.session_state.items[idx]['url'] = url
-        st.session_state.items[idx]['cantidad'] = cantidad
-        st.session_state.items[idx]['analizado'] = True
-        st.session_state.items[idx]['resultado'] = {
-            'parsed_data': parsed_data,
-            'validation': validation,
-            'ai_provider': result['provider'],
-            'raw_response': result['response']
-        }
-        
-        st.rerun()
-
-
-def render_item_results(resultado):
-    """Renderiza los resultados del análisis de un ítem"""
+    # URL Opcional
+    st.markdown("### 🔗 Cotización por URL (Opcional)")
+    url = st.text_input(
+        "Pegue aquí el enlace del producto (opcional)",
+        placeholder="https://www.amazon.com/...",
+        key=f"url_{item_number}"
+    )
     
-    st.markdown("### 📊 Resultados del Análisis")
+    st.markdown("---")
     
-    parsed = resultado['parsed_data']
-    validation = resultado['validation']
+    # Información del Repuesto
+    st.markdown("### 📝 Información del Repuesto")
     
-    # Proveedor de IA
-    provider_emoji = "🤖" if resultado['ai_provider'] == 'gemini' else "🧠"
-    st.caption(f"{provider_emoji} Analizado con: {resultado['ai_provider'].upper()}")
-    
-    # Advertencias
-    if validation['warnings']:
-        for warning in validation['warnings']:
-            st.warning(f"⚠️ {warning}")
-    
-    # Datos principales
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.metric("Peso Real", f"{parsed['peso_kg'] or 0} kg")
-    with col2:
-        st.metric("Peso Volumétrico", f"{parsed.get('peso_volumetrico', 0):.2f} kg")
-    with col3:
-        if 'freight_cost' in parsed:
-            st.metric("Costo Flete", f"${parsed['freight_cost']:.2f}")
-    
-    # Descripción
-    if parsed['descripcion']:
-        st.text_area("Descripción", parsed['descripcion'], height=100, disabled=True)
-    
-    # Dimensiones
     col1, col2 = st.columns(2)
     
     with col1:
-        if any(parsed['dimensiones'].values()):
-            st.write("**Dimensiones del Producto:**")
-            st.write(f"📏 {parsed['dimensiones']['largo_cm']} × {parsed['dimensiones']['ancho_cm']} × {parsed['dimensiones']['alto_cm']} cm")
+        vehiculo = st.text_input(
+            "Vehículo",
+            placeholder="Ej: Ford F-150 2020",
+            key=f"vehiculo_{item_number}"
+        )
+        
+        repuesto = st.text_input(
+            "Repuesto",
+            placeholder="Ej: Bomba de agua",
+            key=f"repuesto_{item_number}"
+        )
     
     with col2:
-        if any(parsed['embalaje'].values()):
-            st.write("**Dimensiones del Embalaje:**")
-            st.write(f"📦 {parsed['embalaje']['largo_cm']} × {parsed['embalaje']['ancho_cm']} × {parsed['embalaje']['alto_cm']} cm")
+        cantidad = st.number_input(
+            "Cantidad",
+            min_value=1,
+            value=1,
+            step=1,
+            key=f"cantidad_{item_number}"
+        )
+        
+        numero_parte = st.text_input(
+            "N° Parte",
+            placeholder="Ej: 12345-ABC",
+            key=f"numero_parte_{item_number}"
+        )
     
-    # Números de parte alternativos
-    if parsed['numeros_parte_alternativos']:
-        st.write("**Números de Parte Alternativos:**")
-        st.write(", ".join(parsed['numeros_parte_alternativos']))
+    st.markdown("---")
     
-    # Nivel de confianza
-    if parsed['nivel_confianza']:
-        confidence_color = {
-            'ALTA': '🟢',
-            'MEDIA': '🟡',
-            'BAJA': '🔴'
-        }
-        st.write(f"**Nivel de Confianza:** {confidence_color.get(parsed['nivel_confianza'], '⚪')} {parsed['nivel_confianza']}")
-    
-    # Sitios consultados
-    if parsed['sitios_consultados']:
-        st.write("**Sitios Consultados:**")
-        st.write(", ".join(parsed['sitios_consultados']))
-    
-    # Ver respuesta completa
-    with st.expander("Ver Respuesta Completa de la IA"):
-        st.text(resultado['raw_response'])
+    # Botón para analizar
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        if st.button("🔍 ANALIZAR CON IA", type="primary", use_container_width=True, key=f"analyze_{item_number}"):
+            # Validar campos requeridos
+            if not vehiculo or not repuesto:
+                st.error("⚠️ Por favor completa al menos Vehículo y Repuesto")
+                return
+            
+            # Validar URL si se proporcionó
+            url_valida = False
+            if url:
+                with st.spinner("Validando URL..."):
+                    validation_result = st.session_state.url_validator.validate_url(url)
+                    if validation_result['valida']:
+                        url_valida = True
+                        st.success(f"✅ URL válida: {validation_result['dominio']}")
+                    else:
+                        st.error(f"❌ {validation_result['mensaje']}")
+                        return
+            
+            # Analizar con IA
+            with st.spinner("🤖 Analizando con IA..."):
+                try:
+                    # Preparar prompt
+                    if url_valida:
+                        prompt = f"""
+Analiza este repuesto:
+- Vehículo: {vehiculo}
+- Repuesto: {repuesto}
+- Cantidad: {cantidad}
+- Número de Parte: {numero_parte}
+- URL: {url}
+
+Valida que el repuesto aplique al vehículo y proporciona:
+1. Descripción detallada
+2. Peso estimado (lb)
+3. Dimensiones (L x A x H en pulgadas)
+4. Tipo de embalaje
+5. Nivel de confianza (Alto/Medio/Bajo)
+"""
+                    else:
+                        prompt = f"""
+Analiza este repuesto:
+- Vehículo: {vehiculo}
+- Repuesto: {repuesto}
+- Cantidad: {cantidad}
+- Número de Parte: {numero_parte}
+
+Proporciona:
+1. Descripción detallada
+2. Peso estimado (lb)
+3. Dimensiones (L x A x H en pulgadas)
+4. Tipo de embalaje
+5. Nivel de confianza (Alto/Medio/Bajo)
+"""
+                    
+                    # Llamar a IA
+                    ai_response = st.session_state.ai_service.analyze_part(prompt)
+                    
+                    # Parsear respuesta
+                    parsed_data = st.session_state.ai_parser.parse_response(ai_response)
+                    
+                    if parsed_data['completo']:
+                        # Calcular peso volumétrico
+                        peso_vol = st.session_state.calc_service.calcular_peso_volumetrico(
+                            parsed_data['largo'],
+                            parsed_data['ancho'],
+                            parsed_data['alto']
+                        )
+                        
+                        # Calcular costo de flete
+                        costo_flete = st.session_state.calc_service.calcular_costo_flete(
+                            parsed_data['peso'],
+                            peso_vol,
+                            origen,
+                            tipo_envio
+                        )
+                        
+                        # Guardar resultado
+                        st.session_state.current_item_result = {
+                            'vehiculo': vehiculo,
+                            'repuesto': repuesto,
+                            'cantidad': cantidad,
+                            'numero_parte': numero_parte,
+                            'url': url if url_valida else None,
+                            'descripcion': parsed_data['descripcion'],
+                            'peso': parsed_data['peso'],
+                            'dimensiones': f"{parsed_data['largo']} x {parsed_data['ancho']} x {parsed_data['alto']}",
+                            'peso_volumetrico': peso_vol,
+                            'embalaje': parsed_data['embalaje'],
+                            'confianza': parsed_data['confianza'],
+                            'costo_flete': costo_flete,
+                            'origen': origen,
+                            'tipo_envio': tipo_envio
+                        }
+                        
+                        st.session_state.current_item_analyzed = True
+                        st.rerun()
+                    else:
+                        st.error("❌ No se pudo obtener información completa del repuesto")
+                        st.info("💡 Intenta agregar más detalles o una URL válida")
+                
+                except Exception as e:
+                    st.error(f"❌ Error al analizar: {str(e)}")
 
 
-def render_summary():
-    """Renderiza el resumen de la cotización"""
+def render_item_result(item, item_number):
+    """Renderiza el resultado de un ítem analizado"""
     
-    st.subheader("📊 Resumen de la Cotización")
+    st.success(f"✅ Ítem #{item_number} analizado exitosamente")
     
-    total_items = len(st.session_state.items)
-    items_analizados = sum(1 for item in st.session_state.items if item['analizado'])
-    
-    col1, col2, col3, col4 = st.columns(4)
+    # Información del repuesto
+    col1, col2 = st.columns(2)
     
     with col1:
-        st.metric("Total Ítems", total_items)
+        st.markdown("**📦 Información:**")
+        st.write(f"**Vehículo:** {item['vehiculo']}")
+        st.write(f"**Repuesto:** {item['repuesto']}")
+        st.write(f"**Cantidad:** {item['cantidad']}")
+        st.write(f"**N° Parte:** {item['numero_parte']}")
+        if item['url']:
+            st.write(f"**URL:** {item['url']}")
     
     with col2:
-        st.metric("Analizados", items_analizados)
+        st.markdown("**📊 Análisis IA:**")
+        st.write(f"**Descripción:** {item['descripcion']}")
+        st.write(f"**Peso:** {item['peso']} lb")
+        st.write(f"**Dimensiones:** {item['dimensiones']} in")
+        st.write(f"**Peso Vol.:** {item['peso_volumetrico']:.2f}")
+        st.write(f"**Embalaje:** {item['embalaje']}")
+        st.write(f"**Confianza:** {item['confianza']}")
     
-    # Calcular totales
-    total_peso = 0
-    total_flete = 0
+    # Precio
+    st.markdown("---")
+    st.markdown(f"### 💰 Precio de Flete: **${item['costo_flete']:.2f}**")
+    st.caption(f"Origen: {item['origen']} | Tipo: {item['tipo_envio']}")
+
+
+def render_summary(completed_items, origen, tipo_envio):
+    """Renderiza el resumen de todos los ítems completados"""
     
-    for item in st.session_state.items:
-        if item['analizado'] and item['resultado']:
-            parsed = item['resultado']['parsed_data']
-            cantidad = item['cantidad']
+    st.subheader("📊 Resumen de Cotización")
+    
+    # Tabla de ítems
+    st.markdown("### Ítems cotizados:")
+    
+    total = 0
+    for idx, item in enumerate(completed_items, 1):
+        with st.expander(f"Ítem #{idx}: {item['repuesto']} - ${item['costo_flete']:.2f}"):
+            col1, col2 = st.columns(2)
             
-            if parsed['peso_kg']:
-                total_peso += parsed['peso_kg'] * cantidad
+            with col1:
+                st.write(f"**Vehículo:** {item['vehiculo']}")
+                st.write(f"**Repuesto:** {item['repuesto']}")
+                st.write(f"**Cantidad:** {item['cantidad']}")
+                st.write(f"**N° Parte:** {item['numero_parte']}")
             
-            if 'freight_cost' in parsed:
-                total_flete += parsed['freight_cost'] * cantidad
+            with col2:
+                st.write(f"**Peso:** {item['peso']} lb")
+                st.write(f"**Dimensiones:** {item['dimensiones']} in")
+                st.write(f"**Embalaje:** {item['embalaje']}")
+                st.write(f"**Confianza:** {item['confianza']}")
+        
+        total += item['costo_flete']
+    
+    # Total
+    st.markdown("---")
+    st.markdown(f"## 💰 TOTAL DE LA COTIZACIÓN: **${total:.2f}**")
+    st.caption(f"Origen: {origen} | Tipo de Envío: {tipo_envio} | Total de ítems: {len(completed_items)}")
+    
+    # Botones de acción
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        if st.button("💾 GUARDAR COTIZACIÓN", type="primary", use_container_width=True):
+            st.success("✅ Cotización guardada (funcionalidad pendiente)")
+    
+    with col2:
+        if st.button("📄 GENERAR PDF", type="secondary", use_container_width=True):
+            st.info("📄 Generación de PDF (funcionalidad pendiente)")
     
     with col3:
-        st.metric("Peso Total", f"{total_peso:.2f} kg")
-    
-    with col4:
-        st.metric("Flete Total", f"${total_flete:.2f}")
-    
-    # Barra de progreso
-    if total_items > 0:
-        progreso = items_analizados / total_items
-        st.progress(progreso, text=f"Progreso: {items_analizados}/{total_items} ítems analizados")
+        if st.button("🔄 NUEVA COTIZACIÓN", type="secondary", use_container_width=True):
+            # Limpiar todo
+            st.session_state.completed_items = []
+            st.session_state.current_item_analyzed = False
+            if 'current_item_result' in st.session_state:
+                del st.session_state.current_item_result
+            st.rerun()
