@@ -204,13 +204,22 @@ def render_item_form(origen, tipo_envio, item_number):
             url_valida = False
             if url:
                 with st.spinner("Validando URL..."):
-                    validation_result = st.session_state.url_validator.validate_url(url)
-                    if validation_result['valida']:
-                        url_valida = True
-                        st.success(f"✅ URL válida: {validation_result['dominio']}")
-                    else:
-                        st.error(f"❌ {validation_result['mensaje']}")
-                        return
+                    try:
+                        if 'url_validator' in st.session_state:
+                            validation_result = st.session_state.url_validator.validate_url(url)
+                            if validation_result['valida']:
+                                url_valida = True
+                                st.success(f"✅ URL válida: {validation_result['dominio']}")
+                            else:
+                                st.error(f"❌ {validation_result['mensaje']}")
+                                return
+                        else:
+                            st.warning("⚠️ Validador de URL no disponible. Continuando sin validación...")
+                            url_valida = True  # Asumir válida si no hay validador
+                    except Exception as e:
+                        st.error(f"❌ Error al validar URL: {str(e)}")
+                        st.info("💡 Continuando sin validación de URL...")
+                        url_valida = True  # Continuar de todos modos
             
             # Analizar con IA
             with st.spinner("🤖 Analizando con IA..."):
