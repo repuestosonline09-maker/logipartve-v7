@@ -69,10 +69,16 @@ def render_analyst_panel():
     # SECCIÓN 3: ÍTEMS DE COTIZACIÓN
     st.subheader("📦 Ítems de la Cotización")
     
+    # 🔍 DEBUG: Mostrar estado actual
+    st.info(f"🔍 DEBUG: Total de ítems en memoria: {len(st.session_state.items)}")
+    if len(st.session_state.items) > 0:
+        st.success(f"✅ Hay {len(st.session_state.items)} ítem(s) agregado(s)")
+    
     # Botón para agregar nuevo ítem
     col_btn, col_space = st.columns([1, 3])
     with col_btn:
         if st.button("➕ Agregar Nuevo Ítem", type="primary", use_container_width=True):
+            st.write("🔍 DEBUG: ¡Botón clickeado!")
             new_item = {
                 'id': len(st.session_state.items),
                 'vehiculo': '',
@@ -83,15 +89,28 @@ def render_analyst_panel():
                 'analizado': False,
                 'resultado': None
             }
+            st.write(f"🔍 DEBUG: Nuevo ítem creado con ID: {new_item['id']}")
             st.session_state.items.append(new_item)
+            st.write(f"🔍 DEBUG: Ítem agregado. Total ahora: {len(st.session_state.items)}")
+            st.write("🔍 DEBUG: Ejecutando st.rerun()...")
             st.rerun()
+    
+    # 🔍 DEBUG: Verificar qué se va a renderizar
+    st.write(f"🔍 DEBUG: Verificando renderizado... Total ítems: {len(st.session_state.items)}")
     
     # Renderizar cada ítem
     if len(st.session_state.items) == 0:
         st.info("👆 Haz clic en 'Agregar Nuevo Ítem' para comenzar")
     else:
+        st.success(f"📋 Mostrando {len(st.session_state.items)} ítem(s):")
         for idx, item in enumerate(st.session_state.items):
-            render_item_form(idx, item, origen, tipo_envio)
+            st.write(f"🔍 DEBUG: Renderizando ítem #{idx}")
+            try:
+                render_item_form(idx, item, origen, tipo_envio)
+                st.write(f"✅ DEBUG: Ítem #{idx} renderizado exitosamente")
+            except Exception as e:
+                st.error(f"❌ DEBUG: Error al renderizar ítem #{idx}: {str(e)}")
+                st.exception(e)
     
     st.markdown("---")
     
