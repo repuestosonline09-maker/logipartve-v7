@@ -206,12 +206,12 @@ def render_item_form(origen, tipo_envio, item_number):
                 with st.spinner("Validando URL..."):
                     try:
                         if 'url_validator' in st.session_state:
-                            validation_result = st.session_state.url_validator.validate_url(url)
-                            if validation_result['valida']:
+                            validation_result = st.session_state.url_validator.validate(url)
+                            if validation_result['whitelisted']:
                                 url_valida = True
-                                st.success(f"✅ URL válida: {validation_result['dominio']}")
+                                st.success(f"✅ URL válida: {validation_result['domain']}")
                             else:
-                                st.error(f"❌ {validation_result['mensaje']}")
+                                st.error(f"❌ {validation_result['message']}")
                                 return
                         else:
                             st.warning("⚠️ Validador de URL no disponible. Continuando sin validación...")
@@ -224,41 +224,22 @@ def render_item_form(origen, tipo_envio, item_number):
             # Analizar con IA
             with st.spinner("🤖 Analizando con IA..."):
                 try:
-                    # Preparar prompt
-                    if url_valida:
-                        prompt = f"""
-Analiza este repuesto:
-- Vehículo: {vehiculo}
-- Repuesto: {repuesto}
-- Cantidad: {cantidad}
-- Número de Parte: {numero_parte}
-- URL: {url}
-
-Valida que el repuesto aplique al vehículo y proporciona:
-1. Descripción detallada
-2. Peso estimado (lb)
-3. Dimensiones (L x A x H en pulgadas)
-4. Tipo de embalaje
-5. Nivel de confianza (Alto/Medio/Bajo)
-"""
+                    # Llamar a IA con el método correcto
+                    if url_valida and url:
+                        ai_result = st.session_state.ai_service.analyze_part_with_url(
+                            vehiculo, repuesto, numero_parte, url, origen, tipo_envio
+                        )
                     else:
-                        prompt = f"""
-Analiza este repuesto:
-- Vehículo: {vehiculo}
-- Repuesto: {repuesto}
-- Cantidad: {cantidad}
-- Número de Parte: {numero_parte}
-
-Proporciona:
-1. Descripción detallada
-2. Peso estimado (lb)
-3. Dimensiones (L x A x H en pulgadas)
-4. Tipo de embalaje
-5. Nivel de confianza (Alto/Medio/Bajo)
-"""
+                        ai_result = st.session_state.ai_service.analyze_part_without_url(
+                            vehiculo, repuesto, numero_parte, origen, tipo_envio
+                        )
                     
-                    # Llamar a IA
-                    ai_response = st.session_state.ai_service.analyze_part(prompt)
+                    # Verificar si hubo error
+                    if not ai_result.get('success', False):
+                        st.error(f"❌ Error en IA: {ai_result.get('error', 'Error desconocido')}")
+                        return
+                    
+                    ai_response = ai_result['response']
                     
                     # Parsear respuesta
                     parsed_data = st.session_state.ai_parser.parse_response(ai_response)
