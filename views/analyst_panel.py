@@ -244,17 +244,26 @@ def render_item_form(origen, tipo_envio, item_number):
                     # Parsear respuesta
                     parsed_data = st.session_state.ai_parser.parse_response(ai_response)
                     
-                    if parsed_data['completo']:
+                    # Validar respuesta
+                    validation = st.session_state.ai_parser.validate_response(parsed_data)
+                    
+                    if validation['valid']:
+                        # Convertir kg a lb (1 kg = 2.20462 lb)
+                        peso_lb = parsed_data['peso_kg'] * 2.20462 if parsed_data['peso_kg'] else 10.0
+                        
+                        # Convertir cm a pulgadas (1 cm = 0.393701 in)
+                        largo_in = parsed_data['dimensiones']['largo_cm'] * 0.393701 if parsed_data['dimensiones']['largo_cm'] else 12.0
+                        ancho_in = parsed_data['dimensiones']['ancho_cm'] * 0.393701 if parsed_data['dimensiones']['ancho_cm'] else 12.0
+                        alto_in = parsed_data['dimensiones']['alto_cm'] * 0.393701 if parsed_data['dimensiones']['alto_cm'] else 12.0
+                        
                         # Calcular peso volumétrico
                         peso_vol = st.session_state.calc_service.calcular_peso_volumetrico(
-                            parsed_data['largo'],
-                            parsed_data['ancho'],
-                            parsed_data['alto']
+                            largo_in, ancho_in, alto_in
                         )
                         
                         # Calcular costo de flete
                         costo_flete = st.session_state.calc_service.calcular_costo_flete(
-                            parsed_data['peso'],
+                            peso_lb,
                             peso_vol,
                             origen,
                             tipo_envio
@@ -268,21 +277,32 @@ def render_item_form(origen, tipo_envio, item_number):
                             'numero_parte': numero_parte,
                             'url': url if url_valida else None,
                             'descripcion': parsed_data['descripcion'],
-                            'peso': parsed_data['peso'],
-                            'dimensiones': f"{parsed_data['largo']} x {parsed_data['ancho']} x {parsed_data['alto']}",
+                            'peso': peso_lb,
+                            'dimensiones': f"{largo_in:.1f} x {ancho_in:.1f} x {alto_in:.1f}",
                             'peso_volumetrico': peso_vol,
-                            'embalaje': parsed_data['embalaje'],
-                            'confianza': parsed_data['confianza'],
+                            'embalaje': f"{parsed_data['embalaje']['largo_cm']:.0f} x {parsed_data['embalaje']['ancho_cm']:.0f} x {parsed_data['embalaje']['alto_cm']:.0f} cm" if parsed_data['embalaje']['largo_cm'] else 'N/A',
+                            'confianza': parsed_data['nivel_confianza'] or 'MEDIA',
                             'costo_flete': costo_flete,
                             'origen': origen,
-                            'tipo_envio': tipo_envio
+                            'tipo_envio': tipo_envio,
+                            'raw_response': parsed_data['raw_response']
                         }
+                        
+                        # Mostrar advertencias si las hay
+                        if validation['warnings']:
+                            for warning in validation['warnings']:
+                                st.warning(f"⚠️ {warning}")
                         
                         st.session_state.current_item_analyzed = True
                         st.rerun()
                     else:
                         st.error("❌ No se pudo obtener información completa del repuesto")
+                        st.error(f"Campos faltantes: {', '.join(validation['missing_fields'])}")
                         st.info("💡 Intenta agregar más detalles o una URL válida")
+                        
+                        # Mostrar respuesta cruda para debugging
+                        with st.expander("🔍 Ver respuesta de IA (para debugging)"):
+                            st.text(parsed_data['raw_response'])
                 
                 except Exception as e:
                     st.error(f"❌ Error al analizar: {str(e)}")
