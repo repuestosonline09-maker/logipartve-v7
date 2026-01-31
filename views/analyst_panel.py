@@ -70,18 +70,21 @@ def render_analyst_panel():
     st.subheader("📦 Ítems de la Cotización")
     
     # Botón para agregar nuevo ítem
-    if st.button("➕ Agregar Nuevo Ítem", type="primary"):
-        st.session_state.items.append({
-            'id': len(st.session_state.items),
-            'vehiculo': '',
-            'repuesto': '',
-            'numero_parte': '',
-            'url': '',
-            'cantidad': 1,
-            'analizado': False,
-            'resultado': None
-        })
-        st.rerun()
+    col_btn, col_space = st.columns([1, 3])
+    with col_btn:
+        if st.button("➕ Agregar Nuevo Ítem", type="primary", use_container_width=True):
+            new_item = {
+                'id': len(st.session_state.items),
+                'vehiculo': '',
+                'repuesto': '',
+                'numero_parte': '',
+                'url': '',
+                'cantidad': 1,
+                'analizado': False,
+                'resultado': None
+            }
+            st.session_state.items.append(new_item)
+            st.rerun()
     
     # Renderizar cada ítem
     if len(st.session_state.items) == 0:
