@@ -16,19 +16,23 @@ def render_analyst_panel():
     st.title("📋 Panel de Analista")
     st.markdown("---")
     
-    # Inicializar servicios
-    if 'url_validator' not in st.session_state:
-        st.session_state.url_validator = URLValidator()
-    if 'calc_service' not in st.session_state:
-        st.session_state.calc_service = CalculationService()
-    if 'ai_service' not in st.session_state:
-        st.session_state.ai_service = AIService()
-    if 'ai_parser' not in st.session_state:
-        st.session_state.ai_parser = AIParser()
-    
-    # Inicializar estado de ítems
+    # Inicializar estado de ítems PRIMERO (antes de servicios)
     if 'items' not in st.session_state:
         st.session_state.items = []
+    
+    # Inicializar servicios (con manejo de errores)
+    try:
+        if 'url_validator' not in st.session_state:
+            st.session_state.url_validator = URLValidator()
+        if 'calc_service' not in st.session_state:
+            st.session_state.calc_service = CalculationService()
+        if 'ai_service' not in st.session_state:
+            st.session_state.ai_service = AIService()
+        if 'ai_parser' not in st.session_state:
+            st.session_state.ai_parser = AIParser()
+    except Exception as e:
+        st.error(f"Error al inicializar servicios: {str(e)}")
+        st.info("Algunas funcionalidades pueden estar limitadas.")
     
     # SECCIÓN 1: DATOS DEL CLIENTE
     st.subheader("👤 Datos del Cliente")
