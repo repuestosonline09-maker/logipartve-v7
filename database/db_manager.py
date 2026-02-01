@@ -159,12 +159,17 @@ class DBManager:
         # Insertar configuraciones por defecto si no existen
         default_configs = [
             ("exchange_differential", "25", "Diferencial de cambio diario (Y30) - Porcentaje"),
-            ("american_tax", "7", "Impuesto de empresa americana (TAX) - Porcentaje"),
+            ("american_tax", "7", "TAX de empresa americana - Porcentaje (valor único, no seleccionable)"),
             ("national_handling", "18", "Costo de manejo nacional - Dólares"),
             ("venezuela_iva", "16", "IVA Venezuela - Porcentaje"),
-            ("profit_factors", "1.4285,1.35,1.30,1.25,1.20,1.15,1.10", "Factores de ganancia disponibles"),
-            ("warranties", "15 días,30 días,45 días,3 meses,6 meses", "Opciones de garantía"),
-            ("terms_conditions", "Términos y condiciones estándar de LogiPartVE Pro", "Términos y condiciones de las cotizaciones")
+            ("profit_factors", "1.4285,1.35,1.30,1.25,1.20,1.15,1.10,0", "Factores de utilidad disponibles (separados por coma)"),
+            ("warranties", "15 DIAS,30 DIAS,45 DIAS,3 MESES,6 MESES", "Opciones de garantía (separadas por coma)"),
+            ("terms_conditions", "Términos y condiciones estándar de LogiPartVE Pro", "Términos y condiciones de las cotizaciones"),
+            ("manejo_options", "0,15,23,25", "Opciones de MANEJO en dólares (separadas por coma)"),
+            ("impuesto_internacional_options", "0,25,30,35,40,45,50", "Opciones de Impuesto Internacional % (separadas por coma)"),
+            ("paises_origen", "EEUU,MIAMI,ESPAÑA,MADRID,ALEMANIA,ARGENTINA,ARUBA,AUSTRALIA,BRASIL,CANADA,CHILE,CHINA,COLOMBIA,COREA DEL SUR,DINAMARCA,DUBAI,ESTONIA,FRANCIA,GRECIA,HOLANDA,HUNGRIA,INDIA,INDONESIA,INGLATERRA,IRLANDA,ITALIA,JAPÓN,JORDANIA,LETONIA,LITUANIA,MALASIA,MEXICO,POLONIA,PORTUGAL,PUERTO RICO,REINO UNIDO,SINGAPUR,TAILANDIA,TAIWAN,TURQUIA,UCRANIA,UNION EUROPEA,VARIOS,VENEZUELA", "Países de origen/localización (separados por coma)"),
+            ("tipos_envio", "AEREO,MARITIMO,TERRESTRE", "Tipos de envío disponibles (separados por coma)"),
+            ("tiempos_entrega", "02 A 05 DIAS,08 A 12 DIAS,12 A 15 DIAS,18 A 21 DIAS,25 A 30 DIAS,30 A 45 DIAS,60 DIAS", "Tiempos de entrega disponibles (separados por coma)")
         ]
         
         for key, value, description in default_configs:
@@ -505,4 +510,114 @@ class DBManager:
             return True
         except Exception as e:
             print(f"Error updating freight rate: {e}")
+            return False
+
+
+    # ========== MÉTODOS HELPER PARA LISTAS DE CONFIGURACIÓN ==========
+    
+    @staticmethod
+    def get_config_list(key: str) -> List[str]:
+        """Obtiene una lista de configuración separada por comas."""
+        value = DBManager.get_config(key)
+        if value:
+            return [item.strip() for item in value.split(',') if item.strip()]
+        return []
+    
+    @staticmethod
+    def get_manejo_options() -> List[float]:
+        """Obtiene las opciones de MANEJO configuradas."""
+        items = DBManager.get_config_list("manejo_options")
+        try:
+            return [float(x) for x in items]
+        except:
+            return [0.0, 15.0, 23.0, 25.0]
+    
+    @staticmethod
+    def get_impuesto_internacional_options() -> List[int]:
+        """Obtiene las opciones de Impuesto Internacional configuradas."""
+        items = DBManager.get_config_list("impuesto_internacional_options")
+        try:
+            return [int(x) for x in items]
+        except:
+            return [0, 25, 30, 35, 40, 45, 50]
+    
+    @staticmethod
+    def get_profit_factors() -> List[float]:
+        """Obtiene los factores de utilidad configurados."""
+        items = DBManager.get_config_list("profit_factors")
+        try:
+            return [float(x) for x in items]
+        except:
+            return [1.4285, 1.35, 1.30, 1.25, 1.20, 1.15, 1.10, 0]
+    
+    @staticmethod
+    def get_tax_percentage() -> float:
+        """Obtiene el porcentaje de TAX configurado."""
+        value = DBManager.get_config("american_tax")
+        try:
+            return float(value) if value else 7.0
+        except:
+            return 7.0
+    
+    @staticmethod
+    def get_warranties() -> List[str]:
+        """Obtiene las opciones de garantía configuradas."""
+        items = DBManager.get_config_list("warranties")
+        return items if items else ["15 DIAS", "30 DIAS", "45 DIAS", "3 MESES", "6 MESES"]
+    
+    @staticmethod
+    def get_paises_origen() -> List[str]:
+        """Obtiene la lista de países de origen configurados."""
+        items = DBManager.get_config_list("paises_origen")
+        return items if items else ["EEUU", "MIAMI", "ESPAÑA", "MADRID"]
+    
+    @staticmethod
+    def get_tipos_envio() -> List[str]:
+        """Obtiene los tipos de envío configurados."""
+        items = DBManager.get_config_list("tipos_envio")
+        return items if items else ["AEREO", "MARITIMO", "TERRESTRE"]
+    
+    @staticmethod
+    def get_tiempos_entrega() -> List[str]:
+        """Obtiene los tiempos de entrega configurados."""
+        items = DBManager.get_config_list("tiempos_entrega")
+        return items if items else ["02 A 05 DIAS", "08 A 12 DIAS", "12 A 15 DIAS"]
+    
+    @staticmethod
+    def get_diferencial() -> float:
+        """Obtiene el diferencial de cambio configurado."""
+        value = DBManager.get_config("exchange_differential")
+        try:
+            return float(value) if value else 25.0
+        except:
+            return 25.0
+    
+    @staticmethod
+    def set_config(key: str, value: str, description: str = None, updated_by: int = None) -> bool:
+        """Crea o actualiza un valor de configuración."""
+        try:
+            conn = DBManager.get_connection()
+            cursor = conn.cursor()
+            
+            # Verificar si existe
+            cursor.execute("SELECT COUNT(*) FROM system_config WHERE key = ?", (key,))
+            exists = cursor.fetchone()[0] > 0
+            
+            if exists:
+                cursor.execute("""
+                    UPDATE system_config 
+                    SET value = ?, updated_by = ?, updated_at = ?
+                    WHERE key = ?
+                """, (value, updated_by, datetime.now(), key))
+            else:
+                cursor.execute("""
+                    INSERT INTO system_config (key, value, description, updated_by, updated_at)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (key, value, description or "", updated_by, datetime.now()))
+            
+            conn.commit()
+            conn.close()
+            return True
+        except Exception as e:
+            print(f"Error setting config: {e}")
             return False

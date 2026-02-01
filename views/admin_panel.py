@@ -268,77 +268,124 @@ def show_system_configuration():
     # Obtener configuraciones actuales
     config = DBManager.get_all_config()
     
-    st.markdown("#### Variables de Cálculo de Precios")
+    # ==========================================
+    # SECCIÓN 1: CONFIGURACIÓN DE COSTOS PARA ANALISTA
+    # ==========================================
+    st.markdown("#### 💰 Opciones de Costos para el Analista")
+    st.info("💡 Estas opciones aparecerán como selectbox en el formulario del analista")
     
     col1, col2 = st.columns(2)
     
     with col1:
-        st.markdown("**Tasas e Impuestos**")
+        # MANEJO
+        st.markdown("**MANEJO ($)**")
+        with st.form("manejo_form"):
+            manejo_str = config.get('manejo_options', {}).get('value', '0,15,23,25')
+            manejo_options = st.text_input(
+                "Opciones de Manejo (separadas por coma)",
+                value=manejo_str,
+                help="Valores en dólares que el analista puede seleccionar. Ej: 0,15,23,25"
+            )
+            submit_manejo = st.form_submit_button("💾 Guardar", use_container_width=True)
+            if submit_manejo:
+                DBManager.set_config('manejo_options', manejo_options, "Opciones de MANEJO en dólares", st.session_state.user_id)
+                st.success("✅ Opciones de MANEJO actualizadas")
+                DBManager.log_activity(st.session_state.user_id, "update_config", "Actualizó opciones de MANEJO")
+                st.rerun()
         
-        with st.form("tax_config_form"):
+        # IMPUESTO INTERNACIONAL
+        st.markdown("**IMPUESTO INTERNACIONAL (%)**")
+        with st.form("impuesto_int_form"):
+            impuesto_str = config.get('impuesto_internacional_options', {}).get('value', '0,25,30,35,40,45,50')
+            impuesto_options = st.text_input(
+                "Opciones de Impuesto Internacional (separadas por coma)",
+                value=impuesto_str,
+                help="Porcentajes de impuesto internacional (EEUU a países como China, Corea). Ej: 0,25,30,35,40,45,50"
+            )
+            submit_impuesto = st.form_submit_button("💾 Guardar", use_container_width=True)
+            if submit_impuesto:
+                DBManager.set_config('impuesto_internacional_options', impuesto_options, "Opciones de Impuesto Internacional %", st.session_state.user_id)
+                st.success("✅ Opciones de Impuesto Internacional actualizadas")
+                DBManager.log_activity(st.session_state.user_id, "update_config", "Actualizó opciones de Impuesto Internacional")
+                st.rerun()
+    
+    with col2:
+        # FACTOR DE UTILIDAD
+        st.markdown("**FACTOR DE UTILIDAD**")
+        with st.form("utilidad_form"):
+            utilidad_str = config.get('profit_factors', {}).get('value', '1.4285,1.35,1.30,1.25,1.20,1.15,1.10,0')
+            utilidad_options = st.text_input(
+                "Factores de Utilidad (separados por coma)",
+                value=utilidad_str,
+                help="Factores multiplicadores de utilidad. Ej: 1.4285,1.35,1.30,1.25,1.20,1.15,1.10,0"
+            )
+            submit_utilidad = st.form_submit_button("💾 Guardar", use_container_width=True)
+            if submit_utilidad:
+                DBManager.set_config('profit_factors', utilidad_options, "Factores de utilidad disponibles", st.session_state.user_id)
+                st.success("✅ Factores de Utilidad actualizados")
+                DBManager.log_activity(st.session_state.user_id, "update_config", "Actualizó factores de utilidad")
+                st.rerun()
+        
+        # TAX (valor único)
+        st.markdown("**TAX % (Valor único - NO seleccionable)**")
+        with st.form("tax_form"):
+            tax_value = config.get('american_tax', {}).get('value', '7')
+            tax_percentage = st.number_input(
+                "Porcentaje de TAX",
+                min_value=0.0,
+                max_value=100.0,
+                value=float(tax_value),
+                step=0.5,
+                help="Este valor se aplica automáticamente. El analista NO lo selecciona."
+            )
+            submit_tax = st.form_submit_button("💾 Guardar", use_container_width=True)
+            if submit_tax:
+                DBManager.set_config('american_tax', str(tax_percentage), "TAX de empresa americana - Porcentaje", st.session_state.user_id)
+                st.success("✅ TAX actualizado")
+                DBManager.log_activity(st.session_state.user_id, "update_config", "Actualizó TAX")
+                st.rerun()
+    
+    st.markdown("---")
+    
+    # ==========================================
+    # SECCIÓN 2: DIFERENCIAL Y OTROS
+    # ==========================================
+    st.markdown("#### 📈 Diferencial y Configuración General")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        with st.form("diferencial_form"):
             exchange_diff = st.number_input(
                 "Diferencial de Cambio Diario (%)",
                 min_value=0.0,
                 max_value=100.0,
                 value=float(config.get('exchange_differential', {}).get('value', 25)),
                 step=0.1,
-                help="Porcentaje de diferencial de cambio (Y30)"
+                help="Porcentaje de diferencial que se aplica al total"
             )
-            
-            american_tax = st.number_input(
-                "Impuesto Empresa Americana (%)",
-                min_value=0.0,
-                max_value=100.0,
-                value=float(config.get('american_tax', {}).get('value', 7)),
-                step=0.1,
-                help="Porcentaje de TAX"
-            )
-            
+            submit_diff = st.form_submit_button("💾 Guardar Diferencial", use_container_width=True)
+            if submit_diff:
+                DBManager.set_config('exchange_differential', str(exchange_diff), "Diferencial de cambio diario - Porcentaje", st.session_state.user_id)
+                st.success("✅ Diferencial actualizado")
+                DBManager.log_activity(st.session_state.user_id, "update_config", "Actualizó diferencial")
+                st.rerun()
+    
+    with col2:
+        with st.form("iva_form"):
             venezuela_iva = st.number_input(
                 "IVA Venezuela (%)",
                 min_value=0.0,
                 max_value=100.0,
                 value=float(config.get('venezuela_iva', {}).get('value', 16)),
                 step=0.1,
-                help="Porcentaje de IVA en Venezuela"
+                help="Porcentaje de IVA en Venezuela (si aplica)"
             )
-            
-            submit_tax = st.form_submit_button("💾 Guardar Tasas e Impuestos", use_container_width=True)
-            
-            if submit_tax:
-                DBManager.update_config('exchange_differential', str(exchange_diff), st.session_state.user_id)
-                DBManager.update_config('american_tax', str(american_tax), st.session_state.user_id)
-                DBManager.update_config('venezuela_iva', str(venezuela_iva), st.session_state.user_id)
-                st.success("✅ Tasas e impuestos actualizados")
-                DBManager.log_activity(st.session_state.user_id, "update_config", "Actualizó tasas e impuestos")
-                st.rerun()
-    
-    with col2:
-        st.markdown("**Costos y Márgenes**")
-        
-        with st.form("costs_config_form"):
-            national_handling = st.number_input(
-                "Manejo Nacional (USD)",
-                min_value=0.0,
-                value=float(config.get('national_handling', {}).get('value', 18)),
-                step=0.5,
-                help="Costo de manejo nacional en dólares"
-            )
-            
-            profit_factors_str = config.get('profit_factors', {}).get('value', '1.4285,1.35,1.30,1.25,1.20,1.15,1.10')
-            profit_factors = st.text_input(
-                "Factores de Ganancia",
-                value=profit_factors_str,
-                help="Separados por comas (ej: 1.4285,1.35,1.30)"
-            )
-            
-            submit_costs = st.form_submit_button("💾 Guardar Costos y Márgenes", use_container_width=True)
-            
-            if submit_costs:
-                DBManager.update_config('national_handling', str(national_handling), st.session_state.user_id)
-                DBManager.update_config('profit_factors', profit_factors, st.session_state.user_id)
-                st.success("✅ Costos y márgenes actualizados")
-                DBManager.log_activity(st.session_state.user_id, "update_config", "Actualizó costos y márgenes")
+            submit_iva = st.form_submit_button("💾 Guardar IVA", use_container_width=True)
+            if submit_iva:
+                DBManager.set_config('venezuela_iva', str(venezuela_iva), "IVA Venezuela - Porcentaje", st.session_state.user_id)
+                st.success("✅ IVA actualizado")
+                DBManager.log_activity(st.session_state.user_id, "update_config", "Actualizó IVA")
                 st.rerun()
     
     st.markdown("---")
@@ -426,7 +473,68 @@ def show_system_configuration():
             st.rerun()
     
     st.markdown("---")
-    st.markdown("#### Términos y Condiciones")
+    
+    # ==========================================
+    # SECCIÓN: LISTAS DESPLEGABLES DEL FORMULARIO
+    # ==========================================
+    st.markdown("#### 📝 Listas Desplegables del Formulario")
+    st.info("💡 Configure las opciones que aparecerán en los selectbox del formulario del analista")
+    
+    # Países de Origen/Localización
+    with st.expander("🌍 Países de Origen / Localización", expanded=False):
+        with st.form("paises_form"):
+            paises_str = config.get('paises_origen', {}).get('value', 'EEUU,MIAMI,ESPAÑA,MADRID')
+            paises_options = st.text_area(
+                "Países (separados por coma)",
+                value=paises_str,
+                height=150,
+                help="Lista de países que aparecerán en 'País de Localización' y 'País de Fabricación'"
+            )
+            submit_paises = st.form_submit_button("💾 Guardar Países", use_container_width=True)
+            if submit_paises:
+                DBManager.set_config('paises_origen', paises_options, "Países de origen/localización", st.session_state.user_id)
+                st.success("✅ Lista de países actualizada")
+                DBManager.log_activity(st.session_state.user_id, "update_config", "Actualizó lista de países")
+                st.rerun()
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Tipos de Envío
+        with st.expander("🚚 Tipos de Envío", expanded=False):
+            with st.form("tipos_envio_form"):
+                tipos_str = config.get('tipos_envio', {}).get('value', 'AEREO,MARITIMO,TERRESTRE')
+                tipos_options = st.text_input(
+                    "Tipos de Envío (separados por coma)",
+                    value=tipos_str,
+                    help="Ej: AEREO,MARITIMO,TERRESTRE"
+                )
+                submit_tipos = st.form_submit_button("💾 Guardar", use_container_width=True)
+                if submit_tipos:
+                    DBManager.set_config('tipos_envio', tipos_options, "Tipos de envío disponibles", st.session_state.user_id)
+                    st.success("✅ Tipos de envío actualizados")
+                    DBManager.log_activity(st.session_state.user_id, "update_config", "Actualizó tipos de envío")
+                    st.rerun()
+    
+    with col2:
+        # Tiempos de Entrega
+        with st.expander("⏰ Tiempos de Entrega", expanded=False):
+            with st.form("tiempos_form"):
+                tiempos_str = config.get('tiempos_entrega', {}).get('value', '02 A 05 DIAS,08 A 12 DIAS,12 A 15 DIAS')
+                tiempos_options = st.text_input(
+                    "Tiempos de Entrega (separados por coma)",
+                    value=tiempos_str,
+                    help="Ej: 02 A 05 DIAS,08 A 12 DIAS,12 A 15 DIAS"
+                )
+                submit_tiempos = st.form_submit_button("💾 Guardar", use_container_width=True)
+                if submit_tiempos:
+                    DBManager.set_config('tiempos_entrega', tiempos_options, "Tiempos de entrega disponibles", st.session_state.user_id)
+                    st.success("✅ Tiempos de entrega actualizados")
+                    DBManager.log_activity(st.session_state.user_id, "update_config", "Actualizó tiempos de entrega")
+                    st.rerun()
+    
+    st.markdown("---")
+    st.markdown("#### 📜 Términos y Condiciones")
     
     with st.form("terms_form"):
         terms = st.text_area(
@@ -439,7 +547,7 @@ def show_system_configuration():
         submit_terms = st.form_submit_button("💾 Guardar Términos y Condiciones", use_container_width=True)
         
         if submit_terms:
-            DBManager.update_config('terms_conditions', terms, st.session_state.user_id)
+            DBManager.set_config('terms_conditions', terms, "Términos y condiciones de las cotizaciones", st.session_state.user_id)
             st.success("✅ Términos y condiciones actualizados")
             DBManager.log_activity(st.session_state.user_id, "update_config", "Actualizó términos y condiciones")
             st.rerun()

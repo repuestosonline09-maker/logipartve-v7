@@ -1,36 +1,14 @@
 """
 Panel de Analista - LogiPartVE Pro v7.0
 Sistema de cotización SIN IA - Solo cálculos y formularios
+Campos configurables desde Panel Admin
 """
 
 import streamlit as st
 from datetime import datetime, timedelta
+from database.db_manager import DBManager
 
-# ==========================================
-# DATOS PARA LISTAS DESPLEGABLES
-# ==========================================
-
-PAISES_ORIGEN = [
-    "-- Seleccione --", "EEUU", "MIAMI", "ESPAÑA", "MADRID", "ALEMANIA", "ARGENTINA", "ARUBA", 
-    "AUSTRALIA", "BRASIL", "CANADA", "CHILE", "CHINA", "COLOMBIA", 
-    "COREA DEL SUR", "DINAMARCA", "DUBAI", "ESTONIA", "FRANCIA", "GRECIA", 
-    "HOLANDA", "HUNGRIA", "INDIA", "INDONESIA", "INGLATERRA", "IRLANDA", 
-    "ITALIA", "JAPÓN", "JORDANIA", "LETONIA", "LITUANIA", "MALASIA", 
-    "MEXICO", "POLONIA", "PORTUGAL", "PUERTO RICO", "REINO UNIDO", 
-    "SINGAPUR", "TAILANDIA", "TAIWAN", "TURQUIA", "UCRANIA", 
-    "UNION EUROPEA", "VARIOS", "VENEZUELA"
-]
-
-TIPOS_ENVIO = ["-- Seleccione --", "AEREO", "MARITIMO", "TERRESTRE"]
-
-TIEMPOS_ENTREGA = [
-    "-- Seleccione --", "02 A 05 DIAS", "08 A 12 DIAS", "12 A 15 DIAS", 
-    "18 A 21 DIAS", "25 A 30 DIAS", "30 A 45 DIAS", "60 DIAS"
-]
-
-GARANTIAS = ["-- Seleccione --", "15 DIAS", "30 DIAS", "45 DIAS", "3 MESES", "6 MESES"]
-
-# Lista de cantidades del 1 al 1000
+# Lista de cantidades del 1 al 1000 (fija, no configurable)
 CANTIDADES = list(range(1, 1001))
 
 # ==========================================
@@ -80,11 +58,48 @@ def calcular_envio(largo_cm, ancho_cm, alto_cm, peso_kg, origen, tipo_envio, tar
 
 
 # ==========================================
+# FUNCIÓN PARA CARGAR CONFIGURACIONES DESDE BD
+# ==========================================
+
+def cargar_configuraciones():
+    """Carga todas las configuraciones desde la base de datos"""
+    try:
+        config = {
+            "paises_origen": ["-- Seleccione --"] + DBManager.get_paises_origen(),
+            "tipos_envio": ["-- Seleccione --"] + DBManager.get_tipos_envio(),
+            "tiempos_entrega": ["-- Seleccione --"] + DBManager.get_tiempos_entrega(),
+            "garantias": ["-- Seleccione --"] + DBManager.get_warranties(),
+            "manejo_options": DBManager.get_manejo_options(),
+            "impuesto_options": DBManager.get_impuesto_internacional_options(),
+            "utilidad_factors": DBManager.get_profit_factors(),
+            "tax_percentage": DBManager.get_tax_percentage(),
+            "diferencial": DBManager.get_diferencial()
+        }
+        return config
+    except Exception as e:
+        # Valores por defecto si hay error
+        return {
+            "paises_origen": ["-- Seleccione --", "EEUU", "MIAMI", "ESPAÑA", "MADRID"],
+            "tipos_envio": ["-- Seleccione --", "AEREO", "MARITIMO", "TERRESTRE"],
+            "tiempos_entrega": ["-- Seleccione --", "02 A 05 DIAS", "08 A 12 DIAS", "12 A 15 DIAS"],
+            "garantias": ["-- Seleccione --", "15 DIAS", "30 DIAS", "45 DIAS", "3 MESES", "6 MESES"],
+            "manejo_options": [0.0, 15.0, 23.0, 25.0],
+            "impuesto_options": [0, 25, 30, 35, 40, 45, 50],
+            "utilidad_factors": [1.4285, 1.35, 1.30, 1.25, 1.20, 1.15, 1.10, 0],
+            "tax_percentage": 7.0,
+            "diferencial": 25.0
+        }
+
+
+# ==========================================
 # FUNCIÓN PRINCIPAL DEL PANEL
 # ==========================================
 
 def render_analyst_panel():
     """Renderiza el panel de analista para crear cotizaciones"""
+    
+    # Cargar configuraciones desde BD
+    config = cargar_configuraciones()
     
     # Inicializar estado de sesión (verificar tipo también)
     if 'items' not in st.session_state or not isinstance(st.session_state.items, list):
@@ -97,8 +112,6 @@ def render_analyst_panel():
             "mia_m": 12.0,  # Miami Marítimo $/ft³
             "mad": 8.0      # Madrid Aéreo $/kg
         }
-    if 'diferencial' not in st.session_state:
-        st.session_state.diferencial = 0.25  # 25%
     
     st.title("📝 Nueva Cotización")
     
@@ -182,37 +195,46 @@ def render_analyst_panel():
     with item_col2:
         item_parte = st.text_input("N° de Parte", key="item_parte")
     
-    # Fila 2: Marca, Garantía, Cantidad
+    # Fila 2: Marca (texto libre), Garantía (desde BD), Cantidad (1-1000)
     item_col3, item_col4, item_col5 = st.columns(3)
     with item_col3:
         item_marca = st.text_input("Marca", placeholder="Ej: TOYOTA, BOSCH, DENSO...", key="item_marca")
     with item_col4:
-        item_garantia = st.selectbox("Garantía", GARANTIAS, key="item_garantia")
+        item_garantia = st.selectbox("Garantía", config["garantias"], key="item_garantia")
     with item_col5:
         item_cantidad = st.selectbox("Cantidad", CANTIDADES, key="item_cantidad")
     
-    # Fila 3: Origen, Envío, Tiempo de Entrega
+    # Fila 3: Origen (desde BD), Envío (desde BD), Tiempo de Entrega (desde BD)
     item_col6, item_col7, item_col8 = st.columns(3)
     with item_col6:
-        item_origen = st.selectbox("País de Localización", PAISES_ORIGEN, key="item_origen")
+        item_origen = st.selectbox("País de Localización", config["paises_origen"], key="item_origen")
     with item_col7:
-        item_envio_tipo = st.selectbox("Tipo de Envío", TIPOS_ENVIO, key="item_envio_tipo")
+        item_envio_tipo = st.selectbox("Tipo de Envío", config["tipos_envio"], key="item_envio_tipo")
     with item_col8:
-        item_tiempo = st.selectbox("Tiempo de Entrega", TIEMPOS_ENTREGA, key="item_tiempo")
+        item_tiempo = st.selectbox("Tiempo de Entrega", config["tiempos_entrega"], key="item_tiempo")
     
-    # Fila 4: País de Fabricación y Link
+    # Fila 4: País de Fabricación (desde BD) y Link
     item_col9, item_col10 = st.columns(2)
     with item_col9:
-        item_fabricacion = st.selectbox("País de Fabricación", PAISES_ORIGEN, key="item_fabricacion")
+        item_fabricacion = st.selectbox("País de Fabricación", config["paises_origen"], key="item_fabricacion")
     with item_col10:
         item_link = st.text_input("Link del Producto (opcional)", placeholder="https://...", key="item_link")
     
     st.markdown("---")
     
     # ==========================================
-    # SECCIÓN 4: COSTOS (Solo visible para analista)
+    # SECCIÓN 4: COSTOS (Campos configurables desde Admin)
     # ==========================================
     st.markdown("### 💰 Costos (Interno - No visible al cliente)")
+    
+    # Preparar opciones de MANEJO con formato $
+    manejo_options_display = [f"${m:.0f}" if m == int(m) else f"${m:.2f}" for m in config["manejo_options"]]
+    
+    # Preparar opciones de IMPUESTO INTERNACIONAL con formato %
+    impuesto_options_display = [f"{i}%" for i in config["impuesto_options"]]
+    
+    # Preparar opciones de FACTOR DE UTILIDAD
+    utilidad_options_display = [f"{u}" for u in config["utilidad_factors"]]
     
     cost_col1, cost_col2, cost_col3 = st.columns(3)
     with cost_col1:
@@ -220,43 +242,82 @@ def render_analyst_panel():
     with cost_col2:
         costo_handling = st.number_input("Handling ($)", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="costo_handling")
     with cost_col3:
-        costo_manejo = st.number_input("Manejo ($)", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="costo_manejo")
+        # MANEJO - Selectbox desde Admin
+        manejo_idx = st.selectbox("Manejo ($)", range(len(manejo_options_display)), 
+                                  format_func=lambda x: manejo_options_display[x], 
+                                  key="costo_manejo_select")
+        costo_manejo = config["manejo_options"][manejo_idx]
     
     cost_col4, cost_col5, cost_col6 = st.columns(3)
     with cost_col4:
-        costo_impuesto = st.number_input("Impuesto ($)", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="costo_impuesto")
+        # IMPUESTO INTERNACIONAL - Selectbox desde Admin
+        impuesto_idx = st.selectbox("Impuesto Internacional (%)", range(len(impuesto_options_display)),
+                                    format_func=lambda x: impuesto_options_display[x],
+                                    key="impuesto_select")
+        impuesto_porcentaje = config["impuesto_options"][impuesto_idx]
     with cost_col5:
-        porcentaje_utilidad = st.number_input("Utilidad (%)", min_value=0, value=0, step=1, key="porcentaje_utilidad")
+        # FACTOR DE UTILIDAD - Selectbox desde Admin
+        utilidad_idx = st.selectbox("Factor de Utilidad", range(len(utilidad_options_display)),
+                                    format_func=lambda x: utilidad_options_display[x],
+                                    key="utilidad_select")
+        factor_utilidad = config["utilidad_factors"][utilidad_idx]
     with cost_col6:
         costo_envio = st.number_input("Envío ($)", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="costo_envio")
     
-    cost_col7, cost_col8 = st.columns(2)
-    with cost_col7:
-        costo_tax = st.number_input("Tax 7% ($)", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="costo_tax")
-    with cost_col8:
-        # Calcular utilidad automáticamente
-        utilidad_calculada = (costo_fob + costo_handling) * (porcentaje_utilidad / 100)
-        st.metric("Utilidad Calculada", f"${utilidad_calculada:.2f}")
+    # TAX - Valor fijo desde Admin (NO seleccionable)
+    tax_porcentaje = config["tax_percentage"]
+    diferencial_porcentaje = config["diferencial"]
     
-    # Calcular subtotal antes de diferencial
+    st.markdown("---")
+    
+    # ==========================================
+    # SECCIÓN 5: CÁLCULOS AUTOMÁTICOS
+    # ==========================================
+    st.markdown("### 📊 Cálculos Automáticos")
+    
+    # Calcular impuesto internacional sobre FOB
+    costo_impuesto = costo_fob * (impuesto_porcentaje / 100)
+    
+    # Calcular TAX sobre FOB
+    costo_tax = costo_fob * (tax_porcentaje / 100)
+    
+    # Calcular utilidad: (FOB + Handling) * (Factor - 1)
+    # Si factor es 1.4285, la utilidad es (FOB+Handling) * 0.4285
+    if factor_utilidad > 0:
+        utilidad_calculada = (costo_fob + costo_handling) * (factor_utilidad - 1) if factor_utilidad > 1 else 0
+    else:
+        utilidad_calculada = 0
+    
+    # Subtotal antes de diferencial
     subtotal_sin_dif = costo_fob + costo_handling + costo_manejo + costo_impuesto + utilidad_calculada + costo_envio + costo_tax
     
     # Calcular diferencial
-    diferencial_valor = subtotal_sin_dif * st.session_state.diferencial
+    diferencial_valor = subtotal_sin_dif * (diferencial_porcentaje / 100)
     
     # Total final
     total_item = subtotal_sin_dif + diferencial_valor
     
+    # Mostrar cálculos
+    calc_col1, calc_col2, calc_col3, calc_col4 = st.columns(4)
+    with calc_col1:
+        st.metric(f"Impuesto Int. ({impuesto_porcentaje}%)", f"${costo_impuesto:.2f}")
+    with calc_col2:
+        st.metric(f"TAX ({tax_porcentaje}%)", f"${costo_tax:.2f}")
+    with calc_col3:
+        st.metric(f"Utilidad (Factor {factor_utilidad})", f"${utilidad_calculada:.2f}")
+    with calc_col4:
+        st.metric(f"Diferencial ({diferencial_porcentaje}%)", f"${diferencial_valor:.2f}")
+    
     st.markdown("---")
     
     # Mostrar resumen de cálculos
-    st.markdown("### 📊 Resumen del Ítem")
+    st.markdown("### 💵 Resumen del Ítem")
     
     resumen_col1, resumen_col2, resumen_col3 = st.columns(3)
     with resumen_col1:
         st.metric("Subtotal (sin diferencial)", f"${subtotal_sin_dif:.2f}")
     with resumen_col2:
-        st.metric(f"Diferencial ({int(st.session_state.diferencial*100)}%)", f"${diferencial_valor:.2f}")
+        st.metric(f"Diferencial ({diferencial_porcentaje}%)", f"${diferencial_valor:.2f}")
     with resumen_col3:
         st.metric("**COSTO UNITARIO**", f"${total_item:.2f}")
     
@@ -267,7 +328,7 @@ def render_analyst_panel():
     st.markdown("---")
     
     # ==========================================
-    # SECCIÓN 5: BOTONES DE ACCIÓN
+    # SECCIÓN 6: BOTONES DE ACCIÓN
     # ==========================================
     
     btn_action_col1, btn_action_col2, btn_action_col3 = st.columns(3)
@@ -296,11 +357,14 @@ def render_analyst_panel():
                     "costo_handling": costo_handling,
                     "costo_manejo": costo_manejo,
                     "costo_impuesto": costo_impuesto,
-                    "utilidad_porcentaje": porcentaje_utilidad,
+                    "impuesto_porcentaje": impuesto_porcentaje,
+                    "factor_utilidad": factor_utilidad,
                     "utilidad_valor": utilidad_calculada,
                     "costo_envio": costo_envio,
                     "costo_tax": costo_tax,
+                    "tax_porcentaje": tax_porcentaje,
                     "diferencial": diferencial_valor,
+                    "diferencial_porcentaje": diferencial_porcentaje,
                     "costo_unitario": total_item,
                     "costo_total": costo_total_item
                 }
@@ -335,11 +399,14 @@ def render_analyst_panel():
                         "costo_handling": costo_handling,
                         "costo_manejo": costo_manejo,
                         "costo_impuesto": costo_impuesto,
-                        "utilidad_porcentaje": porcentaje_utilidad,
+                        "impuesto_porcentaje": impuesto_porcentaje,
+                        "factor_utilidad": factor_utilidad,
                         "utilidad_valor": utilidad_calculada,
                         "costo_envio": costo_envio,
                         "costo_tax": costo_tax,
+                        "tax_porcentaje": tax_porcentaje,
                         "diferencial": diferencial_valor,
+                        "diferencial_porcentaje": diferencial_porcentaje,
                         "costo_unitario": total_item,
                         "costo_total": costo_total_item
                     }
@@ -367,7 +434,7 @@ def render_analyst_panel():
             st.rerun()
     
     # ==========================================
-    # SECCIÓN 6: RESUMEN DE ÍTEMS AGREGADOS
+    # SECCIÓN 7: RESUMEN DE ÍTEMS AGREGADOS
     # ==========================================
     if isinstance(st.session_state.items, list) and len(st.session_state.items) > 0:
         st.markdown("---")
@@ -376,69 +443,78 @@ def render_analyst_panel():
         total_general = 0
         for i, item in enumerate(st.session_state.items):
             with st.expander(f"Ítem #{i+1}: {item['descripcion']}", expanded=False):
-                st.write(f"**N° Parte:** {item['parte']}")
-                st.write(f"**Marca:** {item['marca']} | **Garantía:** {item['garantia']}")
-                st.write(f"**Cantidad:** {item['cantidad']} | **Origen:** {item['origen']}")
-                st.write(f"**Costo Unitario:** ${item['costo_unitario']:.2f}")
-                st.write(f"**Costo Total:** ${item['costo_total']:.2f}")
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.write(f"**N° Parte:** {item['parte']}")
+                    st.write(f"**Marca:** {item['marca']}")
+                    st.write(f"**Cantidad:** {item['cantidad']}")
+                with col2:
+                    st.write(f"**Origen:** {item['origen']}")
+                    st.write(f"**Fabricación:** {item['fabricacion']}")
+                    st.write(f"**Envío:** {item['envio_tipo']}")
+                with col3:
+                    st.write(f"**Costo Unitario:** ${item['costo_unitario']:.2f}")
+                    st.write(f"**Costo Total:** ${item['costo_total']:.2f}")
+                
+                # Botón para eliminar ítem
+                if st.button(f"🗑️ Eliminar Ítem #{i+1}", key=f"del_item_{i}"):
+                    st.session_state.items.pop(i)
+                    st.rerun()
+            
             total_general += item['costo_total']
         
-        st.success(f"**TOTAL GENERAL ({len(st.session_state.items)} ítems): ${total_general:.2f} USD**")
+        st.markdown("---")
+        st.success(f"**💰 TOTAL GENERAL: ${total_general:.2f} USD**")
     
     # ==========================================
-    # SECCIÓN 7: VISTA PREVIA DE COTIZACIÓN
+    # SECCIÓN 8: VISTA PREVIA DE COTIZACIÓN
     # ==========================================
-    if st.session_state.get('mostrar_cotizacion', False):
+    if st.session_state.get('mostrar_cotizacion', False) and len(st.session_state.items) > 0:
         st.markdown("---")
-        st.markdown("## 📄 VISTA PREVIA DE COTIZACIÓN")
+        st.markdown("## 📄 Vista Previa de Cotización")
         
-        # Calcular totales
-        total_general = sum(item['costo_total'] for item in st.session_state.items)
+        cliente = st.session_state.cliente_datos
+        items = st.session_state.items
         
-        # Mostrar datos del cliente
+        # Información del cliente
         st.markdown(f"""
-        **Cliente:** {st.session_state.cliente_datos.get('nombre', '')}  
-        **Teléfono:** {st.session_state.cliente_datos.get('telefono', '')}  
-        **Vehículo:** {st.session_state.cliente_datos.get('vehiculo', '')} {st.session_state.cliente_datos.get('ano', '')}  
-        **Fecha:** {datetime.now().strftime('%d/%m/%Y')}  
-        **Válido hasta:** {(datetime.now() + timedelta(days=1)).strftime('%d/%m/%Y')}
+        **Cliente:** {cliente.get('nombre', 'N/A')}  
+        **Teléfono:** {cliente.get('telefono', 'N/A')}  
+        **Email:** {cliente.get('email', 'N/A')}  
+        **Vehículo:** {cliente.get('vehiculo', 'N/A')} {cliente.get('ano', '')}  
+        **VIN:** {cliente.get('vin', 'N/A')}
         """)
+        
+        st.markdown("---")
         
         # Tabla de ítems
-        st.markdown("### Detalle de Repuestos")
-        
-        for i, item in enumerate(st.session_state.items):
-            st.markdown(f"""
-            | Campo | Valor |
-            |-------|-------|
-            | Descripción | {item['descripcion']} |
-            | N° Parte | {item['parte']} |
-            | Marca | {item['marca']} |
-            | Garantía | {item['garantia']} |
-            | Cantidad | {item['cantidad']} |
-            | Envío | {item['envio_tipo']} |
-            | Origen | {item['origen']} |
-            | Tiempo Entrega | {item['tiempo_entrega']} |
-            | **Costo Unitario** | **${item['costo_unitario']:.2f}** |
-            | **Costo Total** | **${item['costo_total']:.2f}** |
-            """)
+        total_cotizacion = 0
+        for i, item in enumerate(items):
+            st.markdown(f"**Ítem #{i+1}:** {item['descripcion']}")
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.write(f"N° Parte: {item['parte']}")
+                st.write(f"Marca: {item['marca']}")
+            with col2:
+                st.write(f"Cantidad: {item['cantidad']}")
+                st.write(f"Garantía: {item['garantia']}")
+            with col3:
+                st.write(f"Origen: {item['origen']}")
+                st.write(f"Entrega: {item['tiempo_entrega']}")
+            with col4:
+                st.write(f"**Unitario: ${item['costo_unitario']:.2f}**")
+                st.write(f"**Total: ${item['costo_total']:.2f}**")
+            
+            total_cotizacion += item['costo_total']
             st.markdown("---")
         
-        # Totales
-        st.markdown(f"""
-        ### Totales
-        | Concepto | Valor |
-        |----------|-------|
-        | Sub-Total | ${total_general:.2f} |
-        | I.V.A. 16% | $0.00 |
-        | **Total a Pagar** | **${total_general:.2f}** |
-        """)
+        st.success(f"**💰 TOTAL COTIZACIÓN: ${total_cotizacion:.2f} USD**")
         
-        # Botones de descarga
-        st.markdown("### 📥 Descargar Cotización")
-        
-        download_col1, download_col2 = st.columns(2)
-        with download_col1:
-            st.info("🔜 Generación de PDF próximamente")
-        with download_col2:
-            st.info("🔜 Generación de PNG próximamente")
+        # Botones de generación
+        gen_col1, gen_col2 = st.columns(2)
+        with gen_col1:
+            if st.button("📥 GENERAR PDF", use_container_width=True, type="primary"):
+                st.info("🔧 Generación de PDF en desarrollo...")
+        with gen_col2:
+            if st.button("🖼️ GENERAR PNG", use_container_width=True, type="secondary"):
+                st.info("🔧 Generación de PNG en desarrollo...")
