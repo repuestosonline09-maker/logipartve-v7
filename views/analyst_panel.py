@@ -272,58 +272,68 @@ def render_analyst_panel():
     
     # ==========================================
     # SECCIÓN 5: CÁLCULOS AUTOMÁTICOS
+    # FÓRMULAS CORREGIDAS SEGÚN EXCEL DEL USUARIO
     # ==========================================
     st.markdown("### 📊 Cálculos Automáticos")
     
-    # Calcular impuesto internacional sobre FOB
+    # 1. IMPUESTO INTERNACIONAL = FOB * %
     costo_impuesto = costo_fob * (impuesto_porcentaje / 100)
     
-    # Calcular TAX sobre FOB
-    costo_tax = costo_fob * (tax_porcentaje / 100)
-    
-    # Calcular utilidad: (FOB + Handling) * (Factor - 1)
-    # Si factor es 1.4285, la utilidad es (FOB+Handling) * 0.4285
+    # 2. UTILIDAD = (FOB * Factor) - FOB
+    # Ejemplo: (84 * 1.4285) - 84 = 35.99
     if factor_utilidad > 0:
-        utilidad_calculada = (costo_fob + costo_handling) * (factor_utilidad - 1) if factor_utilidad > 1 else 0
+        utilidad_calculada = (costo_fob * factor_utilidad) - costo_fob
     else:
         utilidad_calculada = 0
     
-    # Subtotal antes de diferencial
-    subtotal_sin_dif = costo_fob + costo_handling + costo_manejo + costo_impuesto + utilidad_calculada + costo_envio + costo_tax
+    # 3. TAX = (FOB + Handling + Manejo + Utilidad + Envío) * 7%
+    # NOTA: El TAX NO incluye el Impuesto Internacional en su base
+    base_tax = costo_fob + costo_handling + costo_manejo + utilidad_calculada + costo_envio
+    costo_tax = base_tax * (tax_porcentaje / 100)
     
-    # Calcular diferencial
-    diferencial_valor = subtotal_sin_dif * (diferencial_porcentaje / 100)
+    # 4. PRECIO USD = FOB + Handling + Manejo + Impuesto + Utilidad + Envío + TAX
+    # (SIN diferencial - para clientes que pagan en dólares)
+    precio_usd = costo_fob + costo_handling + costo_manejo + costo_impuesto + utilidad_calculada + costo_envio + costo_tax
     
-    # Total final
-    total_item = subtotal_sin_dif + diferencial_valor
+    # 5. DIFERENCIAL = PRECIO_USD * %
+    diferencial_valor = precio_usd * (diferencial_porcentaje / 100)
     
-    # Mostrar cálculos
+    # 6. PRECIO Bs = PRECIO_USD + DIFERENCIAL
+    # (Para clientes que pagan en bolívares a tasa BCV)
+    precio_bs = precio_usd + diferencial_valor
+    
+    # Mostrar cálculos intermedios
     calc_col1, calc_col2, calc_col3, calc_col4 = st.columns(4)
     with calc_col1:
         st.metric(f"Impuesto Int. ({impuesto_porcentaje}%)", f"${costo_impuesto:.2f}")
     with calc_col2:
-        st.metric(f"TAX ({tax_porcentaje}%)", f"${costo_tax:.2f}")
-    with calc_col3:
         st.metric(f"Utilidad (Factor {factor_utilidad})", f"${utilidad_calculada:.2f}")
+    with calc_col3:
+        st.metric(f"TAX ({tax_porcentaje}%)", f"${costo_tax:.2f}")
     with calc_col4:
         st.metric(f"Diferencial ({diferencial_porcentaje}%)", f"${diferencial_valor:.2f}")
     
     st.markdown("---")
     
-    # Mostrar resumen de cálculos
+    # Mostrar resumen de precios
     st.markdown("### 💵 Resumen del Ítem")
     
-    resumen_col1, resumen_col2, resumen_col3 = st.columns(3)
+    # Precio unitario en USD y Bs
+    resumen_col1, resumen_col2 = st.columns(2)
     with resumen_col1:
-        st.metric("Subtotal (sin diferencial)", f"${subtotal_sin_dif:.2f}")
+        st.metric("💵 PRECIO USD (pago en dólares)", f"${precio_usd:.2f}")
     with resumen_col2:
-        st.metric(f"Diferencial ({diferencial_porcentaje}%)", f"${diferencial_valor:.2f}")
-    with resumen_col3:
-        st.metric("**COSTO UNITARIO**", f"${total_item:.2f}")
+        st.metric("🇻🇪 PRECIO Bs (pago en bolívares)", f"${precio_bs:.2f}")
     
     # Costo total (cantidad × unitario)
-    costo_total_item = total_item * item_cantidad
-    st.success(f"**COSTO TOTAL (Cant. {item_cantidad}): ${costo_total_item:.2f} USD**")
+    costo_total_usd = precio_usd * item_cantidad
+    costo_total_bs = precio_bs * item_cantidad
+    
+    st.success(f"**TOTAL USD (Cant. {item_cantidad}): ${costo_total_usd:.2f}** | **TOTAL Bs: ${costo_total_bs:.2f}**")
+    
+    # Variables para guardar en el ítem (usamos precio_usd como costo_unitario principal)
+    total_item = precio_usd
+    costo_total_item = costo_total_usd
     
     st.markdown("---")
     
@@ -365,8 +375,11 @@ def render_analyst_panel():
                     "tax_porcentaje": tax_porcentaje,
                     "diferencial": diferencial_valor,
                     "diferencial_porcentaje": diferencial_porcentaje,
-                    "costo_unitario": total_item,
-                    "costo_total": costo_total_item
+                    "precio_usd": precio_usd,
+                    "precio_bs": precio_bs,
+                    "costo_unitario": precio_usd,
+                    "costo_total": costo_total_usd,
+                    "costo_total_bs": costo_total_bs
                 }
                 st.session_state.items.append(nuevo_item)
                 st.success(f"✅ Ítem #{len(st.session_state.items)} agregado. Puede agregar otro.")
@@ -407,8 +420,11 @@ def render_analyst_panel():
                         "tax_porcentaje": tax_porcentaje,
                         "diferencial": diferencial_valor,
                         "diferencial_porcentaje": diferencial_porcentaje,
-                        "costo_unitario": total_item,
-                        "costo_total": costo_total_item
+                        "precio_usd": precio_usd,
+                        "precio_bs": precio_bs,
+                        "costo_unitario": precio_usd,
+                        "costo_total": costo_total_usd,
+                        "costo_total_bs": costo_total_bs
                     }
                     st.session_state.items.append(nuevo_item)
                 
@@ -440,7 +456,8 @@ def render_analyst_panel():
         st.markdown("---")
         st.markdown("### 📋 Ítems Agregados")
         
-        total_general = 0
+        total_general_usd = 0
+        total_general_bs = 0
         for i, item in enumerate(st.session_state.items):
             with st.expander(f"Ítem #{i+1}: {item['descripcion']}", expanded=False):
                 col1, col2, col3 = st.columns(3)
@@ -453,18 +470,20 @@ def render_analyst_panel():
                     st.write(f"**Fabricación:** {item['fabricacion']}")
                     st.write(f"**Envío:** {item['envio_tipo']}")
                 with col3:
-                    st.write(f"**Costo Unitario:** ${item['costo_unitario']:.2f}")
-                    st.write(f"**Costo Total:** ${item['costo_total']:.2f}")
+                    st.write(f"**💵 Precio USD:** ${item.get('precio_usd', item['costo_unitario']):.2f}")
+                    st.write(f"**🇻🇪 Precio Bs:** ${item.get('precio_bs', item['costo_total']):.2f}")
+                    st.write(f"**Total USD:** ${item['costo_total']:.2f}")
                 
                 # Botón para eliminar ítem
                 if st.button(f"🗑️ Eliminar Ítem #{i+1}", key=f"del_item_{i}"):
                     st.session_state.items.pop(i)
                     st.rerun()
             
-            total_general += item['costo_total']
+            total_general_usd += item['costo_total']
+            total_general_bs += item.get('costo_total_bs', item['costo_total'])
         
         st.markdown("---")
-        st.success(f"**💰 TOTAL GENERAL: ${total_general:.2f} USD**")
+        st.success(f"**💵 TOTAL USD: ${total_general_usd:.2f}** | **🇻🇪 TOTAL Bs: ${total_general_bs:.2f}**")
     
     # ==========================================
     # SECCIÓN 8: VISTA PREVIA DE COTIZACIÓN
@@ -488,7 +507,8 @@ def render_analyst_panel():
         st.markdown("---")
         
         # Tabla de ítems
-        total_cotizacion = 0
+        total_cotizacion_usd = 0
+        total_cotizacion_bs = 0
         for i, item in enumerate(items):
             st.markdown(f"**Ítem #{i+1}:** {item['descripcion']}")
             col1, col2, col3, col4 = st.columns(4)
@@ -502,13 +522,19 @@ def render_analyst_panel():
                 st.write(f"Origen: {item['origen']}")
                 st.write(f"Entrega: {item['tiempo_entrega']}")
             with col4:
-                st.write(f"**Unitario: ${item['costo_unitario']:.2f}**")
-                st.write(f"**Total: ${item['costo_total']:.2f}**")
+                st.write(f"**💵 USD: ${item.get('precio_usd', item['costo_unitario']):.2f}**")
+                st.write(f"**🇻🇪 Bs: ${item.get('precio_bs', item['costo_total']):.2f}**")
             
-            total_cotizacion += item['costo_total']
+            total_cotizacion_usd += item['costo_total']
+            total_cotizacion_bs += item.get('costo_total_bs', item['costo_total'])
             st.markdown("---")
         
-        st.success(f"**💰 TOTAL COTIZACIÓN: ${total_cotizacion:.2f} USD**")
+        # Mostrar totales
+        total_col1, total_col2 = st.columns(2)
+        with total_col1:
+            st.success(f"**💵 TOTAL USD: ${total_cotizacion_usd:.2f}**")
+        with total_col2:
+            st.success(f"**🇻🇪 TOTAL Bs: ${total_cotizacion_bs:.2f}**")
         
         # Botones de generación
         gen_col1, gen_col2 = st.columns(2)
