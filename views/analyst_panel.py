@@ -225,9 +225,9 @@ def render_analyst_panel():
     with cost_col4:
         costo_impuesto = st.number_input("Impuesto ($)", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="costo_impuesto")
     with cost_col5:
-        porcentaje_utilidad = st.number_input("Utilidad (%)", min_value=0, value=25, step=1, key="porcentaje_utilidad")
+        porcentaje_utilidad = st.number_input("Utilidad (%)", min_value=0, value=0, step=1, key="porcentaje_utilidad")
     with cost_col6:
-        costo_envio = st.number_input("Envío ($)", min_value=0.0, value=25.0, step=0.01, format="%.2f", key="costo_envio")
+        costo_envio = st.number_input("Envío ($)", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="costo_envio")
     
     cost_col7, cost_col8 = st.columns(2)
     with cost_col7:
@@ -368,7 +368,7 @@ def render_analyst_panel():
     # ==========================================
     # SECCIÓN 6: RESUMEN DE ÍTEMS AGREGADOS
     # ==========================================
-    if len(st.session_state.items) > 0:
+    if isinstance(st.session_state.items, list) and len(st.session_state.items) > 0:
         st.markdown("---")
         st.markdown("### 📋 Ítems Agregados")
         
