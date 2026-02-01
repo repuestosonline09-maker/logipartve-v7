@@ -85,8 +85,8 @@ def calcular_envio(largo_cm, ancho_cm, alto_cm, peso_kg, origen, tipo_envio, tar
 def render_analyst_panel():
     """Renderiza el panel de analista para crear cotizaciones"""
     
-    # Inicializar estado de sesión
-    if 'items' not in st.session_state:
+    # Inicializar estado de sesión (verificar tipo también)
+    if 'items' not in st.session_state or not isinstance(st.session_state.items, list):
         st.session_state.items = []
     if 'cliente_datos' not in st.session_state:
         st.session_state.cliente_datos = {}
