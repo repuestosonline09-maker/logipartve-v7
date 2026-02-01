@@ -166,7 +166,13 @@ def render_analyst_panel():
     # ==========================================
     # SECCIÓN 3: FORMULARIO DE ÍTEM
     # ==========================================
-    st.markdown(f"### 📦 Ítem #{len(st.session_state.items) + 1}")
+    try:
+        num_items = len(st.session_state.items) if isinstance(st.session_state.items, list) else 0
+    except:
+        num_items = 0
+        st.session_state.items = []
+    
+    st.markdown(f"### 📦 Ítem #{num_items + 1}")
     
     # Fila 1: Descripción y N° Parte
     item_col1, item_col2 = st.columns(2)
