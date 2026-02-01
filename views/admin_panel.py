@@ -355,20 +355,21 @@ def show_system_configuration():
     col1, col2 = st.columns(2)
     
     with col1:
+        st.info("📊 **DIFERENCIAL BCV vs PARALELO** - Este valor cambia diariamente según la diferencia entre la tasa del Banco Central de Venezuela y la tasa paralela. Se aplica automáticamente a todas las cotizaciones cuando el cliente paga en bolívares.")
         with st.form("diferencial_form"):
             exchange_diff = st.number_input(
                 "Diferencial de Cambio Diario (%)",
                 min_value=0.0,
                 max_value=100.0,
-                value=float(config.get('exchange_differential', {}).get('value', 25)),
-                step=0.1,
-                help="Porcentaje de diferencial que se aplica al total"
+                value=float(config.get('exchange_differential', {}).get('value', 45)),
+                step=1.0,
+                help="Ej: 25, 30, 45. Este porcentaje se suma al precio USD para obtener el precio en Bs."
             )
             submit_diff = st.form_submit_button("💾 Guardar Diferencial", use_container_width=True)
             if submit_diff:
-                DBManager.set_config('exchange_differential', str(exchange_diff), "Diferencial de cambio diario - Porcentaje", st.session_state.user_id)
-                st.success("✅ Diferencial actualizado")
-                DBManager.log_activity(st.session_state.user_id, "update_config", "Actualizó diferencial")
+                DBManager.set_config('exchange_differential', str(int(exchange_diff)), "Diferencial BCV vs Paralelo - Porcentaje diario", st.session_state.user_id)
+                st.success(f"✅ Diferencial actualizado a {int(exchange_diff)}%")
+                DBManager.log_activity(st.session_state.user_id, "update_config", f"Actualizó diferencial a {int(exchange_diff)}%")
                 st.rerun()
     
     with col2:

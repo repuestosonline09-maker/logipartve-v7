@@ -158,7 +158,7 @@ class DBManager:
         
         # Insertar configuraciones por defecto si no existen
         default_configs = [
-            ("exchange_differential", "25", "Diferencial de cambio diario (Y30) - Porcentaje"),
+            ("exchange_differential", "45", "Diferencial BCV vs Paralelo - Porcentaje diario"),
             ("american_tax", "7", "TAX de empresa americana - Porcentaje (valor único, no seleccionable)"),
             ("national_handling", "18", "Costo de manejo nacional - Dólares"),
             ("venezuela_iva", "16", "IVA Venezuela - Porcentaje"),
@@ -585,12 +585,12 @@ class DBManager:
     
     @staticmethod
     def get_diferencial() -> float:
-        """Obtiene el diferencial de cambio configurado."""
+        """Obtiene el diferencial de cambio configurado (BCV vs Paralelo)."""
         value = DBManager.get_config("exchange_differential")
         try:
-            return float(value) if value else 25.0
+            return float(value) if value else 45.0
         except:
-            return 25.0
+            return 45.0
     
     @staticmethod
     def set_config(key: str, value: str, description: str = None, updated_by: int = None) -> bool:
