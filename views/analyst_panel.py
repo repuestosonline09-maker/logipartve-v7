@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 # ==========================================
 
 PAISES_ORIGEN = [
-    "EEUU", "MIAMI", "ESPAÑA", "MADRID", "ALEMANIA", "ARGENTINA", "ARUBA", 
+    "-- Seleccione --", "EEUU", "MIAMI", "ESPAÑA", "MADRID", "ALEMANIA", "ARGENTINA", "ARUBA", 
     "AUSTRALIA", "BRASIL", "CANADA", "CHILE", "CHINA", "COLOMBIA", 
     "COREA DEL SUR", "DINAMARCA", "DUBAI", "ESTONIA", "FRANCIA", "GRECIA", 
     "HOLANDA", "HUNGRIA", "INDIA", "INDONESIA", "INGLATERRA", "IRLANDA", 
@@ -21,16 +21,17 @@ PAISES_ORIGEN = [
     "UNION EUROPEA", "VARIOS", "VENEZUELA"
 ]
 
-TIPOS_ENVIO = ["AEREO", "MARITIMO", "TERRESTRE"]
+TIPOS_ENVIO = ["-- Seleccione --", "AEREO", "MARITIMO", "TERRESTRE"]
 
 TIEMPOS_ENTREGA = [
-    "02 A 05 DIAS", "08 A 12 DIAS", "12 A 15 DIAS", 
+    "-- Seleccione --", "02 A 05 DIAS", "08 A 12 DIAS", "12 A 15 DIAS", 
     "18 A 21 DIAS", "25 A 30 DIAS", "30 A 45 DIAS", "60 DIAS"
 ]
 
-GARANTIAS = ["15 DIAS", "30 DIAS", "45 DIAS", "3 MESES", "6 MESES"]
+GARANTIAS = ["-- Seleccione --", "15 DIAS", "30 DIAS", "45 DIAS", "3 MESES", "6 MESES"]
 
-MARCAS = ["AFTERMARKET", "GENUINO", "OEM", "REMANUFACTURADO", "USADO"]
+# Lista de cantidades del 1 al 1000
+CANTIDADES = list(range(1, 1001))
 
 # ==========================================
 # FUNCIÓN DE CÁLCULO DE ENVÍO (copiada de v6.2.2)
@@ -184,11 +185,11 @@ def render_analyst_panel():
     # Fila 2: Marca, Garantía, Cantidad
     item_col3, item_col4, item_col5 = st.columns(3)
     with item_col3:
-        item_marca = st.selectbox("Marca", MARCAS, key="item_marca")
+        item_marca = st.text_input("Marca", placeholder="Ej: TOYOTA, BOSCH, DENSO...", key="item_marca")
     with item_col4:
-        item_garantia = st.selectbox("Garantía", GARANTIAS, index=3, key="item_garantia")
+        item_garantia = st.selectbox("Garantía", GARANTIAS, key="item_garantia")
     with item_col5:
-        item_cantidad = st.number_input("Cantidad", min_value=1, value=1, step=1, key="item_cantidad")
+        item_cantidad = st.selectbox("Cantidad", CANTIDADES, key="item_cantidad")
     
     # Fila 3: Origen, Envío, Tiempo de Entrega
     item_col6, item_col7, item_col8 = st.columns(3)
