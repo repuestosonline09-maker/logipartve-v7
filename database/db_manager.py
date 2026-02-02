@@ -593,6 +593,15 @@ class DBManager:
             return 45.0
     
     @staticmethod
+    def get_iva_venezuela() -> float:
+        """Obtiene el porcentaje de IVA Venezuela configurado."""
+        value = DBManager.get_config("venezuela_iva")
+        try:
+            return float(value) if value else 16.0
+        except:
+            return 16.0
+    
+    @staticmethod
     def set_config(key: str, value: str, description: str = None, updated_by: int = None) -> bool:
         """Crea o actualiza un valor de configuración."""
         try:

@@ -73,7 +73,8 @@ def cargar_configuraciones():
             "impuesto_options": DBManager.get_impuesto_internacional_options(),
             "utilidad_factors": DBManager.get_profit_factors(),
             "tax_percentage": DBManager.get_tax_percentage(),
-            "diferencial": DBManager.get_diferencial()
+            "diferencial": DBManager.get_diferencial(),
+            "iva_venezuela": DBManager.get_iva_venezuela()
         }
         return config
     except Exception as e:
@@ -87,7 +88,8 @@ def cargar_configuraciones():
             "impuesto_options": [0, 25, 30, 35, 40, 45, 50],
             "utilidad_factors": [1.4285, 1.35, 1.30, 1.25, 1.20, 1.15, 1.10, 0],
             "tax_percentage": 7.0,
-            "diferencial": 25.0
+            "diferencial": 45.0,
+            "iva_venezuela": 16.0
         }
 
 
@@ -133,6 +135,13 @@ def render_analyst_panel():
         cliente_ano = st.text_input("Año del Vehículo", key="cliente_ano")
     with col4:
         cliente_vin = st.text_input("Nro. VIN (opcional)", key="cliente_vin")
+    
+    # Nuevos campos opcionales: Dirección y C.I./RIF
+    col5, col6 = st.columns(2)
+    with col5:
+        cliente_direccion = st.text_input("Dirección (opcional)", key="cliente_direccion")
+    with col6:
+        cliente_ci_rif = st.text_input("C.I. / RIF (opcional)", key="cliente_ci_rif")
     
     st.markdown("---")
     
@@ -267,11 +276,30 @@ def render_analyst_panel():
     # TAX - Valor fijo desde Admin (NO seleccionable)
     tax_porcentaje = config["tax_percentage"]
     diferencial_porcentaje = config["diferencial"]
+    iva_porcentaje = config["iva_venezuela"]
     
     st.markdown("---")
     
     # ==========================================
-    # SECCIÓN 5: CÁLCULOS AUTOMÁTICOS
+    # SECCIÓN 5: PREGUNTA IVA VENEZUELA
+    # ==========================================
+    st.markdown("### 🇻🇪 IVA Venezuela")
+    st.warning(f"⚠️ **¿APLICAR IVA ({iva_porcentaje}%)?** - El IVA solo se aplica al precio en Bolívares")
+    
+    iva_col1, iva_col2 = st.columns(2)
+    with iva_col1:
+        aplicar_iva = st.radio(
+            "¿Aplicar IVA a esta cotización?",
+            options=["NO", "SÍ"],
+            index=0,
+            horizontal=True,
+            key="aplicar_iva"
+        )
+    
+    st.markdown("---")
+    
+    # ==========================================
+    # SECCIÓN 6: CÁLCULOS AUTOMÁTICOS
     # FÓRMULAS CORREGIDAS SEGÚN EXCEL DEL USUARIO
     # ==========================================
     st.markdown("### 📊 Cálculos Automáticos")
@@ -300,10 +328,22 @@ def render_analyst_panel():
     
     # 6. PRECIO Bs = PRECIO_USD + DIFERENCIAL
     # (Para clientes que pagan en bolívares a tasa BCV)
-    precio_bs = precio_usd + diferencial_valor
+    precio_bs_sin_iva = precio_usd + diferencial_valor
+    
+    # 7. IVA VENEZUELA (solo si el analista seleccionó SÍ)
+    if aplicar_iva == "SÍ":
+        iva_valor = precio_bs_sin_iva * (iva_porcentaje / 100)
+        precio_bs = precio_bs_sin_iva + iva_valor
+    else:
+        iva_valor = 0
+        precio_bs = precio_bs_sin_iva
     
     # Mostrar cálculos intermedios
-    calc_col1, calc_col2, calc_col3, calc_col4 = st.columns(4)
+    if aplicar_iva == "SÍ":
+        calc_col1, calc_col2, calc_col3, calc_col4, calc_col5 = st.columns(5)
+    else:
+        calc_col1, calc_col2, calc_col3, calc_col4 = st.columns(4)
+    
     with calc_col1:
         st.metric(f"Impuesto Int. ({impuesto_porcentaje}%)", f"${costo_impuesto:.2f}")
     with calc_col2:
@@ -312,6 +352,10 @@ def render_analyst_panel():
         st.metric(f"TAX ({tax_porcentaje}%)", f"${costo_tax:.2f}")
     with calc_col4:
         st.metric(f"Diferencial ({diferencial_porcentaje}%)", f"${diferencial_valor:.2f}")
+    
+    if aplicar_iva == "SÍ":
+        with calc_col5:
+            st.metric(f"IVA ({iva_porcentaje}%)", f"${iva_valor:.2f}")
     
     st.markdown("---")
     
@@ -323,13 +367,19 @@ def render_analyst_panel():
     with resumen_col1:
         st.metric("💵 PRECIO USD (pago en dólares)", f"${precio_usd:.2f}")
     with resumen_col2:
-        st.metric("🇻🇪 PRECIO Bs (pago en bolívares)", f"${precio_bs:.2f}")
+        if aplicar_iva == "SÍ":
+            st.metric(f"🇻🇪 PRECIO Bs (con IVA {iva_porcentaje}%)", f"${precio_bs:.2f}")
+        else:
+            st.metric("🇻🇪 PRECIO Bs (sin IVA)", f"${precio_bs:.2f}")
     
     # Costo total (cantidad × unitario)
     costo_total_usd = precio_usd * item_cantidad
     costo_total_bs = precio_bs * item_cantidad
     
-    st.success(f"**TOTAL USD (Cant. {item_cantidad}): ${costo_total_usd:.2f}** | **TOTAL Bs: ${costo_total_bs:.2f}**")
+    if aplicar_iva == "SÍ":
+        st.success(f"**TOTAL USD (Cant. {item_cantidad}): ${costo_total_usd:.2f}** | **TOTAL Bs (con IVA): ${costo_total_bs:.2f}**")
+    else:
+        st.success(f"**TOTAL USD (Cant. {item_cantidad}): ${costo_total_usd:.2f}** | **TOTAL Bs: ${costo_total_bs:.2f}**")
     
     # Variables para guardar en el ítem (usamos precio_usd como costo_unitario principal)
     total_item = precio_usd
@@ -375,6 +425,9 @@ def render_analyst_panel():
                     "tax_porcentaje": tax_porcentaje,
                     "diferencial": diferencial_valor,
                     "diferencial_porcentaje": diferencial_porcentaje,
+                    "aplicar_iva": aplicar_iva == "SÍ",
+                    "iva_porcentaje": iva_porcentaje,
+                    "iva_valor": iva_valor,
                     "precio_usd": precio_usd,
                     "precio_bs": precio_bs,
                     "costo_unitario": precio_usd,
@@ -420,6 +473,9 @@ def render_analyst_panel():
                         "tax_porcentaje": tax_porcentaje,
                         "diferencial": diferencial_valor,
                         "diferencial_porcentaje": diferencial_porcentaje,
+                        "aplicar_iva": aplicar_iva == "SÍ",
+                        "iva_porcentaje": iva_porcentaje,
+                        "iva_valor": iva_valor,
                         "precio_usd": precio_usd,
                         "precio_bs": precio_bs,
                         "costo_unitario": precio_usd,
@@ -428,14 +484,16 @@ def render_analyst_panel():
                     }
                     st.session_state.items.append(nuevo_item)
                 
-                # Guardar datos del cliente
+                # Guardar datos del cliente (solo campos con datos)
                 st.session_state.cliente_datos = {
                     "nombre": cliente_nombre,
                     "telefono": cliente_telefono,
                     "email": cliente_email,
                     "vehiculo": cliente_vehiculo,
                     "ano": cliente_ano,
-                    "vin": cliente_vin
+                    "vin": cliente_vin,
+                    "direccion": cliente_direccion,
+                    "ci_rif": cliente_ci_rif
                 }
                 
                 st.session_state.mostrar_cotizacion = True
@@ -495,20 +553,34 @@ def render_analyst_panel():
         cliente = st.session_state.cliente_datos
         items = st.session_state.items
         
-        # Información del cliente
-        st.markdown(f"""
-        **Cliente:** {cliente.get('nombre', 'N/A')}  
-        **Teléfono:** {cliente.get('telefono', 'N/A')}  
-        **Email:** {cliente.get('email', 'N/A')}  
-        **Vehículo:** {cliente.get('vehiculo', 'N/A')} {cliente.get('ano', '')}  
-        **VIN:** {cliente.get('vin', 'N/A')}
-        """)
+        # Información del cliente (solo mostrar campos con datos)
+        cliente_info = []
+        if cliente.get('nombre'):
+            cliente_info.append(f"**Cliente:** {cliente.get('nombre')}")
+        if cliente.get('ci_rif'):
+            cliente_info.append(f"**C.I./RIF:** {cliente.get('ci_rif')}")
+        if cliente.get('telefono'):
+            cliente_info.append(f"**Teléfono:** {cliente.get('telefono')}")
+        if cliente.get('email'):
+            cliente_info.append(f"**Email:** {cliente.get('email')}")
+        if cliente.get('direccion'):
+            cliente_info.append(f"**Dirección:** {cliente.get('direccion')}")
+        vehiculo_str = cliente.get('vehiculo', '')
+        if cliente.get('ano'):
+            vehiculo_str += f" {cliente.get('ano')}"
+        if vehiculo_str:
+            cliente_info.append(f"**Vehículo:** {vehiculo_str}")
+        if cliente.get('vin'):
+            cliente_info.append(f"**VIN:** {cliente.get('vin')}")
+        
+        st.markdown("  \n".join(cliente_info))
         
         st.markdown("---")
         
         # Tabla de ítems
         total_cotizacion_usd = 0
         total_cotizacion_bs = 0
+        hay_iva = False
         for i, item in enumerate(items):
             st.markdown(f"**Ítem #{i+1}:** {item['descripcion']}")
             col1, col2, col3, col4 = st.columns(4)
@@ -523,7 +595,12 @@ def render_analyst_panel():
                 st.write(f"Entrega: {item['tiempo_entrega']}")
             with col4:
                 st.write(f"**💵 USD: ${item.get('precio_usd', item['costo_unitario']):.2f}**")
-                st.write(f"**🇻🇪 Bs: ${item.get('precio_bs', item['costo_total']):.2f}**")
+                # Mostrar si tiene IVA
+                if item.get('aplicar_iva', False):
+                    hay_iva = True
+                    st.write(f"**🇻🇪 Bs (con IVA): ${item.get('precio_bs', item['costo_total']):.2f}**")
+                else:
+                    st.write(f"**🇻🇪 Bs: ${item.get('precio_bs', item['costo_total']):.2f}**")
             
             total_cotizacion_usd += item['costo_total']
             total_cotizacion_bs += item.get('costo_total_bs', item['costo_total'])
