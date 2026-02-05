@@ -394,7 +394,7 @@ def render_analyst_panel():
     btn_action_col1, btn_action_col2, btn_action_col3 = st.columns(3)
     
     with btn_action_col1:
-        if st.button("➕ AGREGAR OTRO ÍTEM", use_container_width=True, type="secondary"):
+        if st.button("➕ AGREGAR OTRO ÍTEM", use_container_width=True, type="secondary", key="btn_agregar_item"):
             # Validar campos mínimos
             if not item_descripcion:
                 st.error("⚠️ Ingrese la descripción del repuesto")
@@ -439,7 +439,7 @@ def render_analyst_panel():
                 st.rerun()
     
     with btn_action_col2:
-        if st.button("📄 GENERAR COTIZACIÓN", use_container_width=True, type="primary"):
+        if st.button("📄 GENERAR COTIZACIÓN", use_container_width=True, type="primary", key="btn_generar_cotizacion"):
             # Validar datos del cliente
             if not cliente_nombre:
                 st.error("⚠️ Ingrese el nombre del cliente")
@@ -500,7 +500,7 @@ def render_analyst_panel():
                 st.rerun()
     
     with btn_action_col3:
-        if st.button("🗑️ LIMPIAR TODO", use_container_width=True):
+        if st.button("🗑️ LIMPIAR TODO", use_container_width=True, key="btn_limpiar_todo"):
             st.session_state.items = []
             st.session_state.cliente_datos = {}
             if 'mostrar_cotizacion' in st.session_state:
@@ -616,8 +616,8 @@ def render_analyst_panel():
         # Botones de generación
         gen_col1, gen_col2 = st.columns(2)
         with gen_col1:
-            if st.button("📥 GENERAR PDF", use_container_width=True, type="primary"):
+            if st.button("📥 GENERAR PDF", use_container_width=True, type="primary", key="btn_generar_pdf"):
                 st.info("🔧 Generación de PDF en desarrollo...")
         with gen_col2:
-            if st.button("🖼️ GENERAR PNG", use_container_width=True, type="secondary"):
+            if st.button("🖼️ GENERAR PNG", use_container_width=True, type="secondary", key="btn_generar_png"):
                 st.info("🔧 Generación de PNG en desarrollo...")
