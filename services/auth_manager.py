@@ -87,11 +87,17 @@ class AuthManager:
         """
         Cierra la sesión del usuario.
         """
-        if 'user_id' in st.session_state:
-            DBManager.log_activity(st.session_state.user_id, "logout", f"Usuario {st.session_state.username} cerró sesión")
+        try:
+            if 'user_id' in st.session_state:
+                DBManager.log_activity(st.session_state.user_id, "logout", f"Usuario {st.session_state.username} cerró sesión")
+        except:
+            pass  # Ignorar errores de logging
         
-        for key in list(st.session_state.keys()):
-            del st.session_state[key]
+        # Limpiar todas las variables de sesión
+        st.session_state.clear()
+        
+        # Asegurar que logged_in esté en False
+        st.session_state.logged_in = False
     
     @staticmethod
     def is_logged_in() -> bool:

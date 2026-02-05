@@ -170,8 +170,10 @@ def show_main_app():
         st.markdown("---")
         
         # Botón de cerrar sesión
-        if st.button("🚪 Cerrar Sesión", use_container_width=True, key="btn_cerrar_sesion"):
+        def do_logout():
             AuthManager.logout()
+        
+        if st.button("🚪 Cerrar Sesión", use_container_width=True, key="btn_cerrar_sesion", on_click=do_logout):
             st.rerun()
     
     # Contenido principal según la opción seleccionada
