@@ -1,7 +1,10 @@
 # database/db_manager.py
-# Gestor de base de datos SQLite (preparado para migración a PostgreSQL)
+# Gestor de base de datos con soporte para SQLite (desarrollo) y PostgreSQL (producción)
 
+import os
 import sqlite3
+import psycopg2
+from psycopg2.extras import RealDictCursor
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Dict, Any
@@ -11,16 +14,25 @@ class DBManager:
     """
     Gestor de base de datos para LogiPartVE Pro v7.0
     Maneja 7 tablas: users, system_config, quotes, quote_items, pages, cache, activity_logs
+    Soporta SQLite (desarrollo local) y PostgreSQL (producción en Railway)
     """
     
     DB_PATH = Path(__file__).parent / "logipartve.db"
+    USE_POSTGRES = os.getenv("DATABASE_URL") is not None
     
     @staticmethod
     def get_connection():
-        """Crea y retorna una conexión a la base de datos."""
-        conn = sqlite3.connect(str(DBManager.DB_PATH))
-        conn.row_factory = sqlite3.Row  # Permite acceso por nombre de columna
-        return conn
+        """Crea y retorna una conexión a la base de datos (SQLite o PostgreSQL)."""
+        if DBManager.USE_POSTGRES:
+            # Producción: PostgreSQL en Railway
+            database_url = os.getenv("DATABASE_URL")
+            conn = psycopg2.connect(database_url, cursor_factory=RealDictCursor)
+            return conn
+        else:
+            # Desarrollo: SQLite local
+            conn = sqlite3.connect(str(DBManager.DB_PATH))
+            conn.row_factory = sqlite3.Row
+            return conn
     
     @staticmethod
     def init_database():
@@ -28,10 +40,16 @@ class DBManager:
         conn = DBManager.get_connection()
         cursor = conn.cursor()
         
+        # Detectar si es PostgreSQL o SQLite para usar sintaxis correcta
+        is_postgres = DBManager.USE_POSTGRES
+        
+        # AUTOINCREMENT en SQLite vs SERIAL en PostgreSQL
+        id_type = "SERIAL PRIMARY KEY" if is_postgres else "INTEGER PRIMARY KEY AUTOINCREMENT"
+        
         # Tabla 1: users
-        cursor.execute("""
+        cursor.execute(f"""
             CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id {id_type},
                 username TEXT UNIQUE NOT NULL,
                 password_hash TEXT NOT NULL,
                 full_name TEXT NOT NULL,
@@ -42,7 +60,7 @@ class DBManager:
         """)
         
         # Tabla 2: system_config
-        cursor.execute("""
+        cursor.execute(f"""
             CREATE TABLE IF NOT EXISTS system_config (
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL,
@@ -54,9 +72,9 @@ class DBManager:
         """)
         
         # Tabla 3: quotes
-        cursor.execute("""
+        cursor.execute(f"""
             CREATE TABLE IF NOT EXISTS quotes (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id {id_type},
                 quote_number TEXT UNIQUE NOT NULL,
                 analyst_id INTEGER NOT NULL,
                 client_name TEXT NOT NULL,
@@ -72,9 +90,9 @@ class DBManager:
         """)
         
         # Tabla 4: quote_items
-        cursor.execute("""
+        cursor.execute(f"""
             CREATE TABLE IF NOT EXISTS quote_items (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id {id_type},
                 quote_id INTEGER NOT NULL,
                 description TEXT NOT NULL,
                 part_number TEXT,
@@ -92,9 +110,9 @@ class DBManager:
         """)
         
         # Tabla 5: pages
-        cursor.execute("""
+        cursor.execute(f"""
             CREATE TABLE IF NOT EXISTS pages (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id {id_type},
                 name TEXT NOT NULL,
                 url TEXT UNIQUE NOT NULL,
                 origin TEXT NOT NULL CHECK(origin IN ('Miami', 'Madrid')),
@@ -103,9 +121,9 @@ class DBManager:
         """)
         
         # Tabla 6: cache
-        cursor.execute("""
+        cursor.execute(f"""
             CREATE TABLE IF NOT EXISTS cache (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id {id_type},
                 part_number TEXT UNIQUE NOT NULL,
                 description TEXT,
                 unit_cost REAL,
@@ -118,9 +136,9 @@ class DBManager:
         """)
         
         # Tabla 7: activity_logs
-        cursor.execute("""
+        cursor.execute(f"""
             CREATE TABLE IF NOT EXISTS activity_logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id {id_type},
                 user_id INTEGER NOT NULL,
                 action TEXT NOT NULL,
                 details TEXT,
@@ -130,9 +148,9 @@ class DBManager:
         """)
         
         # Tabla 8: freight_rates (tarifas de flete)
-        cursor.execute("""
+        cursor.execute(f"""
             CREATE TABLE IF NOT EXISTS freight_rates (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id {id_type},
                 origin TEXT NOT NULL CHECK(origin IN ('Miami', 'Madrid')),
                 shipping_type TEXT NOT NULL CHECK(shipping_type IN ('Aéreo', 'Marítimo')),
                 rate REAL NOT NULL,
@@ -148,90 +166,24 @@ class DBManager:
         
         # Crear usuario admin por defecto si no existe
         cursor.execute("SELECT COUNT(*) FROM users WHERE username = 'admin'")
-        if cursor.fetchone()[0] == 0:
-            password_hash = bcrypt.hashpw("admin123".encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        result = cursor.fetchone()
+        count = result[0] if is_postgres else result[0]
+        
+        if count == 0:
+            admin_password = bcrypt.hashpw("admin123".encode('utf-8'), bcrypt.gensalt())
             cursor.execute("""
                 INSERT INTO users (username, password_hash, full_name, role)
+                VALUES (%s, %s, %s, %s)
+            """ if is_postgres else """
+                INSERT INTO users (username, password_hash, full_name, role)
                 VALUES (?, ?, ?, ?)
-            """, ("admin", password_hash, "Administrador", "admin"))
+            """, ('admin', admin_password.decode('utf-8'), 'Administrador', 'admin'))
             conn.commit()
         
-        # Insertar configuraciones por defecto si no existen
-        default_configs = [
-            ("exchange_differential", "45", "Diferencial BCV vs Paralelo - Porcentaje diario"),
-            ("american_tax", "7", "TAX de empresa americana - Porcentaje (valor único, no seleccionable)"),
-            ("national_handling", "18", "Costo de manejo nacional - Dólares"),
-            ("venezuela_iva", "16", "IVA Venezuela - Porcentaje"),
-            ("profit_factors", "1.4285,1.35,1.30,1.25,1.20,1.15,1.10,0", "Factores de utilidad disponibles (separados por coma)"),
-            ("warranties", "15 DIAS,30 DIAS,45 DIAS,3 MESES,6 MESES", "Opciones de garantía (separadas por coma)"),
-            ("terms_conditions", "Términos y condiciones estándar de LogiPartVE Pro", "Términos y condiciones de las cotizaciones"),
-            ("manejo_options", "0,15,23,25", "Opciones de MANEJO en dólares (separadas por coma)"),
-            ("impuesto_internacional_options", "0,25,30,35,40,45,50", "Opciones de Impuesto Internacional % (separadas por coma)"),
-            ("paises_origen", "EEUU,MIAMI,ESPAÑA,MADRID,ALEMANIA,ARGENTINA,ARUBA,AUSTRALIA,BRASIL,CANADA,CHILE,CHINA,COLOMBIA,COREA DEL SUR,DINAMARCA,DUBAI,ESTONIA,FRANCIA,GRECIA,HOLANDA,HUNGRIA,INDIA,INDONESIA,INGLATERRA,IRLANDA,ITALIA,JAPÓN,JORDANIA,LETONIA,LITUANIA,MALASIA,MEXICO,POLONIA,PORTUGAL,PUERTO RICO,REINO UNIDO,SINGAPUR,TAILANDIA,TAIWAN,TURQUIA,UCRANIA,UNION EUROPEA,VARIOS,VENEZUELA", "Países de origen/localización (separados por coma)"),
-            ("tipos_envio", "AEREO,MARITIMO,TERRESTRE", "Tipos de envío disponibles (separados por coma)"),
-            ("tiempos_entrega", "02 A 05 DIAS,08 A 12 DIAS,12 A 15 DIAS,18 A 21 DIAS,25 A 30 DIAS,30 A 45 DIAS,60 DIAS", "Tiempos de entrega disponibles (separados por coma)")
-        ]
-        
-        for key, value, description in default_configs:
-            cursor.execute("SELECT COUNT(*) FROM system_config WHERE key = ?", (key,))
-            if cursor.fetchone()[0] == 0:
-                cursor.execute("""
-                    INSERT INTO system_config (key, value, description)
-                    VALUES (?, ?, ?)
-                """, (key, value, description))
-        
-        # Insertar tarifas de flete por defecto si no existen
-        default_freight_rates = [
-            ("Miami", "Aéreo", 9.0, "$/lb"),
-            ("Miami", "Marítimo", 40.0, "$/ft³"),
-            ("Madrid", "Aéreo", 25.0, "$/kg")
-        ]
-        
-        for origin, shipping_type, rate, unit in default_freight_rates:
-            cursor.execute(
-                "SELECT COUNT(*) FROM freight_rates WHERE origin = ? AND shipping_type = ?",
-                (origin, shipping_type)
-            )
-            if cursor.fetchone()[0] == 0:
-                cursor.execute("""
-                    INSERT INTO freight_rates (origin, shipping_type, rate, unit)
-                    VALUES (?, ?, ?, ?)
-                """, (origin, shipping_type, rate, unit))
-        
-        conn.commit()
+        cursor.close()
         conn.close()
     
-    # ========== MÉTODOS PARA USERS ==========
-    
-    @staticmethod
-    def get_user_by_username(username: str) -> Optional[Dict]:
-        """Obtiene un usuario por su nombre de usuario."""
-        conn = DBManager.get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM users WHERE username = ?", (username,))
-        row = cursor.fetchone()
-        conn.close()
-        return dict(row) if row else None
-    
-    @staticmethod
-    def get_user_by_id(user_id: int) -> Optional[Dict]:
-        """Obtiene un usuario por su ID."""
-        conn = DBManager.get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
-        row = cursor.fetchone()
-        conn.close()
-        return dict(row) if row else None
-    
-    @staticmethod
-    def get_all_users() -> List[Dict]:
-        """Obtiene todos los usuarios."""
-        conn = DBManager.get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT id, username, full_name, role, created_at, last_login FROM users ORDER BY created_at DESC")
-        rows = cursor.fetchall()
-        conn.close()
-        return [dict(row) for row in rows]
+    # ==================== MÉTODOS DE USUARIOS ====================
     
     @staticmethod
     def create_user(username: str, password: str, full_name: str, role: str) -> bool:
@@ -239,394 +191,290 @@ class DBManager:
         try:
             conn = DBManager.get_connection()
             cursor = conn.cursor()
-            password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+            password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+            
+            is_postgres = DBManager.USE_POSTGRES
             cursor.execute("""
                 INSERT INTO users (username, password_hash, full_name, role)
+                VALUES (%s, %s, %s, %s)
+            """ if is_postgres else """
+                INSERT INTO users (username, password_hash, full_name, role)
                 VALUES (?, ?, ?, ?)
-            """, (username, password_hash, full_name, role))
+            """, (username, password_hash.decode('utf-8'), full_name, role))
+            
             conn.commit()
+            cursor.close()
             conn.close()
             return True
         except Exception as e:
-            print(f"Error creating user: {e}")
+            print(f"Error al crear usuario: {e}")
             return False
     
     @staticmethod
-    def update_user(user_id: int, full_name: str = None, role: str = None) -> bool:
-        """Actualiza información de un usuario."""
+    def verify_user(username: str, password: str) -> Optional[Dict[str, Any]]:
+        """Verifica las credenciales de un usuario."""
         try:
             conn = DBManager.get_connection()
             cursor = conn.cursor()
             
-            updates = []
-            params = []
+            is_postgres = DBManager.USE_POSTGRES
+            cursor.execute("""
+                SELECT * FROM users WHERE username = %s
+            """ if is_postgres else """
+                SELECT * FROM users WHERE username = ?
+            """, (username,))
             
-            if full_name:
-                updates.append("full_name = ?")
-                params.append(full_name)
+            user = cursor.fetchone()
             
-            if role:
-                updates.append("role = ?")
-                params.append(role)
+            if user and bcrypt.checkpw(password.encode('utf-8'), user['password_hash'].encode('utf-8')):
+                # Actualizar last_login
+                cursor.execute("""
+                    UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = %s
+                """ if is_postgres else """
+                    UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?
+                """, (user['id'],))
+                conn.commit()
+                
+                cursor.close()
+                conn.close()
+                return dict(user)
             
-            if not updates:
-                return False
-            
-            params.append(user_id)
-            query = f"UPDATE users SET {', '.join(updates)} WHERE id = ?"
-            cursor.execute(query, params)
-            conn.commit()
+            cursor.close()
             conn.close()
-            return True
+            return None
         except Exception as e:
-            print(f"Error updating user: {e}")
-            return False
+            print(f"Error al verificar usuario: {e}")
+            return None
     
     @staticmethod
-    def change_password(user_id: int, new_password: str) -> bool:
-        """Cambia la contraseña de un usuario."""
+    def get_all_users() -> List[Dict[str, Any]]:
+        """Obtiene todos los usuarios."""
         try:
             conn = DBManager.get_connection()
             cursor = conn.cursor()
-            password_hash = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-            cursor.execute("UPDATE users SET password_hash = ? WHERE id = ?", (password_hash, user_id))
-            conn.commit()
+            cursor.execute("SELECT id, username, full_name, role, created_at, last_login FROM users")
+            users = [dict(row) for row in cursor.fetchall()]
+            cursor.close()
             conn.close()
-            return True
+            return users
         except Exception as e:
-            print(f"Error changing password: {e}")
-            return False
+            print(f"Error al obtener usuarios: {e}")
+            return []
     
     @staticmethod
     def delete_user(user_id: int) -> bool:
-        """Elimina un usuario (solo si no es el admin principal)."""
+        """Elimina un usuario."""
         try:
             conn = DBManager.get_connection()
             cursor = conn.cursor()
             
-            # No permitir eliminar al admin principal
-            cursor.execute("SELECT username FROM users WHERE id = ?", (user_id,))
-            user = cursor.fetchone()
-            if user and user['username'] == 'admin':
-                return False
+            is_postgres = DBManager.USE_POSTGRES
+            cursor.execute("""
+                DELETE FROM users WHERE id = %s
+            """ if is_postgres else """
+                DELETE FROM users WHERE id = ?
+            """, (user_id,))
             
-            cursor.execute("DELETE FROM users WHERE id = ?", (user_id,))
             conn.commit()
+            cursor.close()
             conn.close()
             return True
         except Exception as e:
-            print(f"Error deleting user: {e}")
+            print(f"Error al eliminar usuario: {e}")
             return False
     
-    @staticmethod
-    def update_last_login(user_id: int):
-        """Actualiza la fecha de último login."""
-        conn = DBManager.get_connection()
-        cursor = conn.cursor()
-        cursor.execute("UPDATE users SET last_login = ? WHERE id = ?", (datetime.now(), user_id))
-        conn.commit()
-        conn.close()
-    
-    # ========== MÉTODOS PARA SYSTEM_CONFIG ==========
+    # ==================== MÉTODOS DE CONFIGURACIÓN ====================
     
     @staticmethod
     def get_config(key: str) -> Optional[str]:
         """Obtiene un valor de configuración."""
-        conn = DBManager.get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT value FROM system_config WHERE key = ?", (key,))
-        row = cursor.fetchone()
-        conn.close()
-        return row['value'] if row else None
-    
-    @staticmethod
-    def get_all_config() -> Dict[str, Any]:
-        """Obtiene todas las configuraciones."""
-        conn = DBManager.get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT key, value, description FROM system_config")
-        rows = cursor.fetchall()
-        conn.close()
-        return {row['key']: {'value': row['value'], 'description': row['description']} for row in rows}
-    
-    @staticmethod
-    def update_config(key: str, value: str, updated_by: int = None) -> bool:
-        """Actualiza un valor de configuración."""
         try:
             conn = DBManager.get_connection()
             cursor = conn.cursor()
+            
+            is_postgres = DBManager.USE_POSTGRES
             cursor.execute("""
-                UPDATE system_config 
-                SET value = ?, updated_by = ?, updated_at = ?
-                WHERE key = ?
-            """, (value, updated_by, datetime.now(), key))
+                SELECT value FROM system_config WHERE key = %s
+            """ if is_postgres else """
+                SELECT value FROM system_config WHERE key = ?
+            """, (key,))
+            
+            result = cursor.fetchone()
+            cursor.close()
+            conn.close()
+            return result['value'] if result else None
+        except Exception as e:
+            print(f"Error al obtener configuración: {e}")
+            return None
+    
+    @staticmethod
+    def set_config(key: str, value: str, description: str = "", updated_by: int = None) -> bool:
+        """Establece un valor de configuración."""
+        try:
+            conn = DBManager.get_connection()
+            cursor = conn.cursor()
+            
+            is_postgres = DBManager.USE_POSTGRES
+            
+            # Verificar si la clave ya existe
+            cursor.execute("""
+                SELECT COUNT(*) FROM system_config WHERE key = %s
+            """ if is_postgres else """
+                SELECT COUNT(*) FROM system_config WHERE key = ?
+            """, (key,))
+            
+            result = cursor.fetchone()
+            exists = result[0] if is_postgres else result[0]
+            
+            if exists > 0:
+                # Actualizar
+                cursor.execute("""
+                    UPDATE system_config SET value = %s, description = %s, updated_by = %s, updated_at = CURRENT_TIMESTAMP
+                    WHERE key = %s
+                """ if is_postgres else """
+                    UPDATE system_config SET value = ?, description = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE key = ?
+                """, (value, description, updated_by, key))
+            else:
+                # Insertar
+                cursor.execute("""
+                    INSERT INTO system_config (key, value, description, updated_by)
+                    VALUES (%s, %s, %s, %s)
+                """ if is_postgres else """
+                    INSERT INTO system_config (key, value, description, updated_by)
+                    VALUES (?, ?, ?, ?)
+                """, (key, value, description, updated_by))
+            
             conn.commit()
+            cursor.close()
             conn.close()
             return True
         except Exception as e:
-            print(f"Error updating config: {e}")
+            print(f"Error al establecer configuración: {e}")
             return False
     
-    # ========== MÉTODOS PARA ACTIVITY_LOGS ==========
-    
     @staticmethod
-    def log_activity(user_id: int, action: str, details: str = None):
-        """Registra una actividad en el log."""
-        conn = DBManager.get_connection()
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO activity_logs (user_id, action, details)
-            VALUES (?, ?, ?)
-        """, (user_id, action, details))
-        conn.commit()
-        conn.close()
+    def get_all_config() -> List[Dict[str, Any]]:
+        """Obtiene toda la configuración del sistema."""
+        try:
+            conn = DBManager.get_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM system_config")
+            config = [dict(row) for row in cursor.fetchall()]
+            cursor.close()
+            conn.close()
+            return config
+        except Exception as e:
+            print(f"Error al obtener configuración: {e}")
+            return []
     
-    @staticmethod
-    def get_recent_activities(limit: int = 50) -> List[Dict]:
-        """Obtiene las actividades recientes."""
-        conn = DBManager.get_connection()
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT al.*, u.username, u.full_name
-            FROM activity_logs al
-            JOIN users u ON al.user_id = u.id
-            ORDER BY al.timestamp DESC
-            LIMIT ?
-        """, (limit,))
-        rows = cursor.fetchall()
-        conn.close()
-        return [dict(row) for row in rows]
-    
-    # ========== MÉTODOS PARA QUOTES (para reportes) ==========
-    
-    @staticmethod
-    def get_quotes_by_analyst(analyst_id: int) -> List[Dict]:
-        """Obtiene todas las cotizaciones de un analista."""
-        conn = DBManager.get_connection()
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT * FROM quotes 
-            WHERE analyst_id = ?
-            ORDER BY created_at DESC
-        """, (analyst_id,))
-        rows = cursor.fetchall()
-        conn.close()
-        return [dict(row) for row in rows]
-    
-    @staticmethod
-    def get_quotes_by_period(start_date: str, end_date: str) -> List[Dict]:
-        """Obtiene cotizaciones por período."""
-        conn = DBManager.get_connection()
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT q.*, u.username, u.full_name
-            FROM quotes q
-            JOIN users u ON q.analyst_id = u.id
-            WHERE DATE(q.created_at) BETWEEN ? AND ?
-            ORDER BY q.created_at DESC
-        """, (start_date, end_date))
-        rows = cursor.fetchall()
-        conn.close()
-        return [dict(row) for row in rows]
-    
-    @staticmethod
-    def get_quote_stats() -> Dict:
-        """Obtiene estadísticas generales de cotizaciones."""
-        conn = DBManager.get_connection()
-        cursor = conn.cursor()
-        
-        # Total de cotizaciones
-        cursor.execute("SELECT COUNT(*) as total FROM quotes")
-        total = cursor.fetchone()['total']
-        
-        # Cotizaciones por estado
-        cursor.execute("""
-            SELECT status, COUNT(*) as count 
-            FROM quotes 
-            GROUP BY status
-        """)
-        by_status = {row['status']: row['count'] for row in cursor.fetchall()}
-        
-        # Cotizaciones por analista
-        cursor.execute("""
-            SELECT u.full_name, COUNT(q.id) as count
-            FROM users u
-            LEFT JOIN quotes q ON u.id = q.analyst_id
-            WHERE u.role = 'analyst'
-            GROUP BY u.id, u.full_name
-        """)
-        by_analyst = {row['full_name']: row['count'] for row in cursor.fetchall()}
-        
-        conn.close()
-        
-        return {
-            'total': total,
-            'by_status': by_status,
-            'by_analyst': by_analyst
-        }
-
-    # ========== MÉTODOS PARA FREIGHT_RATES ==========
-    
-    @staticmethod
-    def get_all_freight_rates() -> List[Dict]:
-        """Obtiene todas las tarifas de flete."""
-        conn = DBManager.get_connection()
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT id, origin, shipping_type, rate, unit, updated_at
-            FROM freight_rates
-            ORDER BY origin, shipping_type
-        """)
-        rows = cursor.fetchall()
-        conn.close()
-        return [dict(row) for row in rows]
+    # ==================== MÉTODOS DE TARIFAS DE FLETE ====================
     
     @staticmethod
     def get_freight_rate(origin: str, shipping_type: str) -> Optional[float]:
-        """Obtiene la tarifa de flete para un origen y tipo de envío específico."""
-        conn = DBManager.get_connection()
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT rate FROM freight_rates 
-            WHERE origin = ? AND shipping_type = ?
-        """, (origin, shipping_type))
-        row = cursor.fetchone()
-        conn.close()
-        return row['rate'] if row else None
-    
-    @staticmethod
-    def update_freight_rate(origin: str, shipping_type: str, rate: float, updated_by: int = None) -> bool:
-        """Actualiza una tarifa de flete."""
+        """Obtiene la tarifa de flete."""
         try:
             conn = DBManager.get_connection()
             cursor = conn.cursor()
+            
+            is_postgres = DBManager.USE_POSTGRES
             cursor.execute("""
-                UPDATE freight_rates 
-                SET rate = ?, updated_by = ?, updated_at = ?
-                WHERE origin = ? AND shipping_type = ?
-            """, (rate, updated_by, datetime.now(), origin, shipping_type))
-            conn.commit()
+                SELECT rate FROM freight_rates WHERE origin = %s AND shipping_type = %s
+            """ if is_postgres else """
+                SELECT rate FROM freight_rates WHERE origin = ? AND shipping_type = ?
+            """, (origin, shipping_type))
+            
+            result = cursor.fetchone()
+            cursor.close()
             conn.close()
-            return True
+            return result['rate'] if result else None
         except Exception as e:
-            print(f"Error updating freight rate: {e}")
-            return False
-
-
-    # ========== MÉTODOS HELPER PARA LISTAS DE CONFIGURACIÓN ==========
+            print(f"Error al obtener tarifa de flete: {e}")
+            return None
     
     @staticmethod
-    def get_config_list(key: str) -> List[str]:
-        """Obtiene una lista de configuración separada por comas."""
-        value = DBManager.get_config(key)
-        if value:
-            return [item.strip() for item in value.split(',') if item.strip()]
-        return []
-    
-    @staticmethod
-    def get_manejo_options() -> List[float]:
-        """Obtiene las opciones de MANEJO configuradas."""
-        items = DBManager.get_config_list("manejo_options")
-        try:
-            return [float(x) for x in items]
-        except:
-            return [0.0, 15.0, 23.0, 25.0]
-    
-    @staticmethod
-    def get_impuesto_internacional_options() -> List[int]:
-        """Obtiene las opciones de Impuesto Internacional configuradas."""
-        items = DBManager.get_config_list("impuesto_internacional_options")
-        try:
-            return [int(x) for x in items]
-        except:
-            return [0, 25, 30, 35, 40, 45, 50]
-    
-    @staticmethod
-    def get_profit_factors() -> List[float]:
-        """Obtiene los factores de utilidad configurados."""
-        items = DBManager.get_config_list("profit_factors")
-        try:
-            return [float(x) for x in items]
-        except:
-            return [1.4285, 1.35, 1.30, 1.25, 1.20, 1.15, 1.10, 0]
-    
-    @staticmethod
-    def get_tax_percentage() -> float:
-        """Obtiene el porcentaje de TAX configurado."""
-        value = DBManager.get_config("american_tax")
-        try:
-            return float(value) if value else 7.0
-        except:
-            return 7.0
-    
-    @staticmethod
-    def get_warranties() -> List[str]:
-        """Obtiene las opciones de garantía configuradas."""
-        items = DBManager.get_config_list("warranties")
-        return items if items else ["15 DIAS", "30 DIAS", "45 DIAS", "3 MESES", "6 MESES"]
-    
-    @staticmethod
-    def get_paises_origen() -> List[str]:
-        """Obtiene la lista de países de origen configurados."""
-        items = DBManager.get_config_list("paises_origen")
-        return items if items else ["EEUU", "MIAMI", "ESPAÑA", "MADRID"]
-    
-    @staticmethod
-    def get_tipos_envio() -> List[str]:
-        """Obtiene los tipos de envío configurados."""
-        items = DBManager.get_config_list("tipos_envio")
-        return items if items else ["AEREO", "MARITIMO", "TERRESTRE"]
-    
-    @staticmethod
-    def get_tiempos_entrega() -> List[str]:
-        """Obtiene los tiempos de entrega configurados."""
-        items = DBManager.get_config_list("tiempos_entrega")
-        return items if items else ["02 A 05 DIAS", "08 A 12 DIAS", "12 A 15 DIAS"]
-    
-    @staticmethod
-    def get_diferencial() -> float:
-        """Obtiene el diferencial de cambio configurado (BCV vs Paralelo)."""
-        value = DBManager.get_config("exchange_differential")
-        try:
-            return float(value) if value else 45.0
-        except:
-            return 45.0
-    
-    @staticmethod
-    def get_iva_venezuela() -> float:
-        """Obtiene el porcentaje de IVA Venezuela configurado."""
-        value = DBManager.get_config("venezuela_iva")
-        try:
-            return float(value) if value else 16.0
-        except:
-            return 16.0
-    
-    @staticmethod
-    def set_config(key: str, value: str, description: str = None, updated_by: int = None) -> bool:
-        """Crea o actualiza un valor de configuración."""
+    def set_freight_rate(origin: str, shipping_type: str, rate: float, unit: str, updated_by: int = None) -> bool:
+        """Establece una tarifa de flete."""
         try:
             conn = DBManager.get_connection()
             cursor = conn.cursor()
             
-            # Verificar si existe
-            cursor.execute("SELECT COUNT(*) FROM system_config WHERE key = ?", (key,))
-            exists = cursor.fetchone()[0] > 0
+            is_postgres = DBManager.USE_POSTGRES
             
-            if exists:
+            # Verificar si ya existe
+            cursor.execute("""
+                SELECT COUNT(*) FROM freight_rates WHERE origin = %s AND shipping_type = %s
+            """ if is_postgres else """
+                SELECT COUNT(*) FROM freight_rates WHERE origin = ? AND shipping_type = ?
+            """, (origin, shipping_type))
+            
+            result = cursor.fetchone()
+            exists = result[0] if is_postgres else result[0]
+            
+            if exists > 0:
+                # Actualizar
                 cursor.execute("""
-                    UPDATE system_config 
-                    SET value = ?, updated_by = ?, updated_at = ?
-                    WHERE key = ?
-                """, (value, updated_by, datetime.now(), key))
+                    UPDATE freight_rates SET rate = %s, unit = %s, updated_by = %s, updated_at = CURRENT_TIMESTAMP
+                    WHERE origin = %s AND shipping_type = %s
+                """ if is_postgres else """
+                    UPDATE freight_rates SET rate = ?, unit = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE origin = ? AND shipping_type = ?
+                """, (rate, unit, updated_by, origin, shipping_type))
             else:
+                # Insertar
                 cursor.execute("""
-                    INSERT INTO system_config (key, value, description, updated_by, updated_at)
+                    INSERT INTO freight_rates (origin, shipping_type, rate, unit, updated_by)
+                    VALUES (%s, %s, %s, %s, %s)
+                """ if is_postgres else """
+                    INSERT INTO freight_rates (origin, shipping_type, rate, unit, updated_by)
                     VALUES (?, ?, ?, ?, ?)
-                """, (key, value, description or "", updated_by, datetime.now()))
+                """, (origin, shipping_type, rate, unit, updated_by))
             
             conn.commit()
+            cursor.close()
             conn.close()
             return True
         except Exception as e:
-            print(f"Error setting config: {e}")
+            print(f"Error al establecer tarifa de flete: {e}")
+            return False
+    
+    @staticmethod
+    def get_all_freight_rates() -> List[Dict[str, Any]]:
+        """Obtiene todas las tarifas de flete."""
+        try:
+            conn = DBManager.get_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM freight_rates")
+            rates = [dict(row) for row in cursor.fetchall()]
+            cursor.close()
+            conn.close()
+            return rates
+        except Exception as e:
+            print(f"Error al obtener tarifas de flete: {e}")
+            return []
+    
+    # ==================== MÉTODOS DE LOGS ====================
+    
+    @staticmethod
+    def log_activity(user_id: int, action: str, details: str = "") -> bool:
+        """Registra una actividad en el log."""
+        try:
+            conn = DBManager.get_connection()
+            cursor = conn.cursor()
+            
+            is_postgres = DBManager.USE_POSTGRES
+            cursor.execute("""
+                INSERT INTO activity_logs (user_id, action, details)
+                VALUES (%s, %s, %s)
+            """ if is_postgres else """
+                INSERT INTO activity_logs (user_id, action, details)
+                VALUES (?, ?, ?)
+            """, (user_id, action, details))
+            
+            conn.commit()
+            cursor.close()
+            conn.close()
+            return True
+        except Exception as e:
+            print(f"Error al registrar actividad: {e}")
             return False
