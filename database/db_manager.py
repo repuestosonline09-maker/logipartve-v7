@@ -262,6 +262,50 @@ class DBManager:
             return []
     
     @staticmethod
+    def get_user_by_username(username: str) -> Optional[Dict[str, Any]]:
+        """Obtiene un usuario por su nombre de usuario."""
+        try:
+            conn = DBManager.get_connection()
+            cursor = conn.cursor()
+            
+            is_postgres = DBManager.USE_POSTGRES
+            cursor.execute("""
+                SELECT * FROM users WHERE username = %s
+            """ if is_postgres else """
+                SELECT * FROM users WHERE username = ?
+            """, (username,))
+            
+            user = cursor.fetchone()
+            cursor.close()
+            conn.close()
+            return dict(user) if user else None
+        except Exception as e:
+            print(f"Error al obtener usuario: {e}")
+            return None
+    
+    @staticmethod
+    def update_last_login(user_id: int) -> bool:
+        """Actualiza la fecha de último login de un usuario."""
+        try:
+            conn = DBManager.get_connection()
+            cursor = conn.cursor()
+            
+            is_postgres = DBManager.USE_POSTGRES
+            cursor.execute("""
+                UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = %s
+            """ if is_postgres else """
+                UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?
+            """, (user_id,))
+            
+            conn.commit()
+            cursor.close()
+            conn.close()
+            return True
+        except Exception as e:
+            print(f"Error al actualizar último login: {e}")
+            return False
+    
+    @staticmethod
     def delete_user(user_id: int) -> bool:
         """Elimina un usuario."""
         try:
