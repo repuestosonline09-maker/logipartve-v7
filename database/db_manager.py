@@ -284,6 +284,77 @@ class DBManager:
             return None
     
     @staticmethod
+    def get_user_by_id(user_id: int) -> Optional[Dict[str, Any]]:
+        """Obtiene un usuario por su ID."""
+        try:
+            conn = DBManager.get_connection()
+            cursor = conn.cursor()
+            
+            is_postgres = DBManager.USE_POSTGRES
+            cursor.execute("""
+                SELECT * FROM users WHERE id = %s
+            """ if is_postgres else """
+                SELECT * FROM users WHERE id = ?
+            """, (user_id,))
+            
+            user = cursor.fetchone()
+            cursor.close()
+            conn.close()
+            return dict(user) if user else None
+        except Exception as e:
+            print(f"Error al obtener usuario por ID: {e}")
+            return None
+    
+    @staticmethod
+    def update_user(user_id: int, full_name: str, role: str) -> bool:
+        """Actualiza el nombre completo y rol de un usuario."""
+        try:
+            conn = DBManager.get_connection()
+            cursor = conn.cursor()
+            
+            is_postgres = DBManager.USE_POSTGRES
+            cursor.execute("""
+                UPDATE users SET full_name = %s, role = %s WHERE id = %s
+            """ if is_postgres else """
+                UPDATE users SET full_name = ?, role = ? WHERE id = ?
+            """, (full_name, role, user_id))
+            
+            conn.commit()
+            cursor.close()
+            conn.close()
+            return True
+        except Exception as e:
+            print(f"Error al actualizar usuario: {e}")
+            return False
+    
+    @staticmethod
+    def change_password(user_id: int, new_password: str) -> bool:
+        """Cambia la contraseña de un usuario."""
+        try:
+            import bcrypt
+            
+            # Hash de la nueva contraseña
+            hashed_password = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt())
+            
+            conn = DBManager.get_connection()
+            cursor = conn.cursor()
+            
+            is_postgres = DBManager.USE_POSTGRES
+            cursor.execute("""
+                UPDATE users SET password_hash = %s WHERE id = %s
+            """ if is_postgres else """
+                UPDATE users SET password_hash = ? WHERE id = ?
+            """, (hashed_password.decode('utf-8'), user_id))
+            
+            conn.commit()
+            cursor.close()
+            conn.close()
+            return True
+        except Exception as e:
+            print(f"Error al cambiar contraseña: {e}")
+            return False
+    
+    @staticmethod
     def update_last_login(user_id: int) -> bool:
         """Actualiza la fecha de último login de un usuario."""
         try:
@@ -522,3 +593,132 @@ class DBManager:
         except Exception as e:
             print(f"Error al registrar actividad: {e}")
             return False
+
+    # ==================== MÉTODOS ALIAS ====================
+    
+    @staticmethod
+    def update_config(key: str, value: str, updated_by: int = None) -> bool:
+        """Alias de set_config para compatibilidad."""
+        return DBManager.set_config(key, value, "", updated_by)
+    
+    @staticmethod
+    def update_freight_rate(origin: str, shipping_type: str, rate: float, updated_by: int = None) -> bool:
+        """Actualiza una tarifa de flete."""
+        # Determinar la unidad según origen y tipo
+        if origin == "Miami" and shipping_type == "Aéreo":
+            unit = "$/lb"
+        elif origin == "Miami" and shipping_type == "Marítimo":
+            unit = "$/ft³"
+        elif origin == "Madrid" and shipping_type == "Aéreo":
+            unit = "$/kg"
+        else:
+            unit = "$"
+        
+        return DBManager.set_freight_rate(origin, shipping_type, rate, unit, updated_by)
+    
+    # ==================== MÉTODOS DE REPORTES Y ESTADÍSTICAS ====================
+    
+    @staticmethod
+    def get_quote_stats() -> Dict[str, Any]:
+        """Obtiene estadísticas de cotizaciones."""
+        try:
+            conn = DBManager.get_connection()
+            cursor = conn.cursor()
+            
+            # Total de cotizaciones
+            cursor.execute("SELECT COUNT(*) as total FROM quotes")
+            result = cursor.fetchone()
+            total = result[0] if result else 0
+            
+            # Por estado
+            cursor.execute("""
+                SELECT status, COUNT(*) as count 
+                FROM quotes 
+                GROUP BY status
+            """)
+            by_status = {row['status']: row['count'] for row in cursor.fetchall()}
+            
+            # Por analista
+            cursor.execute("""
+                SELECT u.full_name, COUNT(q.id) as count
+                FROM quotes q
+                JOIN users u ON q.analyst_id = u.id
+                GROUP BY u.full_name
+            """)
+            by_analyst = {row['full_name']: row['count'] for row in cursor.fetchall()}
+            
+            cursor.close()
+            conn.close()
+            
+            return {
+                'total': total,
+                'by_status': by_status,
+                'by_analyst': by_analyst
+            }
+        except Exception as e:
+            print(f"Error al obtener estadísticas: {e}")
+            return {
+                'total': 0,
+                'by_status': {},
+                'by_analyst': {}
+            }
+    
+    @staticmethod
+    def get_quotes_by_period(start_date: str, end_date: str) -> List[Dict[str, Any]]:
+        """Obtiene cotizaciones por período."""
+        try:
+            conn = DBManager.get_connection()
+            cursor = conn.cursor()
+            
+            is_postgres = DBManager.USE_POSTGRES
+            cursor.execute("""
+                SELECT q.*, u.full_name
+                FROM quotes q
+                JOIN users u ON q.analyst_id = u.id
+                WHERE DATE(q.created_at) >= %s AND DATE(q.created_at) <= %s
+                ORDER BY q.created_at DESC
+            """ if is_postgres else """
+                SELECT q.*, u.full_name
+                FROM quotes q
+                JOIN users u ON q.analyst_id = u.id
+                WHERE DATE(q.created_at) >= ? AND DATE(q.created_at) <= ?
+                ORDER BY q.created_at DESC
+            """, (start_date, end_date))
+            
+            quotes = [dict(row) for row in cursor.fetchall()]
+            cursor.close()
+            conn.close()
+            return quotes
+        except Exception as e:
+            print(f"Error al obtener cotizaciones por período: {e}")
+            return []
+    
+    @staticmethod
+    def get_recent_activities(limit: int = 20) -> List[Dict[str, Any]]:
+        """Obtiene las actividades recientes del sistema."""
+        try:
+            conn = DBManager.get_connection()
+            cursor = conn.cursor()
+            
+            is_postgres = DBManager.USE_POSTGRES
+            cursor.execute("""
+                SELECT a.*, u.full_name
+                FROM activity_logs a
+                JOIN users u ON a.user_id = u.id
+                ORDER BY a.timestamp DESC
+                LIMIT %s
+            """ if is_postgres else """
+                SELECT a.*, u.full_name
+                FROM activity_logs a
+                JOIN users u ON a.user_id = u.id
+                ORDER BY a.timestamp DESC
+                LIMIT ?
+            """, (limit,))
+            
+            activities = [dict(row) for row in cursor.fetchall()]
+            cursor.close()
+            conn.close()
+            return activities
+        except Exception as e:
+            print(f"Error al obtener actividades recientes: {e}")
+            return []
