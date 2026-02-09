@@ -12,6 +12,15 @@ def show_login():
     Diseño simple y responsive para PC, laptops, TV, tablets y celulares.
     """
     
+    # Verificar si hay un token de reset en la URL
+    import streamlit as st
+    query_params = st.query_params
+    reset_token = query_params.get('reset_token', None)
+    
+    if reset_token:
+        show_reset_password(reset_token)
+        return
+    
     # Ruta del logo
     logo_path = Path(__file__).parent.parent / "assets" / "logo.png"
     
@@ -95,6 +104,19 @@ def show_login():
                         st.rerun()
                     else:
                         st.error(f"❌ {result['message']}")
+        
+        # Enlace de recuperación de contraseña
+        st.markdown("""<div style='text-align: center; margin-top: 1rem;'>
+            <a href='#' style='color: #1f77b4; text-decoration: none; font-size: 0.9rem;'>¿Olvidaste tu contraseña?</a>
+        </div>""", unsafe_allow_html=True)
+        
+        # Verificar si se hizo clic en recuperar contraseña
+        if st.session_state.get('show_password_recovery', False):
+            show_password_recovery()
+        else:
+            if st.button("¿Olvidaste tu contraseña?", use_container_width=True, type="secondary"):
+                st.session_state['show_password_recovery'] = True
+                st.rerun()
     
     # Footer
     st.markdown("---")
@@ -103,3 +125,82 @@ def show_login():
             LogiPartVE Pro v7.0 © 2026 - Todos los derechos reservados
         </div>
     """, unsafe_allow_html=True)
+
+
+def show_password_recovery():
+    """
+    Muestra el formulario de recuperación de contraseña.
+    """
+    st.markdown("### 🔑 Recuperar Contraseña")
+    st.markdown("Ingresa tu email y te enviaremos un enlace para restablecer tu contraseña.")
+    
+    with st.form("recovery_form"):
+        email = st.text_input("Email", placeholder="Ingresa tu email registrado")
+        submit = st.form_submit_button("Enviar enlace de recuperación", use_container_width=True)
+        
+        if submit:
+            if not email:
+                st.error("⚠️ Por favor ingresa tu email")
+            else:
+                # Importar aquí para evitar dependencias circulares
+                from services.password_recovery import PasswordRecoveryService
+                
+                result = PasswordRecoveryService.send_recovery_email(email)
+                if result["success"]:
+                    st.success(result["message"])
+                    st.info("📧 Revisa tu bandeja de entrada y sigue las instrucciones.")
+                else:
+                    st.error(f"❌ {result['message']}")
+    
+    # Botón para volver al login
+    if st.button("← Volver al login", use_container_width=True):
+        st.session_state['show_password_recovery'] = False
+        st.rerun()
+
+
+def show_reset_password(token: str):
+    """
+    Muestra el formulario para establecer una nueva contraseña usando un token.
+    """
+    st.markdown("### 🔑 Restablecer Contraseña")
+    
+    # Verificar token
+    from services.password_recovery import PasswordRecoveryService
+    token_verification = PasswordRecoveryService.verify_token(token)
+    
+    if not token_verification['valid']:
+        st.error(f"❌ {token_verification['message']}")
+        if st.button("← Volver al login", use_container_width=True):
+            st.query_params.clear()
+            st.rerun()
+        return
+    
+    st.success("✅ Token válido. Ingresa tu nueva contraseña.")
+    
+    with st.form("reset_password_form"):
+        new_password = st.text_input("Nueva Contraseña", type="password", placeholder="Mínimo 6 caracteres")
+        confirm_password = st.text_input("Confirmar Contraseña", type="password", placeholder="Repite la contraseña")
+        submit = st.form_submit_button("Restablecer Contraseña", use_container_width=True)
+        
+        if submit:
+            if not new_password or not confirm_password:
+                st.error("⚠️ Por favor completa ambos campos")
+            elif len(new_password) < 6:
+                st.error("⚠️ La contraseña debe tener al menos 6 caracteres")
+            elif new_password != confirm_password:
+                st.error("⚠️ Las contraseñas no coinciden")
+            else:
+                result = PasswordRecoveryService.reset_password(token, new_password)
+                if result["success"]:
+                    st.success(f"✅ {result['message']}")
+                    st.info("Ahora puedes iniciar sesión con tu nueva contraseña.")
+                    if st.button("Ir al login", use_container_width=True):
+                        st.query_params.clear()
+                        st.rerun()
+                else:
+                    st.error(f"❌ {result['message']}")
+    
+    # Botón para volver al login
+    if st.button("← Volver al login", use_container_width=True):
+        st.query_params.clear()
+        st.rerun()

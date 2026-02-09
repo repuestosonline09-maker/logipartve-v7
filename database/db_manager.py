@@ -148,7 +148,20 @@ class DBManager:
             )
         """)
         
-        # Tabla 8: freight_rates (tarifas de flete)
+        # Tabla 8: password_reset_tokens (tokens de recuperación de contraseña)
+        cursor.execute(f"""
+            CREATE TABLE IF NOT EXISTS password_reset_tokens (
+                id {id_type},
+                user_id INTEGER NOT NULL,
+                token TEXT UNIQUE NOT NULL,
+                expires_at TIMESTAMP NOT NULL,
+                used INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            )
+        """)
+        
+        # Tabla 9: freight_rates (tarifas de flete)
         cursor.execute(f"""
             CREATE TABLE IF NOT EXISTS freight_rates (
                 id {id_type},
@@ -723,3 +736,111 @@ class DBManager:
         except Exception as e:
             print(f"Error al obtener actividades recientes: {e}")
             return []
+
+    # ==================== MÉTODOS DE RECUPERACIÓN DE CONTRASEÑA ====================
+    
+    @staticmethod
+    def create_reset_token(user_id: int, token: str, expires_at: datetime) -> bool:
+        """Crea un token de recuperación de contraseña."""
+        try:
+            conn = DBManager.get_connection()
+            cursor = conn.cursor()
+            
+            if DBManager.USE_POSTGRES:
+                cursor.execute("""
+                    INSERT INTO password_reset_tokens (user_id, token, expires_at)
+                    VALUES (%s, %s, %s)
+                """, (user_id, token, expires_at))
+            else:
+                cursor.execute("""
+                    INSERT INTO password_reset_tokens (user_id, token, expires_at)
+                    VALUES (?, ?, ?)
+                """, (user_id, token, expires_at))
+            
+            conn.commit()
+            cursor.close()
+            conn.close()
+            return True
+        except Exception as e:
+            print(f"Error al crear token de reset: {e}")
+            return False
+    
+    @staticmethod
+    def get_reset_token(token: str) -> Optional[Dict[str, Any]]:
+        """Obtiene información de un token de reset."""
+        try:
+            conn = DBManager.get_connection()
+            cursor = conn.cursor()
+            
+            if DBManager.USE_POSTGRES:
+                cursor.execute("""
+                    SELECT * FROM password_reset_tokens
+                    WHERE token = %s AND used = 0
+                """, (token,))
+            else:
+                cursor.execute("""
+                    SELECT * FROM password_reset_tokens
+                    WHERE token = ? AND used = 0
+                """, (token,))
+            
+            result = cursor.fetchone()
+            cursor.close()
+            conn.close()
+            
+            if result:
+                return dict(result) if DBManager.USE_POSTGRES else dict(zip([col[0] for col in cursor.description], result))
+            return None
+        except Exception as e:
+            print(f"Error al obtener token de reset: {e}")
+            return None
+    
+    @staticmethod
+    def mark_token_as_used(token: str) -> bool:
+        """Marca un token como usado."""
+        try:
+            conn = DBManager.get_connection()
+            cursor = conn.cursor()
+            
+            if DBManager.USE_POSTGRES:
+                cursor.execute("""
+                    UPDATE password_reset_tokens
+                    SET used = 1
+                    WHERE token = %s
+                """, (token,))
+            else:
+                cursor.execute("""
+                    UPDATE password_reset_tokens
+                    SET used = 1
+                    WHERE token = ?
+                """, (token,))
+            
+            conn.commit()
+            cursor.close()
+            conn.close()
+            return True
+        except Exception as e:
+            print(f"Error al marcar token como usado: {e}")
+            return False
+    
+    @staticmethod
+    def get_user_by_email(email: str) -> Optional[Dict[str, Any]]:
+        """Obtiene un usuario por su email."""
+        try:
+            conn = DBManager.get_connection()
+            cursor = conn.cursor()
+            
+            if DBManager.USE_POSTGRES:
+                cursor.execute("SELECT * FROM users WHERE email = %s", (email,))
+            else:
+                cursor.execute("SELECT * FROM users WHERE email = ?", (email,))
+            
+            result = cursor.fetchone()
+            cursor.close()
+            conn.close()
+            
+            if result:
+                return dict(result) if DBManager.USE_POSTGRES else dict(zip([col[0] for col in cursor.description], result))
+            return None
+        except Exception as e:
+            print(f"Error al obtener usuario por email: {e}")
+            return None

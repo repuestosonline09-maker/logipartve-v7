@@ -557,6 +557,100 @@ def show_system_configuration():
             DBManager.log_activity(st.session_state.user_id, "update_config", "Actualizó términos y condiciones")
             st.rerun()
     
+    # ==========================================
+    # SECCIÓN: CONFIGURACIÓN SMTP (RECUPERACIÓN DE CONTRASEÑA)
+    # ==========================================
+    st.markdown("---")
+    st.markdown("#### 📧 Configuración de Email (SMTP)")
+    st.info("💡 Configura el servidor SMTP para enviar emails de recuperación de contraseña")
+    
+    with st.form("smtp_form"):
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            smtp_server = st.text_input(
+                "Servidor SMTP",
+                value=config.get('smtp_server', {}).get('value', ''),
+                placeholder="smtp.gmail.com",
+                help="Servidor SMTP de tu proveedor de email"
+            )
+            
+            smtp_port = st.number_input(
+                "Puerto SMTP",
+                min_value=1,
+                max_value=65535,
+                value=int(config.get('smtp_port', {}).get('value', '587')),
+                help="Puerto del servidor SMTP (587 para TLS, 465 para SSL)"
+            )
+            
+            smtp_username = st.text_input(
+                "Usuario SMTP",
+                value=config.get('smtp_username', {}).get('value', ''),
+                placeholder="tu-email@gmail.com",
+                help="Usuario para autenticación SMTP"
+            )
+        
+        with col2:
+            smtp_password = st.text_input(
+                "Contraseña SMTP",
+                value=config.get('smtp_password', {}).get('value', ''),
+                type="password",
+                help="Contraseña o App Password para autenticación SMTP"
+            )
+            
+            smtp_from_email = st.text_input(
+                "Email Remitente",
+                value=config.get('smtp_from_email', {}).get('value', ''),
+                placeholder="noreply@logipartve.com",
+                help="Email que aparecerá como remitente"
+            )
+            
+            smtp_from_name = st.text_input(
+                "Nombre Remitente",
+                value=config.get('smtp_from_name', {}).get('value', 'LogiPartVE'),
+                placeholder="LogiPartVE",
+                help="Nombre que aparecerá como remitente"
+            )
+        
+        submit_smtp = st.form_submit_button("💾 Guardar Configuración SMTP", use_container_width=True)
+        
+        if submit_smtp:
+            # Guardar todas las configuraciones SMTP
+            DBManager.set_config('smtp_server', smtp_server, "Servidor SMTP", st.session_state.user_id)
+            DBManager.set_config('smtp_port', str(smtp_port), "Puerto SMTP", st.session_state.user_id)
+            DBManager.set_config('smtp_username', smtp_username, "Usuario SMTP", st.session_state.user_id)
+            DBManager.set_config('smtp_password', smtp_password, "Contraseña SMTP", st.session_state.user_id)
+            DBManager.set_config('smtp_from_email', smtp_from_email, "Email remitente", st.session_state.user_id)
+            DBManager.set_config('smtp_from_name', smtp_from_name, "Nombre remitente", st.session_state.user_id)
+            
+            st.success("✅ Configuración SMTP guardada exitosamente")
+            DBManager.log_activity(st.session_state.user_id, "update_config", "Actualizó configuración SMTP")
+            st.rerun()
+    
+    # Ayuda para configurar Gmail
+    with st.expander("💡 ¿Cómo configurar Gmail?"):
+        st.markdown("""
+        **Para usar Gmail como servidor SMTP:**
+        
+        1. **Servidor SMTP**: `smtp.gmail.com`
+        2. **Puerto**: `587`
+        3. **Usuario**: Tu email de Gmail completo (ej: `tuusuario@gmail.com`)
+        4. **Contraseña**: Debes generar una "Contraseña de aplicación" (App Password)
+        
+        **Pasos para generar App Password en Gmail:**
+        1. Ve a tu cuenta de Google: https://myaccount.google.com/
+        2. Seguridad → Verificación en 2 pasos (debes activarla primero)
+        3. Contraseñas de aplicaciones
+        4. Selecciona "Correo" y "Otro (nombre personalizado)"
+        5. Escribe "LogiPartVE" y genera
+        6. Copia la contraseña de 16 caracteres y pégala aquí
+        
+        **Otros proveedores populares:**
+        - **Outlook/Hotmail**: `smtp-mail.outlook.com` (Puerto 587)
+        - **Yahoo**: `smtp.mail.yahoo.com` (Puerto 587)
+        - **SendGrid**: `smtp.sendgrid.net` (Puerto 587)
+        """)
+    
     st.markdown('</div>', unsafe_allow_html=True)
 
 
