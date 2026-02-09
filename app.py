@@ -106,6 +106,37 @@ st.markdown("""
 # Inicializar base de datos
 DBManager.init_database()
 
+# Asegurar que existe usuario admin con contraseña conocida
+def ensure_admin_user():
+    """Verifica y crea/resetea el usuario admin si es necesario."""
+    try:
+        import bcrypt
+        admin_password = "Lamesita.99"
+        
+        # Verificar si existe el usuario admin
+        admin_user = DBManager.get_user_by_username('admin')
+        
+        if not admin_user:
+            # No existe, crear usuario admin
+            DBManager.create_user(
+                username='admin',
+                password=admin_password,
+                full_name='Administrador',
+                role='admin',
+                email=None
+            )
+            print("✅ Usuario admin creado exitosamente")
+        else:
+            # Existe, verificar si la contraseña funciona
+            if not DBManager.verify_user('admin', admin_password):
+                # Contraseña no funciona, resetearla
+                DBManager.change_password(admin_user['id'], admin_password)
+                print("✅ Contraseña del admin reseteada exitosamente")
+    except Exception as e:
+        print(f"⚠️  Error al verificar/crear usuario admin: {e}")
+
+ensure_admin_user()
+
 def main():
     """Función principal de la aplicación."""
     
