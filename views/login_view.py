@@ -134,27 +134,52 @@ def show_password_recovery():
     st.markdown("### 🔑 Recuperar Contraseña")
     st.markdown("Ingresa tu email y te enviaremos un enlace para restablecer tu contraseña.")
     
+    # Mostrar mensajes previos si existen
+    if 'recovery_message' in st.session_state:
+        msg = st.session_state['recovery_message']
+        if msg['type'] == 'success':
+            st.success(msg['text'])
+            st.info("📧 Revisa tu bandeja de entrada (y carpeta de spam) y sigue las instrucciones.")
+        else:
+            st.error(msg['text'])
+        # Limpiar mensaje después de mostrarlo
+        del st.session_state['recovery_message']
+    
     with st.form("recovery_form"):
         email = st.text_input("Email", placeholder="Ingresa tu email registrado")
         submit = st.form_submit_button("Enviar enlace de recuperación", use_container_width=True)
         
         if submit:
             if not email:
-                st.error("⚠️ Por favor ingresa tu email")
+                st.session_state['recovery_message'] = {
+                    'type': 'error',
+                    'text': '⚠️ Por favor ingresa tu email'
+                }
+                st.rerun()
             else:
                 # Importar aquí para evitar dependencias circulares
                 from services.password_recovery import PasswordRecoveryService
                 
-                result = PasswordRecoveryService.send_recovery_email(email)
+                with st.spinner('Enviando email de recuperación...'):
+                    result = PasswordRecoveryService.send_recovery_email(email)
+                
                 if result["success"]:
-                    st.success(result["message"])
-                    st.info("📧 Revisa tu bandeja de entrada y sigue las instrucciones.")
+                    st.session_state['recovery_message'] = {
+                        'type': 'success',
+                        'text': f"✅ {result['message']}"
+                    }
                 else:
-                    st.error(f"❌ {result['message']}")
+                    st.session_state['recovery_message'] = {
+                        'type': 'error',
+                        'text': f"❌ {result['message']}"
+                    }
+                st.rerun()
     
     # Botón para volver al login
     if st.button("← Volver al login", use_container_width=True):
         st.session_state['show_password_recovery'] = False
+        if 'recovery_message' in st.session_state:
+            del st.session_state['recovery_message']
         st.rerun()
 
 
