@@ -869,3 +869,50 @@ class DBManager:
         except Exception as e:
             print(f"Error al obtener usuario por email: {e}")
             return None
+    
+    # ==================== MÉTODOS HELPER PARA TOKENS (COMPATIBILIDAD) ====================
+    
+    @staticmethod
+    def create_password_reset_token(user_id: int) -> Optional[str]:
+        """Crea un token de recuperación y lo retorna (método helper)."""
+        try:
+            import secrets
+            from datetime import timedelta
+            
+            # Generar token único
+            token = secrets.token_urlsafe(32)
+            
+            # Calcular fecha de expiración (1 hora)
+            expires_at = datetime.now() + timedelta(hours=1)
+            
+            # Guardar en base de datos
+            if DBManager.create_reset_token(user_id, token, expires_at):
+                return token
+            return None
+        except Exception as e:
+            print(f"Error al crear token de reset: {e}")
+            return None
+    
+    @staticmethod
+    def verify_reset_token(token: str) -> Optional[int]:
+        """Verifica un token y retorna el user_id si es válido."""
+        try:
+            token_data = DBManager.get_reset_token(token)
+            
+            if not token_data:
+                return None
+            
+            # Verificar si expiró
+            expires_at = datetime.fromisoformat(str(token_data['expires_at']))
+            if datetime.now() > expires_at:
+                return None
+            
+            return token_data['user_id']
+        except Exception as e:
+            print(f"Error al verificar token: {e}")
+            return None
+    
+    @staticmethod
+    def use_reset_token(token: str) -> bool:
+        """Marca un token como usado (alias de mark_token_as_used)."""
+        return DBManager.mark_token_as_used(token)
