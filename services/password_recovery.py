@@ -62,14 +62,14 @@ class PasswordRecoveryService:
             reset_url = f"https://www.logipartve.com/?reset_token={token}"
             
             # Enviar email
-            success = PasswordRecoveryService._send_email(
+            result = PasswordRecoveryService._send_email(
                 smtp_config=smtp_config,
                 to_email=email,
                 user_name=user['full_name'],
                 reset_url=reset_url
             )
             
-            if success:
+            if result['success']:
                 return {
                     "success": True,
                     "message": "Email de recuperación enviado exitosamente"
@@ -77,7 +77,7 @@ class PasswordRecoveryService:
             else:
                 return {
                     "success": False,
-                    "message": "Error al enviar el email. Verifica la configuración SMTP."
+                    "message": f"Error al enviar el email: {result.get('error', 'Error desconocido')}"
                 }
                 
         except Exception as e:
@@ -123,7 +123,7 @@ class PasswordRecoveryService:
             return None
     
     @staticmethod
-    def _send_email(smtp_config: Dict[str, str], to_email: str, user_name: str, reset_url: str) -> bool:
+    def _send_email(smtp_config: Dict[str, str], to_email: str, user_name: str, reset_url: str) -> Dict[str, Any]:
         """
         Envía el email de recuperación.
         
@@ -134,7 +134,7 @@ class PasswordRecoveryService:
             reset_url: URL para resetear contraseña
             
         Returns:
-            True si se envió exitosamente, False en caso contrario
+            Dict con 'success' (bool) y 'error' (str) si falla
         """
         try:
             # Crear mensaje
@@ -209,17 +209,31 @@ class PasswordRecoveryService:
             msg.attach(part1)
             msg.attach(part2)
             
-            # Conectar al servidor SMTP y enviar
-            with smtplib.SMTP(smtp_config['server'], smtp_config['port']) as server:
+            # Conectar al servidor SMTP y enviar (con timeout de 30 segundos)
+            with smtplib.SMTP(smtp_config['server'], smtp_config['port'], timeout=30) as server:
+                server.set_debuglevel(0)  # Cambiar a 1 para debug
                 server.starttls()
                 server.login(smtp_config['username'], smtp_config['password'])
                 server.send_message(msg)
             
-            return True
+            return {"success": True}
             
+        except smtplib.SMTPAuthenticationError as e:
+            error_msg = f"Error de autenticación. Verifica la contraseña de aplicación (sin espacios)"
+            print(f"SMTPAuthenticationError: {e}")
+            return {"success": False, "error": error_msg}
+        except smtplib.SMTPException as e:
+            error_msg = f"Error SMTP: {str(e)}"
+            print(f"SMTPException: {e}")
+            return {"success": False, "error": error_msg}
+        except TimeoutError as e:
+            error_msg = "Timeout al conectar. Verifica el servidor y puerto SMTP"
+            print(f"TimeoutError: {e}")
+            return {"success": False, "error": error_msg}
         except Exception as e:
-            print(f"Error al enviar email: {e}")
-            return False
+            error_msg = f"{type(e).__name__}: {str(e)}"
+            print(f"Error inesperado: {error_msg}")
+            return {"success": False, "error": error_msg}
     
     @staticmethod
     def verify_token(token: str) -> Dict[str, Any]:
