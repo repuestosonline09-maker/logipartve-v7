@@ -106,6 +106,7 @@ def show_user_management():
             with col1:
                 new_username = st.text_input("Nombre de Usuario*", placeholder="usuario123")
                 new_full_name = st.text_input("Nombre Completo*", placeholder="Juan Pérez")
+                new_email = st.text_input("Email", placeholder="usuario@ejemplo.com", help="Email para recuperación de contraseña")
             
             with col2:
                 new_password = st.text_input("Contraseña*", type="password", placeholder="Mínimo 6 caracteres")
@@ -119,7 +120,7 @@ def show_user_management():
                 elif len(new_password) < 6:
                     st.error("⚠️ La contraseña debe tener al menos 6 caracteres")
                 else:
-                    success = DBManager.create_user(new_username, new_password, new_full_name, new_role)
+                    success = DBManager.create_user(new_username, new_password, new_full_name, new_role, new_email if new_email else None)
                     if success:
                         st.success(f"✅ Usuario '{new_username}' creado exitosamente")
                         DBManager.log_activity(
@@ -154,6 +155,7 @@ def show_user_management():
                     st.markdown("**Editar Información**")
                     with st.form("edit_user_form"):
                         edit_full_name = st.text_input("Nombre Completo", value=selected_user['full_name'])
+                        edit_email = st.text_input("Email", value=selected_user.get('email', ''), placeholder="usuario@ejemplo.com")
                         edit_role = st.selectbox(
                             "Rol",
                             ["analyst", "admin"],
@@ -164,7 +166,7 @@ def show_user_management():
                         submit_edit = st.form_submit_button("💾 Guardar Cambios", use_container_width=True)
                         
                         if submit_edit:
-                            success = DBManager.update_user(selected_user_id, edit_full_name, edit_role)
+                            success = DBManager.update_user(selected_user_id, edit_full_name, edit_role, edit_email if edit_email else None)
                             if success:
                                 st.success("✅ Usuario actualizado exitosamente")
                                 DBManager.log_activity(
@@ -266,7 +268,9 @@ def show_system_configuration():
     st.markdown("### ⚙️ Configuración del Sistema")
     
     # Obtener configuraciones actuales
-    config = DBManager.get_all_config()
+    config_list = DBManager.get_all_config()
+    # Convertir lista a diccionario para fácil acceso
+    config = {item['key']: item for item in config_list}
     
     # ==========================================
     # SECCIÓN 1: CONFIGURACIÓN DE COSTOS PARA ANALISTA

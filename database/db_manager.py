@@ -53,6 +53,7 @@ class DBManager:
                 username TEXT UNIQUE NOT NULL,
                 password_hash TEXT NOT NULL,
                 full_name TEXT NOT NULL,
+                email TEXT,
                 role TEXT NOT NULL CHECK(role IN ('admin', 'analyst')),
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 last_login TIMESTAMP
@@ -186,7 +187,7 @@ class DBManager:
     # ==================== MÉTODOS DE USUARIOS ====================
     
     @staticmethod
-    def create_user(username: str, password: str, full_name: str, role: str) -> bool:
+    def create_user(username: str, password: str, full_name: str, role: str, email: str = None) -> bool:
         """Crea un nuevo usuario."""
         try:
             conn = DBManager.get_connection()
@@ -195,12 +196,12 @@ class DBManager:
             
             is_postgres = DBManager.USE_POSTGRES
             cursor.execute("""
-                INSERT INTO users (username, password_hash, full_name, role)
-                VALUES (%s, %s, %s, %s)
+                INSERT INTO users (username, password_hash, full_name, email, role)
+                VALUES (%s, %s, %s, %s, %s)
             """ if is_postgres else """
-                INSERT INTO users (username, password_hash, full_name, role)
-                VALUES (?, ?, ?, ?)
-            """, (username, password_hash.decode('utf-8'), full_name, role))
+                INSERT INTO users (username, password_hash, full_name, email, role)
+                VALUES (?, ?, ?, ?, ?)
+            """, (username, password_hash.decode('utf-8'), full_name, email, role))
             
             conn.commit()
             cursor.close()
@@ -306,18 +307,18 @@ class DBManager:
             return None
     
     @staticmethod
-    def update_user(user_id: int, full_name: str, role: str) -> bool:
-        """Actualiza el nombre completo y rol de un usuario."""
+    def update_user(user_id: int, full_name: str, role: str, email: str = None) -> bool:
+        """Actualiza el nombre completo, rol y email de un usuario."""
         try:
             conn = DBManager.get_connection()
             cursor = conn.cursor()
             
             is_postgres = DBManager.USE_POSTGRES
             cursor.execute("""
-                UPDATE users SET full_name = %s, role = %s WHERE id = %s
+                UPDATE users SET full_name = %s, role = %s, email = %s WHERE id = %s
             """ if is_postgres else """
-                UPDATE users SET full_name = ?, role = ? WHERE id = ?
-            """, (full_name, role, user_id))
+                UPDATE users SET full_name = ?, role = ?, email = ? WHERE id = ?
+            """, (full_name, role, email, user_id))
             
             conn.commit()
             cursor.close()
