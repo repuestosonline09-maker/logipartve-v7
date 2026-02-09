@@ -178,6 +178,31 @@ class DBManager:
         
         conn.commit()
         
+        # ==================== MIGRACIONES AUTOMÁTICAS ====================
+        # Migración: Agregar columna 'email' a tabla 'users' si no existe
+        try:
+            if is_postgres:
+                # PostgreSQL: Verificar si la columna existe
+                cursor.execute("""
+                    SELECT column_name 
+                    FROM information_schema.columns 
+                    WHERE table_name='users' AND column_name='email'
+                """)
+                if not cursor.fetchone():
+                    cursor.execute("ALTER TABLE users ADD COLUMN email VARCHAR(255)")
+                    conn.commit()
+                    print("✅ Migración: Columna 'email' agregada a tabla 'users'")
+            else:
+                # SQLite: Verificar si la columna existe
+                cursor.execute("PRAGMA table_info(users)")
+                columns = [row[1] for row in cursor.fetchall()]
+                if 'email' not in columns:
+                    cursor.execute("ALTER TABLE users ADD COLUMN email TEXT")
+                    conn.commit()
+                    print("✅ Migración: Columna 'email' agregada a tabla 'users'")
+        except Exception as e:
+            print(f"⚠️ Migración de columna 'email': {e}")
+        
         # Crear usuario admin por defecto si no existe
         cursor.execute("SELECT COUNT(*) FROM users WHERE username = 'admin'")
         result = cursor.fetchone()
