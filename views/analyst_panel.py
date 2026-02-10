@@ -107,20 +107,20 @@ def render_analyst_panel():
     config = cargar_configuraciones()
     
     # Inicializar estado de sesión (verificar tipo también)
-    # Protección adicional: asegurarse de que items sea siempre una lista
-    if 'items' not in st.session_state:
-        st.session_state.items = []
-    # Verificar si items es una lista válida, si no, reinicializarla
+    # Protección adicional: asegurarse de que cotizacion_items sea siempre una lista
+    if 'cotizacion_items' not in st.session_state:
+        st.session_state.cotizacion_items = []
+    # Verificar si cotizacion_items es una lista válida, si no, reinicializarla
     try:
-        if not isinstance(st.session_state.items, list):
-            st.session_state.items = []
-        elif callable(st.session_state.items):
-            st.session_state.items = []
+        if not isinstance(st.session_state.cotizacion_items, list):
+            st.session_state.cotizacion_items = []
+        elif callable(st.session_state.cotizacion_items):
+            st.session_state.cotizacion_items = []
         # Intentar hacer append de prueba para verificar que es una lista mutable
-        test_list = st.session_state.items.copy() if isinstance(st.session_state.items, list) else []
-        st.session_state.items = test_list
+        test_list = st.session_state.cotizacion_items.copy() if isinstance(st.session_state.cotizacion_items, list) else []
+        st.session_state.cotizacion_items = test_list
     except (AttributeError, TypeError):
-        st.session_state.items = []
+        st.session_state.cotizacion_items = []
     if 'cliente_datos' not in st.session_state:
         st.session_state.cliente_datos = {}
     if 'tarifas' not in st.session_state:
@@ -226,10 +226,10 @@ def render_analyst_panel():
     # SECCIÓN 3: FORMULARIO DE ÍTEM
     # ==========================================
     try:
-        num_items = len(st.session_state.items) if isinstance(st.session_state.items, list) else 0
+        num_items = len(st.session_state.cotizacion_items) if isinstance(st.session_state.cotizacion_items, list) else 0
     except:
         num_items = 0
-        st.session_state.items = []
+        st.session_state.cotizacion_items = []
     
     st.markdown(f"### 📦 Ítem #{num_items + 1}")
     
@@ -481,18 +481,18 @@ def render_analyst_panel():
                 }
                 # Protección adicional antes de append
                 try:
-                    if not isinstance(st.session_state.items, list):
-                        st.session_state.items = []
-                    # Verificar que items tiene el método append
-                    if not hasattr(st.session_state.items, 'append'):
-                        st.session_state.items = []
-                    st.session_state.items.append(nuevo_item)
+                    if not isinstance(st.session_state.cotizacion_items, list):
+                        st.session_state.cotizacion_items = []
+                    # Verificar que cotizacion_items tiene el método append
+                    if not hasattr(st.session_state.cotizacion_items, 'append'):
+                        st.session_state.cotizacion_items = []
+                    st.session_state.cotizacion_items.append(nuevo_item)
                     # Guardar mensaje de éxito en session_state para mostrarlo después del rerun
-                    st.session_state.item_agregado_msg = f"✅ Ítem #{len(st.session_state.items)} agregado. Puede agregar otro."
+                    st.session_state.item_agregado_msg = f"✅ Ítem #{len(st.session_state.cotizacion_items)} agregado. Puede agregar otro."
                 except (AttributeError, TypeError) as e:
                     # Guardar mensaje de error en session_state
                     st.session_state.item_agregado_msg = f"⚠️ Error al agregar ítem: {str(e)}. Reiniciando lista..."
-                    st.session_state.items = [nuevo_item]
+                    st.session_state.cotizacion_items = [nuevo_item]
                 st.rerun()
     
     with btn_action_col2:
@@ -502,7 +502,7 @@ def render_analyst_panel():
                 st.error("⚠️ Ingrese el nombre del cliente")
             elif not cliente_vehiculo:
                 st.error("⚠️ Ingrese el vehículo")
-            elif not item_descripcion and len(st.session_state.items) == 0:
+            elif not item_descripcion and len(st.session_state.cotizacion_items) == 0:
                 st.error("⚠️ Agregue al menos un ítem")
             else:
                 # Si hay un ítem en el formulario actual, agregarlo
@@ -539,7 +539,7 @@ def render_analyst_panel():
                         "costo_total": costo_total_usd,
                         "costo_total_bs": costo_total_bs
                     }
-                    st.session_state.items.append(nuevo_item)
+                    st.session_state.cotizacion_items.append(nuevo_item)
                 
                 # Guardar datos del cliente (solo campos con datos)
                 st.session_state.cliente_datos = {
@@ -558,7 +558,7 @@ def render_analyst_panel():
     
     with btn_action_col3:
         if st.button("🗑️ LIMPIAR TODO", use_container_width=True, key="btn_limpiar_todo"):
-            st.session_state.items = []
+            st.session_state.cotizacion_items = []
             st.session_state.cliente_datos = {}
             if 'mostrar_cotizacion' in st.session_state:
                 del st.session_state.mostrar_cotizacion
@@ -567,13 +567,13 @@ def render_analyst_panel():
     # ==========================================
     # SECCIÓN 7: RESUMEN DE ÍTEMS AGREGADOS
     # ==========================================
-    if isinstance(st.session_state.items, list) and len(st.session_state.items) > 0:
+    if isinstance(st.session_state.cotizacion_items, list) and len(st.session_state.cotizacion_items) > 0:
         st.markdown("---")
         st.markdown("### 📋 Ítems Agregados")
         
         total_general_usd = 0
         total_general_bs = 0
-        for i, item in enumerate(st.session_state.items):
+        for i, item in enumerate(st.session_state.cotizacion_items):
             with st.expander(f"Ítem #{i+1}: {item['descripcion']}", expanded=False):
                 col1, col2, col3 = st.columns(3)
                 with col1:
@@ -591,7 +591,7 @@ def render_analyst_panel():
                 
                 # Botón para eliminar ítem
                 if st.button(f"🗑️ Eliminar Ítem #{i+1}", key=f"del_item_{i}"):
-                    st.session_state.items.pop(i)
+                    st.session_state.cotizacion_items.pop(i)
                     st.rerun()
             
             total_general_usd += item['costo_total']
@@ -603,7 +603,7 @@ def render_analyst_panel():
     # ==========================================
     # SECCIÓN 8: VISTA PREVIA DE COTIZACIÓN
     # ==========================================
-    if st.session_state.get('mostrar_cotizacion', False) and len(st.session_state.items) > 0:
+    if st.session_state.get('mostrar_cotizacion', False) and len(st.session_state.cotizacion_items) > 0:
         st.markdown("---")
         st.markdown("## 📄 Vista Previa de Cotización")
         
@@ -620,7 +620,7 @@ def render_analyst_panel():
         st.markdown("---")
         
         cliente = st.session_state.cliente_datos
-        items = st.session_state.items
+        items = st.session_state.cotizacion_items
         
         # Información del cliente (solo mostrar campos con datos)
         cliente_info = []
