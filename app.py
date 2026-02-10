@@ -150,6 +150,11 @@ def main():
             sys.path.insert(0, os.path.dirname(__file__))
             from database.migrations.add_quote_numbering import run_migration
             run_migration()
+            
+            # Ejecutar migración de actualización de países
+            from database.migrations.update_countries_list import run_migration as update_countries
+            update_countries()
+            
             st.session_state.migrations_executed = True
         except Exception as e:
             # Si falla, continuar (las tablas ya pueden existir)
