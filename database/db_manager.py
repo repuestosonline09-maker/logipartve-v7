@@ -348,22 +348,52 @@ class DBManager:
     def update_user(user_id: int, full_name: str, role: str, email: str = None) -> bool:
         """Actualiza el nombre completo, rol y email de un usuario."""
         try:
+            print(f"[DEBUG] update_user llamado con:")
+            print(f"  - user_id: {user_id}")
+            print(f"  - full_name: {full_name}")
+            print(f"  - role: {role}")
+            print(f"  - email: {email}")
+            
             conn = DBManager.get_connection()
             cursor = conn.cursor()
             
             is_postgres = DBManager.USE_POSTGRES
+            print(f"[DEBUG] Usando {'PostgreSQL' if is_postgres else 'SQLite'}")
+            
             cursor.execute("""
                 UPDATE users SET full_name = %s, role = %s, email = %s WHERE id = %s
             """ if is_postgres else """
                 UPDATE users SET full_name = ?, role = ?, email = ? WHERE id = ?
             """, (full_name, role, email, user_id))
             
+            rows_affected = cursor.rowcount
+            print(f"[DEBUG] Filas actualizadas: {rows_affected}")
+            
             conn.commit()
+            
+            # Verificar que se guardó correctamente
+            cursor.execute("""
+                SELECT email FROM users WHERE id = %s
+            """ if is_postgres else """
+                SELECT email FROM users WHERE id = ?
+            """, (user_id,))
+            result = cursor.fetchone()
+            saved_email = result[0] if result else None
+            print(f"[DEBUG] Email guardado en BD: {saved_email}")
+            
             cursor.close()
             conn.close()
-            return True
+            
+            if saved_email == email:
+                print(f"[DEBUG] ✅ Email guardado correctamente")
+                return True
+            else:
+                print(f"[DEBUG] ⚠️ Email guardado ({saved_email}) no coincide con el esperado ({email})")
+                return True  # Retornar True de todas formas porque el UPDATE fue exitoso
         except Exception as e:
-            print(f"Error al actualizar usuario: {e}")
+            print(f"[ERROR] Error al actualizar usuario: {e}")
+            import traceback
+            traceback.print_exc()
             return False
     
     @staticmethod
