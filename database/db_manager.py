@@ -217,7 +217,8 @@ class DBManager:
         # Crear usuario admin por defecto si no existe
         cursor.execute("SELECT COUNT(*) FROM users WHERE username = 'admin'")
         result = cursor.fetchone()
-        count = result[0] if is_postgres else result[0]
+        # Para PostgreSQL con RealDictCursor, result es un dict; para SQLite es una tupla
+        count = result['count'] if is_postgres else result[0]
         
         if count == 0:
             admin_password = bcrypt.hashpw("admin123".encode('utf-8'), bcrypt.gensalt())
@@ -389,7 +390,7 @@ class DBManager:
                 SELECT email FROM users WHERE id = ?
             """, (user_id,))
             result = cursor.fetchone()
-            saved_email = result[0] if result else None
+            saved_email = result['email'] if (result and is_postgres) else (result[0] if result else None)
             print(f"[DEBUG] Email guardado en BD: {saved_email}")
             
             cursor.close()
@@ -519,7 +520,7 @@ class DBManager:
             """, (key,))
             
             result = cursor.fetchone()
-            exists = result[0] if is_postgres else result[0]
+            exists = result['count'] if is_postgres else result[0]
             
             if exists > 0:
                 # Actualizar
@@ -606,7 +607,7 @@ class DBManager:
             """, (origin, shipping_type))
             
             result = cursor.fetchone()
-            exists = result[0] if is_postgres else result[0]
+            exists = result['count'] if is_postgres else result[0]
             
             if exists > 0:
                 # Actualizar
@@ -710,7 +711,7 @@ class DBManager:
             # Total de cotizaciones
             cursor.execute("SELECT COUNT(*) as total FROM quotes")
             result = cursor.fetchone()
-            total = result[0] if result else 0
+            total = result['total'] if (result and is_postgres) else (result[0] if result else 0)
             
             # Por estado
             cursor.execute("""
