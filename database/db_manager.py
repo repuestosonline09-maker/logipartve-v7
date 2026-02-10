@@ -864,6 +864,41 @@ class DBManager:
             return None
     
     @staticmethod
+    def get_recent_reset_token(user_id: int, minutes: int = 5) -> Optional[Dict[str, Any]]:
+        """Obtiene el token más reciente de un usuario si fue creado en los últimos N minutos."""
+        try:
+            conn = DBManager.get_connection()
+            cursor = conn.cursor()
+            
+            if DBManager.USE_POSTGRES:
+                cursor.execute("""
+                    SELECT * FROM password_reset_tokens
+                    WHERE user_id = %s 
+                    AND created_at > NOW() - INTERVAL '%s minutes'
+                    ORDER BY created_at DESC
+                    LIMIT 1
+                """, (user_id, minutes))
+            else:
+                cursor.execute("""
+                    SELECT * FROM password_reset_tokens
+                    WHERE user_id = ? 
+                    AND datetime(created_at) > datetime('now', '-' || ? || ' minutes')
+                    ORDER BY created_at DESC
+                    LIMIT 1
+                """, (user_id, minutes))
+            
+            result = cursor.fetchone()
+            cursor.close()
+            conn.close()
+            
+            if result:
+                return dict(result) if DBManager.USE_POSTGRES else dict(zip([col[0] for col in cursor.description], result))
+            return None
+        except Exception as e:
+            print(f"Error al obtener token reciente: {e}")
+            return None
+    
+    @staticmethod
     def mark_token_as_used(token: str) -> bool:
         """Marca un token como usado."""
         try:

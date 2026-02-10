@@ -133,6 +133,7 @@ def show_password_recovery():
     """
     st.markdown("### 🔑 Recuperar Contraseña")
     st.markdown("Ingresa tu email y te enviaremos un enlace para restablecer tu contraseña.")
+    st.info("⏱️ **Importante:** El enlace de recuperación expira en **1 hora**. Solo puedes solicitar un nuevo enlace cada **5 minutos**.")
     
     # Mostrar mensajes previos si existen
     if 'recovery_message' in st.session_state:
@@ -166,7 +167,7 @@ def show_password_recovery():
                 if result["success"]:
                     st.session_state['recovery_message'] = {
                         'type': 'success',
-                        'text': f"✅ {result['message']}"
+                        'text': f"✅ {result['message']}. El enlace expira en 1 hora."
                     }
                 else:
                     st.session_state['recovery_message'] = {

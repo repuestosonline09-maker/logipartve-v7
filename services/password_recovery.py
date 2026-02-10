@@ -33,6 +33,14 @@ class PasswordRecoveryService:
                     "message": "No existe ningún usuario registrado con ese email"
                 }
             
+            # Verificar si hay un token reciente (menos de 5 minutos)
+            recent_token = DBManager.get_recent_reset_token(user['id'], minutes=5)
+            if recent_token:
+                return {
+                    "success": False,
+                    "message": "Ya solicitaste un enlace recientemente. Por favor espera 5 minutos antes de solicitar uno nuevo."
+                }
+            
             # Generar token único
             token = secrets.token_urlsafe(32)
             
