@@ -7,6 +7,7 @@ Campos configurables desde Panel Admin
 import streamlit as st
 from datetime import datetime, timedelta
 from database.db_manager import DBManager
+from database.config_helpers import ConfigHelpers
 from services.auth_manager import AuthManager
 from services.quote_numbering import QuoteNumberingService
 
@@ -106,7 +107,12 @@ def render_analyst_panel():
     config = cargar_configuraciones()
     
     # Inicializar estado de sesión (verificar tipo también)
-    if 'items' not in st.session_state or not isinstance(st.session_state.items, list):
+    # Protección adicional: asegurarse de que items sea siempre una lista
+    if 'items' not in st.session_state:
+        st.session_state.items = []
+    elif not isinstance(st.session_state.items, list):
+        st.session_state.items = []
+    elif callable(st.session_state.items):
         st.session_state.items = []
     if 'cliente_datos' not in st.session_state:
         st.session_state.cliente_datos = {}
@@ -457,6 +463,9 @@ def render_analyst_panel():
                     "costo_total": costo_total_usd,
                     "costo_total_bs": costo_total_bs
                 }
+                # Protección adicional antes de append
+                if not isinstance(st.session_state.items, list):
+                    st.session_state.items = []
                 st.session_state.items.append(nuevo_item)
                 st.success(f"✅ Ítem #{len(st.session_state.items)} agregado. Puede agregar otro.")
                 st.rerun()
