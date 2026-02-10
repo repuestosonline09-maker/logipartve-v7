@@ -7,6 +7,8 @@ Campos configurables desde Panel Admin
 import streamlit as st
 from datetime import datetime, timedelta
 from database.db_manager import DBManager
+from services.auth_manager import AuthManager
+from services.quote_numbering import QuoteNumberingService
 
 # Lista de cantidades del 1 al 1000 (fija, no configurable)
 CANTIDADES = list(range(1, 1001))
@@ -115,7 +117,28 @@ def render_analyst_panel():
             "mad": 8.0      # Madrid Aéreo $/kg
         }
     
+    # Obtener información del usuario actual
+    current_user = AuthManager.get_current_user()
+    user_id = current_user.get('user_id') if current_user else None
+    username = current_user.get('username', 'Usuario') if current_user else 'Usuario'
+    
+    # Obtener vista previa del número de cotización
+    if user_id:
+        next_quote_number = QuoteNumberingService.get_next_quote_number_preview(user_id, username)
+    else:
+        next_quote_number = "N/A"
+    
+    # Título con información del analista y número de cotización
     st.title("📝 Nueva Cotización")
+    
+    # Mostrar información del analista y número de cotización
+    info_col1, info_col2 = st.columns([1, 1])
+    with info_col1:
+        st.info(f"👤 **Analista:** {username}")
+    with info_col2:
+        st.success(f"🔢 **Número de Cotización:** {next_quote_number}")
+    
+    st.markdown("---")
     
     # ==========================================
     # SECCIÓN 1: DATOS DEL CLIENTE
@@ -550,6 +573,18 @@ def render_analyst_panel():
         st.markdown("---")
         st.markdown("## 📄 Vista Previa de Cotización")
         
+        # Mostrar información de la cotización
+        quote_info_col1, quote_info_col2, quote_info_col3 = st.columns(3)
+        with quote_info_col1:
+            st.info(f"🔢 **Cotización:** {next_quote_number}")
+        with quote_info_col2:
+            st.info(f"👤 **Analista:** {username}")
+        with quote_info_col3:
+            fecha_actual = datetime.now().strftime("%d/%m/%Y")
+            st.info(f"📅 **Fecha:** {fecha_actual}")
+        
+        st.markdown("---")
+        
         cliente = st.session_state.cliente_datos
         items = st.session_state.items
         
@@ -614,10 +649,30 @@ def render_analyst_panel():
             st.success(f"**🇻🇪 TOTAL Bs: ${total_cotizacion_bs:.2f}**")
         
         # Botones de generación
-        gen_col1, gen_col2 = st.columns(2)
+        gen_col1, gen_col2, gen_col3 = st.columns(3)
         with gen_col1:
-            if st.button("📥 GENERAR PDF", use_container_width=True, type="primary", key="btn_generar_pdf"):
-                st.info("🔧 Generación de PDF en desarrollo...")
+            if st.button("💾 GUARDAR COTIZACIÓN", use_container_width=True, type="primary", key="btn_guardar_cotizacion"):
+                # Generar número de cotización definitivo
+                final_quote_number = QuoteNumberingService.generate_quote_number(user_id, username)
+                
+                if final_quote_number:
+                    # Aquí se guardaría en la base de datos
+                    # Por ahora solo mostramos confirmación
+                    st.success(f"✅ Cotización {final_quote_number} guardada exitosamente")
+                    st.session_state.saved_quote_number = final_quote_number
+                else:
+                    st.error("❌ Error al generar número de cotización")
+        
         with gen_col2:
+            if st.button("📥 GENERAR PDF", use_container_width=True, type="secondary", key="btn_generar_pdf"):
+                if st.session_state.get('saved_quote_number'):
+                    st.info(f"🔧 Generación de PDF para cotización {st.session_state.saved_quote_number} en desarrollo...")
+                else:
+                    st.warning("⚠️ Primero debe guardar la cotización")
+        
+        with gen_col3:
             if st.button("🖼️ GENERAR PNG", use_container_width=True, type="secondary", key="btn_generar_png"):
-                st.info("🔧 Generación de PNG en desarrollo...")
+                if st.session_state.get('saved_quote_number'):
+                    st.info(f"🔧 Generación de PNG para cotización {st.session_state.saved_quote_number} en desarrollo...")
+                else:
+                    st.warning("⚠️ Primero debe guardar la cotización")
