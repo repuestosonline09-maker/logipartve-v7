@@ -18,7 +18,13 @@ class DBManager:
     """
     
     DB_PATH = Path(__file__).parent / "logipartve.db"
-    USE_POSTGRES = os.getenv("DATABASE_URL") is not None
+    
+    # Detectar DATABASE_URL con logging
+    _database_url = os.getenv("DATABASE_URL")
+    print(f"[INIT] DATABASE_URL detectado: {'Sí (' + _database_url[:20] + '...)' if _database_url else 'No (None)'}")
+    USE_POSTGRES = _database_url is not None
+    print(f"[INIT] Modo de base de datos: {'PostgreSQL' if USE_POSTGRES else 'SQLite'}")
+    print(f"[INIT] Ruta SQLite: {DB_PATH}" if not USE_POSTGRES else "[INIT] Usando PostgreSQL en Railway")
     
     @staticmethod
     def get_connection():
