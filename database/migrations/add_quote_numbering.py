@@ -98,5 +98,8 @@ def migrate():
         cursor.close()
         conn.close()
 
+# Alias para compatibilidad
+run_migration = migrate
+
 if __name__ == "__main__":
     migrate()
