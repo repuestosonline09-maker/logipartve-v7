@@ -157,19 +157,15 @@ def main():
             print(f"Migración de numeración ya ejecutada o error: {e}")
             st.session_state.migrations_executed = True
     
-    # Ejecutar migración de países SIEMPRE (forzar actualización)
-    if 'countries_migration_forced' not in st.session_state:
-        try:
-            print("🔄 Forzando actualización de lista de países...")
-            from database.migrations.update_countries_list import run_migration as update_countries
-            update_countries()
-            st.session_state.countries_migration_forced = True
-            print("✅ Lista de países actualizada exitosamente")
-        except Exception as e:
-            print(f"❌ Error al actualizar países: {e}")
-            import traceback
-            traceback.print_exc()
-            st.session_state.countries_migration_forced = True
+    # Ejecutar migración de países EN CADA INICIO (sin session_state)
+    # Esto garantiza que se ejecute incluso si el código cambió
+    try:
+        print("🔄 Ejecutando actualización de lista de países...")
+        from database.migrations.update_countries_list import run_migration as update_countries
+        update_countries()
+        print("✅ Lista de países actualizada")
+    except Exception as e:
+        print(f"⚠️  Error al actualizar países (puede ser normal si ya existen): {e}")
     
     # Verificar si el usuario está logueado
     if not AuthManager.is_logged_in():
