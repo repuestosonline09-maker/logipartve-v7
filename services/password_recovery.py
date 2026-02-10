@@ -1,13 +1,15 @@
 # services/password_recovery.py
-# Servicio de recuperación de contraseña por email
+# Servicio de recuperación de contraseña por email - VERSIÓN MEJORADA
 
 import secrets
 import smtplib
+import socket
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta
 from typing import Dict, Any
 from database.db_manager import DBManager
+import time
 
 class PasswordRecoveryService:
     """
@@ -58,11 +60,10 @@ class PasswordRecoveryService:
                 }
             
             # Construir URL de reset
-            # TODO: Obtener dominio desde configuración
             reset_url = f"https://www.logipartve.com/?reset_token={token}"
             
-            # Enviar email
-            result = PasswordRecoveryService._send_email(
+            # Enviar email con múltiples intentos
+            result = PasswordRecoveryService._send_email_with_retry(
                 smtp_config=smtp_config,
                 to_email=email,
                 user_name=user['full_name'],
@@ -123,7 +124,66 @@ class PasswordRecoveryService:
             return None
     
     @staticmethod
-    def _send_email(smtp_config: Dict[str, str], to_email: str, user_name: str, reset_url: str) -> Dict[str, Any]:
+    def _send_email_with_retry(smtp_config: Dict[str, str], to_email: str, user_name: str, reset_url: str, max_retries: int = 3) -> Dict[str, Any]:
+        """
+        Envía el email con múltiples intentos y estrategias.
+        
+        Args:
+            smtp_config: Configuración SMTP
+            to_email: Email del destinatario
+            user_name: Nombre del usuario
+            reset_url: URL para resetear contraseña
+            max_retries: Número máximo de reintentos
+            
+        Returns:
+            Dict con 'success' (bool) y 'error' (str) si falla
+        """
+        # Estrategias a intentar en orden
+        strategies = [
+            {'port': 465, 'use_ssl': True, 'name': 'SSL (465)'},
+            {'port': 587, 'use_ssl': False, 'name': 'TLS (587)'},
+        ]
+        
+        last_error = None
+        
+        for strategy in strategies:
+            print(f"Intentando enviar email usando {strategy['name']}...")
+            
+            for attempt in range(max_retries):
+                try:
+                    result = PasswordRecoveryService._send_email(
+                        smtp_config=smtp_config,
+                        to_email=to_email,
+                        user_name=user_name,
+                        reset_url=reset_url,
+                        port=strategy['port'],
+                        use_ssl=strategy['use_ssl']
+                    )
+                    
+                    if result['success']:
+                        print(f"✅ Email enviado exitosamente usando {strategy['name']}")
+                        return result
+                    
+                    last_error = result.get('error', 'Error desconocido')
+                    print(f"❌ Intento {attempt + 1}/{max_retries} falló: {last_error}")
+                    
+                    # Esperar antes del siguiente intento
+                    if attempt < max_retries - 1:
+                        time.sleep(2)
+                        
+                except Exception as e:
+                    last_error = str(e)
+                    print(f"❌ Excepción en intento {attempt + 1}/{max_retries}: {last_error}")
+                    if attempt < max_retries - 1:
+                        time.sleep(2)
+        
+        return {
+            "success": False,
+            "error": f"Todos los intentos fallaron. Último error: {last_error}"
+        }
+    
+    @staticmethod
+    def _send_email(smtp_config: Dict[str, str], to_email: str, user_name: str, reset_url: str, port: int = None, use_ssl: bool = False) -> Dict[str, Any]:
         """
         Envía el email de recuperación.
         
@@ -132,11 +192,16 @@ class PasswordRecoveryService:
             to_email: Email del destinatario
             user_name: Nombre del usuario
             reset_url: URL para resetear contraseña
+            port: Puerto a usar (None = usar el configurado)
+            use_ssl: Si usar SSL directo en lugar de STARTTLS
             
         Returns:
             Dict con 'success' (bool) y 'error' (str) si falla
         """
         try:
+            # Usar puerto especificado o el configurado
+            smtp_port = port if port is not None else smtp_config['port']
+            
             # Crear mensaje
             msg = MIMEMultipart('alternative')
             msg['Subject'] = 'Recuperación de Contraseña - LogiPartVE'
@@ -209,26 +274,47 @@ class PasswordRecoveryService:
             msg.attach(part1)
             msg.attach(part2)
             
-            # Conectar al servidor SMTP y enviar (con timeout de 30 segundos)
-            with smtplib.SMTP(smtp_config['server'], smtp_config['port'], timeout=30) as server:
-                server.set_debuglevel(0)  # Cambiar a 1 para debug
-                server.starttls()
-                server.login(smtp_config['username'], smtp_config['password'])
-                server.send_message(msg)
+            # Conectar y enviar según el método
+            if use_ssl:
+                # Usar SMTP_SSL (puerto 465)
+                print(f"Conectando a {smtp_config['server']}:{smtp_port} con SSL...")
+                with smtplib.SMTP_SSL(smtp_config['server'], smtp_port, timeout=30) as server:
+                    server.set_debuglevel(0)
+                    print("Autenticando...")
+                    server.login(smtp_config['username'], smtp_config['password'])
+                    print("Enviando mensaje...")
+                    server.send_message(msg)
+                    print("Mensaje enviado exitosamente")
+            else:
+                # Usar SMTP con STARTTLS (puerto 587)
+                print(f"Conectando a {smtp_config['server']}:{smtp_port} con STARTTLS...")
+                with smtplib.SMTP(smtp_config['server'], smtp_port, timeout=30) as server:
+                    server.set_debuglevel(0)
+                    print("Iniciando TLS...")
+                    server.starttls()
+                    print("Autenticando...")
+                    server.login(smtp_config['username'], smtp_config['password'])
+                    print("Enviando mensaje...")
+                    server.send_message(msg)
+                    print("Mensaje enviado exitosamente")
             
             return {"success": True}
             
         except smtplib.SMTPAuthenticationError as e:
-            error_msg = f"Error de autenticación. Verifica la contraseña de aplicación (sin espacios)"
+            error_msg = f"Error de autenticación SMTP. Verifica usuario y contraseña"
             print(f"SMTPAuthenticationError: {e}")
             return {"success": False, "error": error_msg}
         except smtplib.SMTPException as e:
             error_msg = f"Error SMTP: {str(e)}"
             print(f"SMTPException: {e}")
             return {"success": False, "error": error_msg}
-        except TimeoutError as e:
-            error_msg = "Timeout al conectar. Verifica el servidor y puerto SMTP"
-            print(f"TimeoutError: {e}")
+        except socket.gaierror as e:
+            error_msg = f"Error de DNS/Red: No se puede resolver {smtp_config['server']}"
+            print(f"socket.gaierror: {e}")
+            return {"success": False, "error": error_msg}
+        except socket.timeout as e:
+            error_msg = f"Timeout al conectar a {smtp_config['server']}:{smtp_port}"
+            print(f"socket.timeout: {e}")
             return {"success": False, "error": error_msg}
         except Exception as e:
             error_msg = f"{type(e).__name__}: {str(e)}"
@@ -257,7 +343,10 @@ class PasswordRecoveryService:
                 }
             
             # Verificar si expiró
-            expires_at = datetime.fromisoformat(str(token_data['expires_at']))
+            expires_at = token_data['expires_at']
+            if isinstance(expires_at, str):
+                expires_at = datetime.fromisoformat(expires_at)
+            
             if datetime.now() > expires_at:
                 return {
                     "valid": False,
