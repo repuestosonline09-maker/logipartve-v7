@@ -111,15 +111,7 @@ def render_analyst_panel():
     if 'cotizacion_items' not in st.session_state:
         st.session_state.cotizacion_items = []
     # Verificar si cotizacion_items es una lista válida, si no, reinicializarla
-    try:
-        if not isinstance(st.session_state.cotizacion_items, list):
-            st.session_state.cotizacion_items = []
-        elif callable(st.session_state.cotizacion_items):
-            st.session_state.cotizacion_items = []
-        # Intentar hacer append de prueba para verificar que es una lista mutable
-        test_list = st.session_state.cotizacion_items.copy() if isinstance(st.session_state.cotizacion_items, list) else []
-        st.session_state.cotizacion_items = test_list
-    except (AttributeError, TypeError):
+    elif not isinstance(st.session_state.cotizacion_items, list) or callable(st.session_state.cotizacion_items):
         st.session_state.cotizacion_items = []
     if 'cliente_datos' not in st.session_state:
         st.session_state.cliente_datos = {}
