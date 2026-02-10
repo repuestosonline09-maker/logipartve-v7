@@ -28,28 +28,8 @@ class DBManager:
         os.getenv("DB_URL")
     )
     
-    # Debug: Mostrar TODAS las variables de entorno relacionadas con BD
-    print("\n" + "="*60)
-    print("[INIT] LogiPartVE Pro v7.0 - Inicializando Base de Datos")
-    print("="*60)
-    print(f"[DEBUG] Variables de entorno relacionadas con BD:")
-    for key in os.environ.keys():
-        if any(keyword in key.upper() for keyword in ['DATABASE', 'POSTGRES', 'PG', 'DB', 'SQL']):
-            value = os.environ[key]
-            masked = value[:30] + "..." if len(value) > 30 else value
-            print(f"  - {key}: {masked}")
-    
-    print(f"\n[INIT] DATABASE_URL detectado: {'Sí (' + _database_url[:30] + '...)' if _database_url else 'No (None)'}")
+    # Detección simple y segura
     USE_POSTGRES = _database_url is not None
-    print(f"[INIT] Modo de base de datos: {'PostgreSQL ✅' if USE_POSTGRES else 'SQLite ⚠️'}")
-    
-    if USE_POSTGRES:
-        print(f"[INIT] ✅ Usando PostgreSQL en Railway (datos permanentes)")
-    else:
-        print(f"[INIT] ⚠️  Usando SQLite local (datos temporales - se borran al reiniciar)")
-        print(f"[INIT] Ruta SQLite: {DB_PATH}")
-    
-    print("="*60 + "\n")
     
     @staticmethod
     def get_connection():
