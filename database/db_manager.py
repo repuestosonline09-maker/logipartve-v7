@@ -19,12 +19,37 @@ class DBManager:
     
     DB_PATH = Path(__file__).parent / "logipartve.db"
     
-    # Detectar DATABASE_URL con logging
-    _database_url = os.getenv("DATABASE_URL")
-    print(f"[INIT] DATABASE_URL detectado: {'Sí (' + _database_url[:20] + '...)' if _database_url else 'No (None)'}")
+    # Detectar DATABASE_URL con logging mejorado
+    # Buscar en múltiples variables de entorno posibles
+    _database_url = (
+        os.getenv("DATABASE_URL") or 
+        os.getenv("POSTGRES_URL") or 
+        os.getenv("POSTGRESQL_URL") or
+        os.getenv("DB_URL")
+    )
+    
+    # Debug: Mostrar TODAS las variables de entorno relacionadas con BD
+    print("\n" + "="*60)
+    print("[INIT] LogiPartVE Pro v7.0 - Inicializando Base de Datos")
+    print("="*60)
+    print(f"[DEBUG] Variables de entorno relacionadas con BD:")
+    for key in os.environ.keys():
+        if any(keyword in key.upper() for keyword in ['DATABASE', 'POSTGRES', 'PG', 'DB', 'SQL']):
+            value = os.environ[key]
+            masked = value[:30] + "..." if len(value) > 30 else value
+            print(f"  - {key}: {masked}")
+    
+    print(f"\n[INIT] DATABASE_URL detectado: {'Sí (' + _database_url[:30] + '...)' if _database_url else 'No (None)'}")
     USE_POSTGRES = _database_url is not None
-    print(f"[INIT] Modo de base de datos: {'PostgreSQL' if USE_POSTGRES else 'SQLite'}")
-    print(f"[INIT] Ruta SQLite: {DB_PATH}" if not USE_POSTGRES else "[INIT] Usando PostgreSQL en Railway")
+    print(f"[INIT] Modo de base de datos: {'PostgreSQL ✅' if USE_POSTGRES else 'SQLite ⚠️'}")
+    
+    if USE_POSTGRES:
+        print(f"[INIT] ✅ Usando PostgreSQL en Railway (datos permanentes)")
+    else:
+        print(f"[INIT] ⚠️  Usando SQLite local (datos temporales - se borran al reiniciar)")
+        print(f"[INIT] Ruta SQLite: {DB_PATH}")
+    
+    print("="*60 + "\n")
     
     @staticmethod
     def get_connection():
