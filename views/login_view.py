@@ -202,30 +202,41 @@ def show_reset_password(token: str):
     
     st.success("✅ Token válido. Ingresa tu nueva contraseña.")
     
-    with st.form("reset_password_form"):
-        new_password = st.text_input("Nueva Contraseña", type="password", placeholder="Mínimo 6 caracteres")
-        confirm_password = st.text_input("Confirmar Contraseña", type="password", placeholder="Repite la contraseña")
-        submit = st.form_submit_button("Restablecer Contraseña", use_container_width=True)
-        
-        if submit:
-            if not new_password or not confirm_password:
-                st.error("⚠️ Por favor completa ambos campos")
-            elif len(new_password) < 6:
-                st.error("⚠️ La contraseña debe tener al menos 6 caracteres")
-            elif new_password != confirm_password:
-                st.error("⚠️ Las contraseñas no coinciden")
-            else:
-                result = PasswordRecoveryService.reset_password(token, new_password)
-                if result["success"]:
-                    st.success(f"✅ {result['message']}")
-                    st.info("Ahora puedes iniciar sesión con tu nueva contraseña.")
-                    if st.button("Ir al login", use_container_width=True):
-                        st.query_params.clear()
-                        st.rerun()
-                else:
-                    st.error(f"❌ {result['message']}")
+    # Inicializar estado de reseteo exitoso
+    if 'password_reset_success' not in st.session_state:
+        st.session_state.password_reset_success = False
     
-    # Botón para volver al login
-    if st.button("← Volver al login", use_container_width=True):
-        st.query_params.clear()
-        st.rerun()
+    # Si el reseteo fue exitoso, mostrar mensaje y botón de redirección
+    if st.session_state.password_reset_success:
+        st.success("✅ Contraseña restablecida exitosamente")
+        st.info("Ahora puedes iniciar sesión con tu nueva contraseña.")
+        if st.button("Ir al login", use_container_width=True, type="primary"):
+            st.session_state.password_reset_success = False
+            st.query_params.clear()
+            st.rerun()
+    else:
+        # Mostrar formulario de reseteo
+        with st.form("reset_password_form"):
+            new_password = st.text_input("Nueva Contraseña", type="password", placeholder="Mínimo 6 caracteres")
+            confirm_password = st.text_input("Confirmar Contraseña", type="password", placeholder="Repite la contraseña")
+            submit = st.form_submit_button("Restablecer Contraseña", use_container_width=True)
+            
+            if submit:
+                if not new_password or not confirm_password:
+                    st.error("⚠️ Por favor completa ambos campos")
+                elif len(new_password) < 6:
+                    st.error("⚠️ La contraseña debe tener al menos 6 caracteres")
+                elif new_password != confirm_password:
+                    st.error("⚠️ Las contraseñas no coinciden")
+                else:
+                    result = PasswordRecoveryService.reset_password(token, new_password)
+                    if result["success"]:
+                        st.session_state.password_reset_success = True
+                        st.rerun()
+                    else:
+                        st.error(f"❌ {result['message']}")
+        
+        # Botón para volver al login (fuera del formulario)
+        if st.button("← Volver al login", use_container_width=True):
+            st.query_params.clear()
+            st.rerun()
