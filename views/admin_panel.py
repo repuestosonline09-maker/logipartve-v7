@@ -251,7 +251,11 @@ def show_user_management():
                     
                     with col4:
                         if user['last_login']:
-                            last_login = datetime.fromisoformat(user['last_login'])
+                            # PostgreSQL devuelve datetime, SQLite devuelve string
+                            if isinstance(user['last_login'], str):
+                                last_login = datetime.fromisoformat(user['last_login'])
+                            else:
+                                last_login = user['last_login']
                             st.text(f"Último acceso: {last_login.strftime('%d/%m/%Y %H:%M')}")
                         else:
                             st.text("Sin accesos")
@@ -786,7 +790,11 @@ def show_reports_and_stats():
                         st.text(f"{status_emoji.get(quote['status'], '❓')} {quote['status']}")
                     
                     with col4:
-                        created = datetime.fromisoformat(quote['created_at'])
+                        # PostgreSQL devuelve datetime, SQLite devuelve string
+                        if isinstance(quote['created_at'], str):
+                            created = datetime.fromisoformat(quote['created_at'])
+                        else:
+                            created = quote['created_at']
                         st.text(f"Analista: {quote['full_name']}")
                         st.text(f"Fecha: {created.strftime('%d/%m/%Y')}")
                     
@@ -812,7 +820,11 @@ def show_reports_and_stats():
     
     if activities:
         for activity in activities:
-            timestamp = datetime.fromisoformat(activity['timestamp'])
+            # PostgreSQL devuelve datetime, SQLite devuelve string
+            if isinstance(activity['timestamp'], str):
+                timestamp = datetime.fromisoformat(activity['timestamp'])
+            else:
+                timestamp = activity['timestamp']
             st.text(f"[{timestamp.strftime('%d/%m/%Y %H:%M')}] {activity['full_name']}: {activity['action']}")
             if activity['details']:
                 st.caption(f"   └─ {activity['details']}")
