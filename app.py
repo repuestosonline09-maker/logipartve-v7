@@ -19,6 +19,7 @@ from components.header import show_header
 from views.login_view import show_login
 from views.admin_panel import show_admin_panel
 from views.analyst_panel import render_analyst_panel
+from views.diagnostics_view import show_diagnostics
 
 # CSS global responsive
 st.markdown("""
@@ -187,7 +188,8 @@ def show_main_app():
                 "🏠 Inicio",
                 "🔧 Panel de Administración",
                 "📝 Crear Cotización",
-                "📊 Mis Cotizaciones"
+                "📊 Mis Cotizaciones",
+                "🔍 Diagnóstico del Sistema"
             ]
         else:
             menu_options = [
@@ -216,6 +218,8 @@ def show_main_app():
         show_create_quote()
     elif selected_menu == "📊 Mis Cotizaciones":
         show_my_quotes()
+    elif selected_menu == "🔍 Diagnóstico del Sistema":
+        show_diagnostics()
 
 
 def show_home():
