@@ -15,6 +15,8 @@ st.set_page_config(
 # Importar módulos
 from database.db_manager import DBManager
 from services.auth_manager import AuthManager
+import os
+import sys
 from components.header import show_header
 from views.login_view import show_login
 from views.admin_panel import show_admin_panel
@@ -140,6 +142,19 @@ ensure_admin_user()
 
 def main():
     """Función principal de la aplicación."""
+    
+    # Ejecutar migraciones automáticamente (solo una vez)
+    if 'migrations_executed' not in st.session_state:
+        try:
+            # Ejecutar migración de numeración de cotizaciones
+            sys.path.insert(0, os.path.dirname(__file__))
+            from database.migrations.add_quote_numbering import run_migration
+            run_migration()
+            st.session_state.migrations_executed = True
+        except Exception as e:
+            # Si falla, continuar (las tablas ya pueden existir)
+            print(f"Migración ya ejecutada o error: {e}")
+            st.session_state.migrations_executed = True
     
     # Verificar si el usuario está logueado
     if not AuthManager.is_logged_in():
