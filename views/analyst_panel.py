@@ -233,6 +233,15 @@ def render_analyst_panel():
     
     st.markdown(f"### 📦 Ítem #{num_items + 1}")
     
+    # Mostrar mensaje de éxito/error si existe
+    if 'item_agregado_msg' in st.session_state:
+        if "✅" in st.session_state.item_agregado_msg:
+            st.success(st.session_state.item_agregado_msg)
+        else:
+            st.error(st.session_state.item_agregado_msg)
+        # Limpiar el mensaje después de mostrarlo
+        del st.session_state.item_agregado_msg
+    
     # Fila 1: Descripción y N° Parte
     item_col1, item_col2 = st.columns(2)
     with item_col1:
@@ -478,11 +487,12 @@ def render_analyst_panel():
                     if not hasattr(st.session_state.items, 'append'):
                         st.session_state.items = []
                     st.session_state.items.append(nuevo_item)
+                    # Guardar mensaje de éxito en session_state para mostrarlo después del rerun
+                    st.session_state.item_agregado_msg = f"✅ Ítem #{len(st.session_state.items)} agregado. Puede agregar otro."
                 except (AttributeError, TypeError) as e:
-                    st.error(f"⚠️ Error al agregar ítem: {str(e)}. Reiniciando lista...")
+                    # Guardar mensaje de error en session_state
+                    st.session_state.item_agregado_msg = f"⚠️ Error al agregar ítem: {str(e)}. Reiniciando lista..."
                     st.session_state.items = [nuevo_item]
-                    st.rerun()
-                st.success(f"✅ Ítem #{len(st.session_state.items)} agregado. Puede agregar otro.")
                 st.rerun()
     
     with btn_action_col2:
