@@ -226,28 +226,28 @@ def migrate():
         # Actualizar países de origen
         cursor.execute("""
             UPDATE system_config 
-            SET config_value = %s 
-            WHERE config_key = 'paises_origen'
+            SET value = %s 
+            WHERE key = 'paises_origen'
         """, (paises_str,))
         
         # Si no existe, insertar
         if cursor.rowcount == 0:
             cursor.execute("""
-                INSERT INTO system_config (config_key, config_value, description)
+                INSERT INTO system_config (key, value, description)
                 VALUES ('paises_origen', %s, 'Lista de países de origen/localización')
             """, (paises_str,))
         
         # Actualizar países de fabricación (misma lista)
         cursor.execute("""
             UPDATE system_config 
-            SET config_value = %s 
-            WHERE config_key = 'paises_fabricacion'
+            SET value = %s 
+            WHERE key = 'paises_fabricacion'
         """, (paises_str,))
         
         # Si no existe, insertar
         if cursor.rowcount == 0:
             cursor.execute("""
-                INSERT INTO system_config (config_key, config_value, description)
+                INSERT INTO system_config (key, value, description)
                 VALUES ('paises_fabricacion', %s, 'Lista de países de fabricación')
             """, (paises_str,))
         
