@@ -1,15 +1,11 @@
 # services/password_recovery.py
-# Servicio de recuperación de contraseña por email - VERSIÓN MEJORADA
+# Servicio de recuperación de contraseña por email - VERSIÓN CON RESEND API
 
 import secrets
-import smtplib
-import socket
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta
 from typing import Dict, Any
 from database.db_manager import DBManager
-import time
+from services.email_service import email_service
 
 class PasswordRecoveryService:
     """
@@ -50,27 +46,17 @@ class PasswordRecoveryService:
                     "message": "Error al generar el token de recuperación"
                 }
             
-            # Obtener configuración SMTP
-            smtp_config = PasswordRecoveryService._get_smtp_config()
-            
-            if not smtp_config:
-                return {
-                    "success": False,
-                    "message": "El sistema de email no está configurado. Contacta al administrador."
-                }
-            
             # Construir URL de reset
             reset_url = f"https://www.logipartve.com/?reset_token={token}"
             
-            # Enviar email con múltiples intentos
-            result = PasswordRecoveryService._send_email_with_retry(
-                smtp_config=smtp_config,
+            # Enviar email usando Resend API
+            success, message = email_service.send_password_recovery_email(
                 to_email=email,
-                user_name=user['full_name'],
-                reset_url=reset_url
+                reset_link=reset_url,
+                username=user['username']
             )
             
-            if result['success']:
+            if success:
                 return {
                     "success": True,
                     "message": "Email de recuperación enviado exitosamente"
@@ -78,7 +64,7 @@ class PasswordRecoveryService:
             else:
                 return {
                     "success": False,
-                    "message": f"Error al enviar el email: {result.get('error', 'Error desconocido')}"
+                    "message": f"Error al enviar el email: {message}"
                 }
                 
         except Exception as e:
@@ -87,239 +73,6 @@ class PasswordRecoveryService:
                 "success": False,
                 "message": f"Error inesperado: {str(e)}"
             }
-    
-    @staticmethod
-    def _get_smtp_config() -> Dict[str, str]:
-        """
-        Obtiene la configuración SMTP desde la base de datos.
-        
-        Returns:
-            Dict con configuración SMTP o None si no está configurado
-        """
-        try:
-            config = {}
-            
-            # Obtener configuraciones SMTP
-            smtp_server = DBManager.get_config('smtp_server')
-            smtp_port = DBManager.get_config('smtp_port')
-            smtp_username = DBManager.get_config('smtp_username')
-            smtp_password = DBManager.get_config('smtp_password')
-            smtp_from_email = DBManager.get_config('smtp_from_email')
-            smtp_from_name = DBManager.get_config('smtp_from_name')
-            
-            if not all([smtp_server, smtp_port, smtp_username, smtp_password, smtp_from_email]):
-                return None
-            
-            config['server'] = smtp_server
-            config['port'] = int(smtp_port)
-            config['username'] = smtp_username
-            config['password'] = smtp_password
-            config['from_email'] = smtp_from_email
-            config['from_name'] = smtp_from_name or 'LogiPartVE'
-            
-            return config
-            
-        except Exception as e:
-            print(f"Error al obtener configuración SMTP: {e}")
-            return None
-    
-    @staticmethod
-    def _send_email_with_retry(smtp_config: Dict[str, str], to_email: str, user_name: str, reset_url: str, max_retries: int = 3) -> Dict[str, Any]:
-        """
-        Envía el email con múltiples intentos y estrategias.
-        
-        Args:
-            smtp_config: Configuración SMTP
-            to_email: Email del destinatario
-            user_name: Nombre del usuario
-            reset_url: URL para resetear contraseña
-            max_retries: Número máximo de reintentos
-            
-        Returns:
-            Dict con 'success' (bool) y 'error' (str) si falla
-        """
-        # Estrategias a intentar en orden
-        strategies = [
-            {'port': 465, 'use_ssl': True, 'name': 'SSL (465)'},
-            {'port': 587, 'use_ssl': False, 'name': 'TLS (587)'},
-        ]
-        
-        last_error = None
-        
-        for strategy in strategies:
-            print(f"Intentando enviar email usando {strategy['name']}...")
-            
-            for attempt in range(max_retries):
-                try:
-                    result = PasswordRecoveryService._send_email(
-                        smtp_config=smtp_config,
-                        to_email=to_email,
-                        user_name=user_name,
-                        reset_url=reset_url,
-                        port=strategy['port'],
-                        use_ssl=strategy['use_ssl']
-                    )
-                    
-                    if result['success']:
-                        print(f"✅ Email enviado exitosamente usando {strategy['name']}")
-                        return result
-                    
-                    last_error = result.get('error', 'Error desconocido')
-                    print(f"❌ Intento {attempt + 1}/{max_retries} falló: {last_error}")
-                    
-                    # Esperar antes del siguiente intento
-                    if attempt < max_retries - 1:
-                        time.sleep(2)
-                        
-                except Exception as e:
-                    last_error = str(e)
-                    print(f"❌ Excepción en intento {attempt + 1}/{max_retries}: {last_error}")
-                    if attempt < max_retries - 1:
-                        time.sleep(2)
-        
-        return {
-            "success": False,
-            "error": f"Todos los intentos fallaron. Último error: {last_error}"
-        }
-    
-    @staticmethod
-    def _send_email(smtp_config: Dict[str, str], to_email: str, user_name: str, reset_url: str, port: int = None, use_ssl: bool = False) -> Dict[str, Any]:
-        """
-        Envía el email de recuperación.
-        
-        Args:
-            smtp_config: Configuración SMTP
-            to_email: Email del destinatario
-            user_name: Nombre del usuario
-            reset_url: URL para resetear contraseña
-            port: Puerto a usar (None = usar el configurado)
-            use_ssl: Si usar SSL directo en lugar de STARTTLS
-            
-        Returns:
-            Dict con 'success' (bool) y 'error' (str) si falla
-        """
-        try:
-            # Usar puerto especificado o el configurado
-            smtp_port = port if port is not None else smtp_config['port']
-            
-            # Crear mensaje
-            msg = MIMEMultipart('alternative')
-            msg['Subject'] = 'Recuperación de Contraseña - LogiPartVE'
-            msg['From'] = f"{smtp_config['from_name']} <{smtp_config['from_email']}>"
-            msg['To'] = to_email
-            
-            # Cuerpo del email en HTML
-            html_body = f"""
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset="UTF-8">
-                <style>
-                    body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
-                    .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
-                    .header {{ background-color: #1f77b4; color: white; padding: 20px; text-align: center; }}
-                    .content {{ background-color: #f9f9f9; padding: 30px; }}
-                    .button {{ display: inline-block; padding: 12px 30px; background-color: #1f77b4; color: white; text-decoration: none; border-radius: 5px; margin: 20px 0; }}
-                    .footer {{ text-align: center; padding: 20px; font-size: 0.9rem; color: #666; }}
-                </style>
-            </head>
-            <body>
-                <div class="container">
-                    <div class="header">
-                        <h1>LogiPartVE Pro</h1>
-                        <p>Cotizador Global de Repuestos</p>
-                    </div>
-                    <div class="content">
-                        <h2>Hola, {user_name}</h2>
-                        <p>Recibimos una solicitud para restablecer la contraseña de tu cuenta en LogiPartVE.</p>
-                        <p>Haz clic en el siguiente botón para crear una nueva contraseña:</p>
-                        <p style="text-align: center;">
-                            <a href="{reset_url}" class="button">Restablecer Contraseña</a>
-                        </p>
-                        <p>O copia y pega este enlace en tu navegador:</p>
-                        <p style="word-break: break-all; background-color: #eee; padding: 10px; border-radius: 3px;">
-                            {reset_url}
-                        </p>
-                        <p><strong>Este enlace expirará en 1 hora.</strong></p>
-                        <p>Si no solicitaste restablecer tu contraseña, puedes ignorar este email.</p>
-                    </div>
-                    <div class="footer">
-                        <p>LogiPartVE Pro v7.0 © 2026</p>
-                        <p>Este es un email automático, por favor no respondas a este mensaje.</p>
-                    </div>
-                </div>
-            </body>
-            </html>
-            """
-            
-            # Cuerpo del email en texto plano (fallback)
-            text_body = f"""
-            Hola, {user_name}
-            
-            Recibimos una solicitud para restablecer la contraseña de tu cuenta en LogiPartVE.
-            
-            Copia y pega este enlace en tu navegador para crear una nueva contraseña:
-            {reset_url}
-            
-            Este enlace expirará en 1 hora.
-            
-            Si no solicitaste restablecer tu contraseña, puedes ignorar este email.
-            
-            LogiPartVE Pro v7.0 © 2026
-            """
-            
-            # Adjuntar ambas versiones
-            part1 = MIMEText(text_body, 'plain')
-            part2 = MIMEText(html_body, 'html')
-            msg.attach(part1)
-            msg.attach(part2)
-            
-            # Conectar y enviar según el método
-            if use_ssl:
-                # Usar SMTP_SSL (puerto 465)
-                print(f"Conectando a {smtp_config['server']}:{smtp_port} con SSL...")
-                with smtplib.SMTP_SSL(smtp_config['server'], smtp_port, timeout=30) as server:
-                    server.set_debuglevel(0)
-                    print("Autenticando...")
-                    server.login(smtp_config['username'], smtp_config['password'])
-                    print("Enviando mensaje...")
-                    server.send_message(msg)
-                    print("Mensaje enviado exitosamente")
-            else:
-                # Usar SMTP con STARTTLS (puerto 587)
-                print(f"Conectando a {smtp_config['server']}:{smtp_port} con STARTTLS...")
-                with smtplib.SMTP(smtp_config['server'], smtp_port, timeout=30) as server:
-                    server.set_debuglevel(0)
-                    print("Iniciando TLS...")
-                    server.starttls()
-                    print("Autenticando...")
-                    server.login(smtp_config['username'], smtp_config['password'])
-                    print("Enviando mensaje...")
-                    server.send_message(msg)
-                    print("Mensaje enviado exitosamente")
-            
-            return {"success": True}
-            
-        except smtplib.SMTPAuthenticationError as e:
-            error_msg = f"Error de autenticación SMTP. Verifica usuario y contraseña"
-            print(f"SMTPAuthenticationError: {e}")
-            return {"success": False, "error": error_msg}
-        except smtplib.SMTPException as e:
-            error_msg = f"Error SMTP: {str(e)}"
-            print(f"SMTPException: {e}")
-            return {"success": False, "error": error_msg}
-        except socket.gaierror as e:
-            error_msg = f"Error de DNS/Red: No se puede resolver {smtp_config['server']}"
-            print(f"socket.gaierror: {e}")
-            return {"success": False, "error": error_msg}
-        except socket.timeout as e:
-            error_msg = f"Timeout al conectar a {smtp_config['server']}:{smtp_port}"
-            print(f"socket.timeout: {e}")
-            return {"success": False, "error": error_msg}
-        except Exception as e:
-            error_msg = f"{type(e).__name__}: {str(e)}"
-            print(f"Error inesperado: {error_msg}")
-            return {"success": False, "error": error_msg}
     
     @staticmethod
     def verify_token(token: str) -> Dict[str, Any]:
