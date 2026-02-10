@@ -152,7 +152,7 @@ class EmailService:
             
             # Enviar email usando Resend API
             params = {
-                "from": "LogiPartVE <onboarding@resend.dev>",  # Email verificado de Resend
+                "from": "LogiPartVE <noreply@logipartve.com>",  # Dominio verificado
                 "to": [to_email],
                 "subject": "🔐 Recuperación de Contraseña - LogiPartVE Pro",
                 "html": html_content,
@@ -186,7 +186,7 @@ class EmailService:
         
         try:
             params = {
-                "from": "LogiPartVE <onboarding@resend.dev>",
+                "from": "LogiPartVE <noreply@logipartve.com>",
                 "to": [to_email],
                 "subject": "✅ Email de Prueba - LogiPartVE Pro",
                 "html": "<h1>¡Hola!</h1><p>Este es un email de prueba desde LogiPartVE Pro.</p>",
