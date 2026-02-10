@@ -110,9 +110,16 @@ def render_analyst_panel():
     # Protección adicional: asegurarse de que items sea siempre una lista
     if 'items' not in st.session_state:
         st.session_state.items = []
-    elif not isinstance(st.session_state.items, list):
-        st.session_state.items = []
-    elif callable(st.session_state.items):
+    # Verificar si items es una lista válida, si no, reinicializarla
+    try:
+        if not isinstance(st.session_state.items, list):
+            st.session_state.items = []
+        elif callable(st.session_state.items):
+            st.session_state.items = []
+        # Intentar hacer append de prueba para verificar que es una lista mutable
+        test_list = st.session_state.items.copy() if isinstance(st.session_state.items, list) else []
+        st.session_state.items = test_list
+    except (AttributeError, TypeError):
         st.session_state.items = []
     if 'cliente_datos' not in st.session_state:
         st.session_state.cliente_datos = {}
@@ -464,9 +471,17 @@ def render_analyst_panel():
                     "costo_total_bs": costo_total_bs
                 }
                 # Protección adicional antes de append
-                if not isinstance(st.session_state.items, list):
-                    st.session_state.items = []
-                st.session_state.items.append(nuevo_item)
+                try:
+                    if not isinstance(st.session_state.items, list):
+                        st.session_state.items = []
+                    # Verificar que items tiene el método append
+                    if not hasattr(st.session_state.items, 'append'):
+                        st.session_state.items = []
+                    st.session_state.items.append(nuevo_item)
+                except (AttributeError, TypeError) as e:
+                    st.error(f"⚠️ Error al agregar ítem: {str(e)}. Reiniciando lista...")
+                    st.session_state.items = [nuevo_item]
+                    st.rerun()
                 st.success(f"✅ Ítem #{len(st.session_state.items)} agregado. Puede agregar otro.")
                 st.rerun()
     
