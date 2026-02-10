@@ -615,17 +615,56 @@ def show_system_configuration():
         submit_smtp = st.form_submit_button("💾 Guardar Configuración SMTP", use_container_width=True)
         
         if submit_smtp:
-            # Guardar todas las configuraciones SMTP
-            DBManager.set_config('smtp_server', smtp_server, "Servidor SMTP", st.session_state.user_id)
-            DBManager.set_config('smtp_port', str(smtp_port), "Puerto SMTP", st.session_state.user_id)
-            DBManager.set_config('smtp_username', smtp_username, "Usuario SMTP", st.session_state.user_id)
-            DBManager.set_config('smtp_password', smtp_password, "Contraseña SMTP", st.session_state.user_id)
-            DBManager.set_config('smtp_from_email', smtp_from_email, "Email remitente", st.session_state.user_id)
-            DBManager.set_config('smtp_from_name', smtp_from_name, "Nombre remitente", st.session_state.user_id)
-            
-            st.success("✅ Configuración SMTP guardada exitosamente")
-            DBManager.log_activity(st.session_state.user_id, "update_config", "Actualizó configuración SMTP")
-            st.rerun()
+            # Validar que los campos obligatorios no estén vacíos
+            if not smtp_server or not smtp_username or not smtp_password or not smtp_from_email:
+                st.error("❌ Por favor completa todos los campos obligatorios (Servidor, Usuario, Contraseña, Email Remitente)")
+            else:
+                # Guardar todas las configuraciones SMTP
+                try:
+                    success_count = 0
+                    errors = []
+                    
+                    if DBManager.set_config('smtp_server', smtp_server, "Servidor SMTP", st.session_state.user_id):
+                        success_count += 1
+                    else:
+                        errors.append("smtp_server")
+                    
+                    if DBManager.set_config('smtp_port', str(smtp_port), "Puerto SMTP", st.session_state.user_id):
+                        success_count += 1
+                    else:
+                        errors.append("smtp_port")
+                    
+                    if DBManager.set_config('smtp_username', smtp_username, "Usuario SMTP", st.session_state.user_id):
+                        success_count += 1
+                    else:
+                        errors.append("smtp_username")
+                    
+                    if DBManager.set_config('smtp_password', smtp_password, "Contraseña SMTP", st.session_state.user_id):
+                        success_count += 1
+                    else:
+                        errors.append("smtp_password")
+                    
+                    if DBManager.set_config('smtp_from_email', smtp_from_email, "Email remitente", st.session_state.user_id):
+                        success_count += 1
+                    else:
+                        errors.append("smtp_from_email")
+                    
+                    if DBManager.set_config('smtp_from_name', smtp_from_name, "Nombre remitente", st.session_state.user_id):
+                        success_count += 1
+                    else:
+                        errors.append("smtp_from_name")
+                    
+                    if success_count == 6:
+                        st.success("✅ Configuración SMTP guardada exitosamente (6/6 campos)")
+                        DBManager.log_activity(st.session_state.user_id, "update_config", "Actualizó configuración SMTP")
+                        st.rerun()
+                    else:
+                        st.error(f"❌ Error al guardar configuración SMTP. Guardados: {success_count}/6. Fallaron: {', '.join(errors)}")
+                        st.warning("⚠️ Verifica los logs del servidor para más detalles")
+                except Exception as e:
+                    st.error(f"❌ Error inesperado al guardar configuración SMTP: {str(e)}")
+                    import traceback
+                    st.code(traceback.format_exc())
     
     # Ayuda para configurar Gmail
     with st.expander("💡 ¿Cómo configurar Gmail?"):

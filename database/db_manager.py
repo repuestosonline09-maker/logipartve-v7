@@ -504,7 +504,9 @@ class DBManager:
             conn.close()
             return True
         except Exception as e:
-            print(f"Error al establecer configuración: {e}")
+            print(f"Error al establecer configuración '{key}': {e}")
+            import traceback
+            traceback.print_exc()
             return False
     
     @staticmethod
