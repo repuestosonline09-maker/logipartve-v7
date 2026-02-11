@@ -152,6 +152,66 @@ def render_analyst_panel():
     # Título con información del analista y número de cotización
     st.title("📝 Nueva Cotización")
     
+    # ==========================================
+    # SIDEBAR: CALCULADORA DE ENVÍO
+    # ==========================================
+    with st.sidebar:
+        st.markdown("### 📊 Calculadora de Envío")
+        st.info("💡 Use esta calculadora para estimar el costo de envío. El resultado es solo una **referencia**.")
+        
+        calc_origen = st.selectbox("Origen", ["Miami", "Madrid"], key="calc_origen")
+        calc_tipo = st.selectbox("Tipo de Envío", ["Aéreo", "Marítimo"], key="calc_tipo")
+        
+        calc_largo = st.number_input("Largo (cm)", min_value=0.0, value=None, step=1.0, placeholder="Ej: 50", key="calc_largo") or 0.0
+        calc_ancho = st.number_input("Ancho (cm)", min_value=0.0, value=None, step=1.0, placeholder="Ej: 30", key="calc_ancho") or 0.0
+        calc_alto = st.number_input("Alto (cm)", min_value=0.0, value=None, step=1.0, placeholder="Ej: 20", key="calc_alto") or 0.0
+        calc_peso = st.number_input("Peso (kg)", min_value=0.0, value=None, step=1.0, placeholder="Ej: 5", key="calc_peso") or 0.0
+        
+        calc_col1, calc_col2 = st.columns(2)
+        with calc_col1:
+            if st.button("🧮 Calcular", use_container_width=True, key="btn_calcular"):
+                if calc_largo > 0 and calc_ancho > 0 and calc_alto > 0 and calc_peso > 0:
+                    origen_calc = "MIAMI" if calc_origen == "Miami" else "MADRID"
+                    tipo_calc = "AEREO" if calc_tipo == "Aéreo" else "MARITIMO"
+                    
+                    total, fact, unidad, pv, es_min = calcular_envio(
+                        calc_largo, calc_ancho, calc_alto, calc_peso,
+                        origen_calc, tipo_calc, st.session_state.tarifas
+                    )
+                    
+                    st.session_state.calc_resultado = {
+                        'total': total,
+                        'facturable': fact,
+                        'unidad': unidad,
+                        'peso_vol': pv,
+                        'es_minimo': es_min
+                    }
+                else:
+                    st.error("⚠️ Complete todos los campos")
+        
+        with calc_col2:
+            if st.button("🧹 Limpiar", use_container_width=True, key="btn_limpiar_calc"):
+                # Limpiar campos de la calculadora
+                for key in ['calc_origen', 'calc_tipo', 'calc_largo', 'calc_ancho', 'calc_alto', 'calc_peso']:
+                    if key in st.session_state:
+                        del st.session_state[key]
+                # Limpiar resultado
+                if 'calc_resultado' in st.session_state:
+                    del st.session_state.calc_resultado
+                st.rerun()
+        
+        # Mostrar resultado si existe
+        if 'calc_resultado' in st.session_state:
+            res = st.session_state.calc_resultado
+            st.success(f"**💰 COSTO: ${res['total']} USD**")
+            st.caption(f"📦 Facturable: {res['facturable']} {res['unidad']}")
+            st.caption(f"⚖️ Peso Vol.: {res['peso_vol']} kg")
+            if res['es_minimo']:
+                st.warning("⚠️ Tarifa mínima $25")
+        
+        st.markdown("---")
+        st.caption("📌 Copie el monto al campo 'Envío ($)' en el formulario")
+    
     # Mostrar información del analista y número de cotización
     info_col1, info_col2 = st.columns([1, 1])
     with info_col1:
@@ -174,59 +234,20 @@ def render_analyst_panel():
         cliente_email = st.text_input("Email (opcional)", key="cliente_email")
         cliente_vehiculo = st.text_input("Vehículo", placeholder="Ej: Hyundai Santa Fe 2006", key="cliente_vehiculo")
     
-    col3, col4 = st.columns(2)
+    col3, col4, col5 = st.columns(3)
     with col3:
-        cliente_ano = st.text_input("Año del Vehículo", key="cliente_ano")
+        cliente_cilindrada = st.text_input("Cilindrada/Motor", placeholder="Ej: V6 3.5L", key="cliente_cilindrada")
     with col4:
+        cliente_ano = st.text_input("Año del Vehículo", key="cliente_ano")
+    with col5:
         cliente_vin = st.text_input("Nro. VIN (opcional)", key="cliente_vin")
     
     # Nuevos campos opcionales: Dirección y C.I./RIF
-    col5, col6 = st.columns(2)
-    with col5:
+    col7, col8 = st.columns(2)
+    with col7:
         cliente_direccion = st.text_input("Dirección (opcional)", key="cliente_direccion")
-    with col6:
+    with col8:
         cliente_ci_rif = st.text_input("C.I. / RIF (opcional)", key="cliente_ci_rif")
-    
-    st.markdown("---")
-    
-    # ==========================================
-    # SECCIÓN 2: CALCULADORA DE ENVÍO (EXPANDIBLE)
-    # ==========================================
-    with st.expander("📊 CALCULADORA DE ENVÍO (Herramienta de referencia)", expanded=False):
-        st.info("💡 Use esta calculadora para estimar el costo de envío. El resultado es solo una **referencia** - usted decide el valor final.")
-        
-        calc_col1, calc_col2 = st.columns(2)
-        with calc_col1:
-            calc_origen = st.selectbox("Origen", ["Miami", "Madrid"], key="calc_origen")
-        with calc_col2:
-            calc_tipo = st.selectbox("Tipo de Envío", ["Aéreo", "Marítimo"], key="calc_tipo")
-        
-        calc_col3, calc_col4, calc_col5, calc_col6 = st.columns(4)
-        with calc_col3:
-            calc_largo = st.number_input("Largo (cm)", min_value=0.0, value=0.0, step=0.1, format="%.1f", key="calc_largo")
-        with calc_col4:
-            calc_ancho = st.number_input("Ancho (cm)", min_value=0.0, value=0.0, step=0.1, format="%.1f", key="calc_ancho")
-        with calc_col5:
-            calc_alto = st.number_input("Alto (cm)", min_value=0.0, value=0.0, step=0.1, format="%.1f", key="calc_alto")
-        with calc_col6:
-            calc_peso = st.number_input("Peso (kg)", min_value=0.0, value=0.0, step=0.1, format="%.1f", key="calc_peso")
-        
-        if st.button("🧮 CALCULAR ENVÍO", use_container_width=True, key="btn_calcular"):
-            if calc_largo > 0 and calc_ancho > 0 and calc_alto > 0 and calc_peso > 0:
-                origen_calc = "MIAMI" if calc_origen == "Miami" else "MADRID"
-                tipo_calc = "AEREO" if calc_tipo == "Aéreo" else "MARITIMO"
-                
-                total, fact, unidad, pv, es_min = calcular_envio(
-                    calc_largo, calc_ancho, calc_alto, calc_peso,
-                    origen_calc, tipo_calc, st.session_state.tarifas
-                )
-                
-                st.success(f"**💰 COSTO ESTIMADO: ${total} USD**")
-                st.write(f"📦 Base Facturable: {fact} {unidad} | ⚖️ Peso Volumétrico: {pv} kg")
-                if es_min:
-                    st.warning("⚠️ Tarifa mínima de $25 aplicada.")
-            else:
-                st.error("⚠️ Complete todos los campos con valores mayores a 0")
     
     st.markdown("---")
     
@@ -250,12 +271,27 @@ def render_analyst_panel():
         # Limpiar el mensaje después de mostrarlo
         del st.session_state.item_agregado_msg
     
+    # Limpiar campos del ítem si se agregó uno nuevo
+    if st.session_state.get('limpiar_campos_item', False):
+        # Limpiar todos los campos del ítem (NO los del cliente)
+        keys_to_clear = [
+            'item_descripcion', 'item_parte', 'item_marca', 'item_garantia', 'item_cantidad',
+            'item_origen', 'item_envio_tipo', 'item_tiempo', 'item_fabricacion', 'item_link',
+            'costo_fob', 'costo_handling', 'costo_manejo_select', 'impuesto_select',
+            'utilidad_select', 'costo_envio'
+        ]
+        for key in keys_to_clear:
+            if key in st.session_state:
+                del st.session_state[key]
+        # Marcar como limpiado
+        st.session_state.limpiar_campos_item = False
+    
     # Fila 1: Descripción y N° Parte
     item_col1, item_col2 = st.columns(2)
     with item_col1:
-        item_descripcion = st.text_input("Descripción del Repuesto", key="item_descripcion")
+        item_descripcion = st.text_input("Descripción del Repuesto", key="item_descripcion", placeholder="Ej: Bomba de gasolina")
     with item_col2:
-        item_parte = st.text_input("N° de Parte", key="item_parte")
+        item_parte = st.text_input("N° de Parte", key="item_parte", placeholder="Ej: 12345-ABC")
     
     # Fila 2: Marca (texto libre), Garantía (desde BD), Cantidad (1-1000)
     item_col3, item_col4, item_col5 = st.columns(3)
@@ -300,9 +336,9 @@ def render_analyst_panel():
     
     cost_col1, cost_col2, cost_col3 = st.columns(3)
     with cost_col1:
-        costo_fob = st.number_input("Costo FOB ($)", min_value=0.0, value=0.0, step=1.0, format="%.0f", key="costo_fob")
+        costo_fob = st.number_input("Costo FOB ($)", min_value=0.0, value=None, step=1.0, placeholder="Ej: $50", key="costo_fob") or 0.0
     with cost_col2:
-        costo_handling = st.number_input("Handling ($)", min_value=0.0, value=0.0, step=1.0, format="%.0f", key="costo_handling")
+        costo_handling = st.number_input("Handling ($)", min_value=0.0, value=None, step=1.0, placeholder="Ej: $25", key="costo_handling") or 0.0
     with cost_col3:
         # MANEJO - Selectbox desde Admin
         manejo_idx = st.selectbox("Manejo ($)", range(len(manejo_options_display)), 
@@ -324,7 +360,7 @@ def render_analyst_panel():
                                     key="utilidad_select")
         factor_utilidad = config["utilidad_factors"][utilidad_idx]
     with cost_col6:
-        costo_envio = st.number_input("Envío ($)", min_value=0.0, value=0.0, step=1.0, format="%.0f", key="costo_envio")
+        costo_envio = st.number_input("Envío ($)", min_value=0.0, value=None, step=1.0, placeholder="Ej: $100", key="costo_envio") or 0.0
     
     # TAX - Valor fijo desde Admin (NO seleccionable)
     tax_porcentaje = config["tax_percentage"]
@@ -497,10 +533,13 @@ def render_analyst_panel():
                     st.session_state.cotizacion_items.append(nuevo_item)
                     # Guardar mensaje de éxito en session_state para mostrarlo después del rerun
                     st.session_state.item_agregado_msg = f"✅ Ítem #{len(st.session_state.cotizacion_items)} agregado. Puede agregar otro."
+                    # Limpiar campos del ítem para el siguiente (mantener datos del cliente)
+                    st.session_state.limpiar_campos_item = True
                 except (AttributeError, TypeError) as e:
                     # Guardar mensaje de error en session_state
                     st.session_state.item_agregado_msg = f"⚠️ Error al agregar ítem: {str(e)}. Reiniciando lista..."
                     st.session_state.cotizacion_items = [nuevo_item]
+                    st.session_state.limpiar_campos_item = True
                 st.rerun()
     
     with btn_action_col2:
@@ -555,6 +594,7 @@ def render_analyst_panel():
                     "telefono": cliente_telefono,
                     "email": cliente_email,
                     "vehiculo": cliente_vehiculo,
+                    "cilindrada": cliente_cilindrada,
                     "ano": cliente_ano,
                     "vin": cliente_vin,
                     "direccion": cliente_direccion,
