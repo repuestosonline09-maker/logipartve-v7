@@ -67,11 +67,27 @@ def calcular_envio(largo_cm, ancho_cm, alto_cm, peso_kg, origen, tipo_envio, tar
 def cargar_configuraciones():
     """Carga todas las configuraciones desde la base de datos"""
     try:
+        # Obtener listas desde BD
+        paises_origen = DBManager.get_paises_origen()
+        tipos_envio = DBManager.get_tipos_envio()
+        tiempos_entrega = DBManager.get_tiempos_entrega()
+        garantias = DBManager.get_warranties()
+        
+        # Solo agregar "-- Seleccione --" si la lista NO está vacía y NO empieza con él
+        if paises_origen and paises_origen[0] != "-- Seleccione --":
+            paises_origen = ["-- Seleccione --"] + paises_origen
+        if tipos_envio and tipos_envio[0] != "-- Seleccione --":
+            tipos_envio = ["-- Seleccione --"] + tipos_envio
+        if tiempos_entrega and tiempos_entrega[0] != "-- Seleccione --":
+            tiempos_entrega = ["-- Seleccione --"] + tiempos_entrega
+        if garantias and garantias[0] != "-- Seleccione --":
+            garantias = ["-- Seleccione --"] + garantias
+        
         config = {
-            "paises_origen": ["-- Seleccione --"] + DBManager.get_paises_origen(),
-            "tipos_envio": ["-- Seleccione --"] + DBManager.get_tipos_envio(),
-            "tiempos_entrega": ["-- Seleccione --"] + DBManager.get_tiempos_entrega(),
-            "garantias": ["-- Seleccione --"] + DBManager.get_warranties(),
+            "paises_origen": paises_origen,
+            "tipos_envio": tipos_envio,
+            "tiempos_entrega": tiempos_entrega,
+            "garantias": garantias,
             "manejo_options": DBManager.get_manejo_options(),
             "impuesto_options": DBManager.get_impuesto_internacional_options(),
             "utilidad_factors": DBManager.get_profit_factors(),
@@ -284,9 +300,9 @@ def render_analyst_panel():
     
     cost_col1, cost_col2, cost_col3 = st.columns(3)
     with cost_col1:
-        costo_fob = st.number_input("Costo FOB ($)", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="costo_fob")
+        costo_fob = st.number_input("Costo FOB ($)", min_value=0.0, value=0.0, step=1.0, format="%.0f", key="costo_fob")
     with cost_col2:
-        costo_handling = st.number_input("Handling ($)", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="costo_handling")
+        costo_handling = st.number_input("Handling ($)", min_value=0.0, value=0.0, step=1.0, format="%.0f", key="costo_handling")
     with cost_col3:
         # MANEJO - Selectbox desde Admin
         manejo_idx = st.selectbox("Manejo ($)", range(len(manejo_options_display)), 
@@ -308,7 +324,7 @@ def render_analyst_panel():
                                     key="utilidad_select")
         factor_utilidad = config["utilidad_factors"][utilidad_idx]
     with cost_col6:
-        costo_envio = st.number_input("Envío ($)", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="costo_envio")
+        costo_envio = st.number_input("Envío ($)", min_value=0.0, value=0.0, step=1.0, format="%.0f", key="costo_envio")
     
     # TAX - Valor fijo desde Admin (NO seleccionable)
     tax_porcentaje = config["tax_percentage"]
