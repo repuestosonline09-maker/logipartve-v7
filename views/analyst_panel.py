@@ -169,10 +169,10 @@ def render_analyst_panel():
         calc_origen = st.selectbox("Origen", ["Miami", "Madrid"], key=f"calc_origen_{reset_key}")
         calc_tipo = st.selectbox("Tipo de Envío", ["Aéreo", "Marítimo"], key=f"calc_tipo_{reset_key}")
         
-        calc_largo = st.number_input("Largo (cm)", min_value=0.0, step=1.0, placeholder="Ej: 50", key=f"calc_largo_{reset_key}")
-        calc_ancho = st.number_input("Ancho (cm)", min_value=0.0, step=1.0, placeholder="Ej: 30", key=f"calc_ancho_{reset_key}")
-        calc_alto = st.number_input("Alto (cm)", min_value=0.0, step=1.0, placeholder="Ej: 20", key=f"calc_alto_{reset_key}")
-        calc_peso = st.number_input("Peso (kg)", min_value=0.0, step=1.0, placeholder="Ej: 5", key=f"calc_peso_{reset_key}")
+        calc_largo = st.number_input("Largo (cm)", min_value=0.0, value=None, step=1.0, placeholder="Ej: 50", key=f"calc_largo_{reset_key}")
+        calc_ancho = st.number_input("Ancho (cm)", min_value=0.0, value=None, step=1.0, placeholder="Ej: 30", key=f"calc_ancho_{reset_key}")
+        calc_alto = st.number_input("Alto (cm)", min_value=0.0, value=None, step=1.0, placeholder="Ej: 20", key=f"calc_alto_{reset_key}")
+        calc_peso = st.number_input("Peso (kg)", min_value=0.0, value=None, step=1.0, placeholder="Ej: 5", key=f"calc_peso_{reset_key}")
         
         calc_col1, calc_col2 = st.columns(2)
         with calc_col1:
