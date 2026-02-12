@@ -11,6 +11,18 @@ enableCORS = false
 enableXsrfProtection = false
 address = "0.0.0.0"
 port = 8080
+maxMessageSize = 200
+enableWebsocketCompression = true
 
 [browser]
 gatherUsageStats = false
+serverPort = 8501
+
+[client]
+toolbarMode = "minimal"
+showErrorDetails = false
+
+# Configuración crítica para evitar cierre de sesión
+[runner]
+fastReruns = true
+maxMessageAge = 300

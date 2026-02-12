@@ -93,8 +93,11 @@ class AuthManager:
         except:
             pass  # Ignorar errores de logging
         
-        # Limpiar todas las variables de sesión
-        st.session_state.clear()
+        # Limpiar SOLO variables de autenticación (no usar clear() que borra todo)
+        auth_keys = ['logged_in', 'user_id', 'username', 'role', 'full_name']
+        for key in auth_keys:
+            if key in st.session_state:
+                del st.session_state[key]
         
         # Asegurar que logged_in esté en False
         st.session_state.logged_in = False
