@@ -194,9 +194,10 @@ def show_user_management():
                             elif new_password != confirm_password:
                                 st.error("⚠️ Las contraseñas no coinciden")
                             else:
-                                # Limpiar caché antes de cambiar contraseña
+                                # Limpiar TODOS los cachés antes de cambiar contraseña
                                 try:
                                     st.cache_data.clear()
+                                    st.cache_resource.clear()
                                 except:
                                     pass
                                 
@@ -210,11 +211,23 @@ def show_user_management():
                                     
                                     # Verificar si el usuario está cambiando su propia contraseña
                                     if selected_user_id == st.session_state.user_id:
-                                        # Cerrar sesión automáticamente
+                                        # Limpiar TODAS las variables de sesión relacionadas con autenticación
+                                        keys_to_delete = []
+                                        for key in st.session_state.keys():
+                                            if key in ['authenticated', 'user_id', 'username', 'role', 'user_data']:
+                                                keys_to_delete.append(key)
+                                        
+                                        for key in keys_to_delete:
+                                            del st.session_state[key]
+                                        
+                                        # Mostrar mensaje y forzar recarga completa
                                         st.success("✅ Contraseña actualizada exitosamente. Cerrando sesión...")
                                         st.info("🔑 Por favor inicia sesión nuevamente con tu nueva contraseña.")
+                                        st.warning("⚠️ Si la nueva contraseña no funciona inmediatamente, espera 30 segundos y vuelve a intentar.")
                                         import time
-                                        time.sleep(2)
+                                        time.sleep(3)
+                                        
+                                        # Forzar logout y recarga
                                         from services.auth_manager import AuthManager
                                         AuthManager.logout()
                                         st.rerun()
@@ -222,8 +235,9 @@ def show_user_management():
                                         # Cambio de contraseña de otro usuario
                                         st.success("✅ Contraseña actualizada exitosamente")
                                         st.info(f"🔑 El usuario '{selected_user['username']}' debe cerrar sesión y volver a entrar con la nueva contraseña.")
+                                        st.warning("⚠️ Si el usuario tiene problemas para iniciar sesión, debe esperar 30 segundos y volver a intentar.")
                                 else:
-                                    st.error("❌ Error al cambiar contraseña")
+                                    st.error("❌ Error al cambiar contraseña. Por favor intenta nuevamente.")
                 
                 # Botón de eliminar (solo si no es el admin principal)
                 if selected_user['username'] != 'admin':
