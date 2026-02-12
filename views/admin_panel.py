@@ -194,14 +194,34 @@ def show_user_management():
                             elif new_password != confirm_password:
                                 st.error("⚠️ Las contraseñas no coinciden")
                             else:
+                                # Limpiar caché antes de cambiar contraseña
+                                try:
+                                    st.cache_data.clear()
+                                except:
+                                    pass
+                                
                                 success = DBManager.change_password(selected_user_id, new_password)
                                 if success:
-                                    st.success("✅ Contraseña actualizada exitosamente")
                                     DBManager.log_activity(
                                         st.session_state.user_id,
                                         "change_password",
                                         f"Cambió contraseña de usuario: {selected_user['username']}"
                                     )
+                                    
+                                    # Verificar si el usuario está cambiando su propia contraseña
+                                    if selected_user_id == st.session_state.user_id:
+                                        # Cerrar sesión automáticamente
+                                        st.success("✅ Contraseña actualizada exitosamente. Cerrando sesión...")
+                                        st.info("🔑 Por favor inicia sesión nuevamente con tu nueva contraseña.")
+                                        import time
+                                        time.sleep(2)
+                                        from services.auth_manager import AuthManager
+                                        AuthManager.logout()
+                                        st.rerun()
+                                    else:
+                                        # Cambio de contraseña de otro usuario
+                                        st.success("✅ Contraseña actualizada exitosamente")
+                                        st.info(f"🔑 El usuario '{selected_user['username']}' debe cerrar sesión y volver a entrar con la nueva contraseña.")
                                 else:
                                     st.error("❌ Error al cambiar contraseña")
                 
