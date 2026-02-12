@@ -159,13 +159,33 @@ def render_analyst_panel():
         st.markdown("### 📊 Calculadora de Envío")
         st.info("💡 Use esta calculadora para estimar el costo de envío. El resultado es solo una **referencia**.")
         
+        # Inicializar valores de la calculadora si no existen
+        if 'calc_largo' not in st.session_state:
+            st.session_state.calc_largo = 0.0
+        if 'calc_ancho' not in st.session_state:
+            st.session_state.calc_ancho = 0.0
+        if 'calc_alto' not in st.session_state:
+            st.session_state.calc_alto = 0.0
+        if 'calc_peso' not in st.session_state:
+            st.session_state.calc_peso = 0.0
+        if 'calc_origen' not in st.session_state:
+            st.session_state.calc_origen = "Miami"
+        if 'calc_tipo' not in st.session_state:
+            st.session_state.calc_tipo = "Aéreo"
+        
         calc_origen = st.selectbox("Origen", ["Miami", "Madrid"], key="calc_origen")
         calc_tipo = st.selectbox("Tipo de Envío", ["Aéreo", "Marítimo"], key="calc_tipo")
         
-        calc_largo = st.number_input("Largo (cm)", min_value=0.0, value=None, step=1.0, placeholder="Ej: 50", key="calc_largo") or 0.0
-        calc_ancho = st.number_input("Ancho (cm)", min_value=0.0, value=None, step=1.0, placeholder="Ej: 30", key="calc_ancho") or 0.0
-        calc_alto = st.number_input("Alto (cm)", min_value=0.0, value=None, step=1.0, placeholder="Ej: 20", key="calc_alto") or 0.0
-        calc_peso = st.number_input("Peso (kg)", min_value=0.0, value=None, step=1.0, placeholder="Ej: 5", key="calc_peso") or 0.0
+        calc_largo = st.number_input("Largo (cm)", min_value=0.0, value=st.session_state.calc_largo, step=1.0, placeholder="Ej: 50", key="calc_largo_input")
+        calc_ancho = st.number_input("Ancho (cm)", min_value=0.0, value=st.session_state.calc_ancho, step=1.0, placeholder="Ej: 30", key="calc_ancho_input")
+        calc_alto = st.number_input("Alto (cm)", min_value=0.0, value=st.session_state.calc_alto, step=1.0, placeholder="Ej: 20", key="calc_alto_input")
+        calc_peso = st.number_input("Peso (kg)", min_value=0.0, value=st.session_state.calc_peso, step=1.0, placeholder="Ej: 5", key="calc_peso_input")
+        
+        # Actualizar valores en session_state
+        st.session_state.calc_largo = calc_largo
+        st.session_state.calc_ancho = calc_ancho
+        st.session_state.calc_alto = calc_alto
+        st.session_state.calc_peso = calc_peso
         
         calc_col1, calc_col2 = st.columns(2)
         with calc_col1:
@@ -191,10 +211,13 @@ def render_analyst_panel():
         
         with calc_col2:
             if st.button("🧹 Limpiar", use_container_width=True, key="btn_limpiar_calc"):
-                # Limpiar campos de la calculadora
-                for key in ['calc_origen', 'calc_tipo', 'calc_largo', 'calc_ancho', 'calc_alto', 'calc_peso']:
-                    if key in st.session_state:
-                        del st.session_state[key]
+                # Resetear campos de la calculadora a valores por defecto
+                st.session_state.calc_largo = 0.0
+                st.session_state.calc_ancho = 0.0
+                st.session_state.calc_alto = 0.0
+                st.session_state.calc_peso = 0.0
+                st.session_state.calc_origen = "Miami"
+                st.session_state.calc_tipo = "Aéreo"
                 # Limpiar resultado
                 if 'calc_resultado' in st.session_state:
                     del st.session_state.calc_resultado
