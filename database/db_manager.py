@@ -411,6 +411,8 @@ class DBManager:
     @staticmethod
     def change_password(user_id: int, new_password: str) -> bool:
         """Cambia la contraseña de un usuario."""
+        conn = None
+        cursor = None
         try:
             import bcrypt
             
@@ -427,13 +429,38 @@ class DBManager:
                 UPDATE users SET password_hash = ? WHERE id = ?
             """, (hashed_password.decode('utf-8'), user_id))
             
+            # Verificar que se actualizó al menos una fila
+            rows_affected = cursor.rowcount
+            
             conn.commit()
             cursor.close()
             conn.close()
+            
+            if rows_affected == 0:
+                print(f"⚠️ Advertencia: No se encontró usuario con ID {user_id}")
+                return False
+            
+            print(f"✅ Contraseña actualizada exitosamente para usuario ID {user_id}")
             return True
         except Exception as e:
-            print(f"Error al cambiar contraseña: {e}")
+            print(f"❌ Error al cambiar contraseña: {e}")
+            if conn:
+                try:
+                    conn.rollback()
+                except:
+                    pass
             return False
+        finally:
+            if cursor:
+                try:
+                    cursor.close()
+                except:
+                    pass
+            if conn:
+                try:
+                    conn.close()
+                except:
+                    pass
     
     @staticmethod
     def update_last_login(user_id: int) -> bool:
