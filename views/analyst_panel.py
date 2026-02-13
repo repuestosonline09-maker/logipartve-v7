@@ -276,20 +276,19 @@ def render_analyst_panel():
         # Limpiar el mensaje después de mostrarlo
         del st.session_state.item_agregado_msg
     
+    # Inicializar contador de reset de campos de ítem
+    if 'item_reset_counter' not in st.session_state:
+        st.session_state.item_reset_counter = 0
+    
     # Limpiar campos del ítem si se agregó uno nuevo
     if st.session_state.get('limpiar_campos_item', False):
-        # Limpiar todos los campos del ítem (NO los del cliente)
-        keys_to_clear = [
-            'item_descripcion', 'item_parte', 'item_marca', 'item_garantia', 'item_cantidad',
-            'item_origen', 'item_envio_tipo', 'item_tiempo', 'item_fabricacion', 'item_link',
-            'costo_fob', 'costo_handling', 'costo_manejo_select', 'impuesto_select',
-            'utilidad_select', 'costo_envio'
-        ]
-        for key in keys_to_clear:
-            if key in st.session_state:
-                del st.session_state[key]
+        # Incrementar contador para forzar recreación de widgets
+        st.session_state.item_reset_counter += 1
         # Marcar como limpiado
         st.session_state.limpiar_campos_item = False
+    
+    # Usar el contador para generar keys únicas
+    reset_key = st.session_state.item_reset_counter
     
     # Fila 1: Descripción y N° Parte
     item_col1, item_col2 = st.columns(2)
@@ -341,14 +340,14 @@ def render_analyst_panel():
     
     cost_col1, cost_col2, cost_col3 = st.columns(3)
     with cost_col1:
-        costo_fob = st.number_input("Costo FOB ($)", min_value=0.0, value=None, step=1.0, placeholder="Ej: $50", key="costo_fob") or 0.0
+        costo_fob = st.number_input("Costo FOB ($)", min_value=0.0, value=None, step=1.0, placeholder="Ej: $50", key=f"costo_fob_{reset_key}") or 0.0
     with cost_col2:
-        costo_handling = st.number_input("Handling ($)", min_value=0.0, value=None, step=1.0, placeholder="Ej: $25", key="costo_handling") or 0.0
+        costo_handling = st.number_input("Handling ($)", min_value=0.0, value=None, step=1.0, placeholder="Ej: $25", key=f"costo_handling_{reset_key}") or 0.0
     with cost_col3:
         # MANEJO - Selectbox desde Admin
         manejo_idx = st.selectbox("Manejo ($)", range(len(manejo_options_display)), 
                                   format_func=lambda x: manejo_options_display[x], 
-                                  key="costo_manejo_select")
+                                  key=f"costo_manejo_select_{reset_key}")
         costo_manejo = config["manejo_options"][manejo_idx]
     
     cost_col4, cost_col5, cost_col6 = st.columns(3)
@@ -356,16 +355,16 @@ def render_analyst_panel():
         # IMPUESTO INTERNACIONAL - Selectbox desde Admin
         impuesto_idx = st.selectbox("Impuesto Internacional (%)", range(len(impuesto_options_display)),
                                     format_func=lambda x: impuesto_options_display[x],
-                                    key="impuesto_select")
+                                    key=f"impuesto_select_{reset_key}")
         impuesto_porcentaje = config["impuesto_options"][impuesto_idx]
     with cost_col5:
         # FACTOR DE UTILIDAD - Selectbox desde Admin
         utilidad_idx = st.selectbox("Factor de Utilidad", range(len(utilidad_options_display)),
                                     format_func=lambda x: utilidad_options_display[x],
-                                    key="utilidad_select")
+                                    key=f"utilidad_select_{reset_key}")
         factor_utilidad = config["utilidad_factors"][utilidad_idx]
     with cost_col6:
-        costo_envio = st.number_input("Envío ($)", min_value=0.0, value=None, step=1.0, placeholder="Ej: $100", key="costo_envio") or 0.0
+        costo_envio = st.number_input("Envío ($)", min_value=0.0, value=None, step=1.0, placeholder="Ej: $100", key=f"costo_envio_{reset_key}") or 0.0
     
     # TAX - Valor fijo desde Admin (NO seleccionable)
     tax_porcentaje = config["tax_percentage"]
