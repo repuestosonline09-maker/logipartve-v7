@@ -746,6 +746,19 @@ def render_analyst_panel():
                     # Por ahora solo mostramos confirmación
                     st.success(f"✅ Cotización {final_quote_number} guardada exitosamente")
                     st.session_state.saved_quote_number = final_quote_number
+                    
+                    # Limpiar la cotización actual para empezar una nueva
+                    st.session_state.cotizacion_items = []
+                    st.session_state.cliente_datos = {}
+                    if 'mostrar_cotizacion' in st.session_state:
+                        del st.session_state.mostrar_cotizacion
+                    # Incrementar contador para limpiar campos del formulario
+                    st.session_state.item_reset_counter += 1
+                    
+                    # Mostrar mensaje y hacer rerun después de un momento
+                    import time
+                    time.sleep(1)
+                    st.rerun()
                 else:
                     st.error("❌ Error al generar número de cotización")
         
