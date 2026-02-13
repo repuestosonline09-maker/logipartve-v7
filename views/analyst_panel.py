@@ -750,15 +750,103 @@ def render_analyst_panel():
                     st.error("❌ Error al generar número de cotización")
         
         with gen_col2:
-            if st.button("📥 GENERAR PDF", use_container_width=True, type="secondary", key="btn_generar_pdf"):
+            if st.button("📅 GENERAR PDF", use_container_width=True, type="secondary", key="btn_generar_pdf"):
                 if st.session_state.get('saved_quote_number'):
-                    st.info(f"🔧 Generación de PDF para cotización {st.session_state.saved_quote_number} en desarrollo...")
+                    try:
+                        from services.document_generation import PDFQuoteGenerator
+                        import os
+                        
+                        # Preparar datos para PDF
+                        quote_data = {
+                            'quote_number': st.session_state.saved_quote_number,
+                            'analyst_name': st.session_state.full_name,
+                            'client': {
+                                'nombre': nombre_cliente,
+                                'telefono': telefono,
+                                'email': email,
+                                'vehiculo': vehiculo,
+                                'motor': motor,
+                                'áño': año
+                            },
+                            'items': items,
+                            'total_usd': total_cotizacion_usd,
+                            'total_bs': total_cotizacion_bs,
+                            'terms': config.get('terms_conditions', 'Términos y condiciones estándar.')
+                        }
+                        
+                        # Generar PDF
+                        output_dir = '/tmp/cotizaciones'
+                        os.makedirs(output_dir, exist_ok=True)
+                        output_path = f"{output_dir}/cotizacion_{st.session_state.saved_quote_number}.pdf"
+                        
+                        pdf_gen = PDFQuoteGenerator()
+                        result = pdf_gen.generate_quote_pdf(quote_data, output_path)
+                        
+                        if result:
+                            # Ofrecer descarga
+                            with open(output_path, 'rb') as f:
+                                st.download_button(
+                                    label="📅 Descargar PDF",
+                                    data=f,
+                                    file_name=f"cotizacion_{st.session_state.saved_quote_number}.pdf",
+                                    mime="application/pdf",
+                                    use_container_width=True
+                                )
+                            st.success("✅ PDF generado exitosamente")
+                        else:
+                            st.error("❌ Error al generar PDF")
+                    except Exception as e:
+                        st.error(f"❌ Error: {str(e)}")
                 else:
                     st.warning("⚠️ Primero debe guardar la cotización")
         
         with gen_col3:
             if st.button("🖼️ GENERAR PNG", use_container_width=True, type="secondary", key="btn_generar_png"):
                 if st.session_state.get('saved_quote_number'):
-                    st.info(f"🔧 Generación de PNG para cotización {st.session_state.saved_quote_number} en desarrollo...")
+                    try:
+                        from services.document_generation import PNGQuoteGenerator
+                        import os
+                        
+                        # Preparar datos para PNG
+                        quote_data = {
+                            'quote_number': st.session_state.saved_quote_number,
+                            'analyst_name': st.session_state.full_name,
+                            'client': {
+                                'nombre': nombre_cliente,
+                                'telefono': telefono,
+                                'email': email,
+                                'vehiculo': vehiculo,
+                                'motor': motor,
+                                'áño': año
+                            },
+                            'items': items,
+                            'total_usd': total_cotizacion_usd,
+                            'total_bs': total_cotizacion_bs,
+                            'terms': config.get('terms_conditions', 'Términos y condiciones estándar.')
+                        }
+                        
+                        # Generar PNG
+                        output_dir = '/tmp/cotizaciones'
+                        os.makedirs(output_dir, exist_ok=True)
+                        output_path = f"{output_dir}/cotizacion_{st.session_state.saved_quote_number}.png"
+                        
+                        png_gen = PNGQuoteGenerator()
+                        result = png_gen.generate_quote_png_from_data(quote_data, output_path)
+                        
+                        if result:
+                            # Ofrecer descarga
+                            with open(output_path, 'rb') as f:
+                                st.download_button(
+                                    label="🖼️ Descargar PNG",
+                                    data=f,
+                                    file_name=f"cotizacion_{st.session_state.saved_quote_number}.png",
+                                    mime="image/png",
+                                    use_container_width=True
+                                )
+                            st.success("✅ PNG generado exitosamente")
+                        else:
+                            st.error("❌ Error al generar PNG")
+                    except Exception as e:
+                        st.error(f"❌ Error: {str(e)}")
                 else:
                     st.warning("⚠️ Primero debe guardar la cotización")
