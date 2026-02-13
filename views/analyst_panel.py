@@ -293,34 +293,34 @@ def render_analyst_panel():
     # Fila 1: Descripción y N° Parte
     item_col1, item_col2 = st.columns(2)
     with item_col1:
-        item_descripcion = st.text_input("Descripción del Repuesto", key="item_descripcion", placeholder="Ej: Bomba de gasolina")
+        item_descripcion = st.text_input("Descripción del Repuesto", key=f"item_descripcion_{reset_key}", placeholder="Ej: Bomba de gasolina")
     with item_col2:
-        item_parte = st.text_input("N° de Parte", key="item_parte", placeholder="Ej: 12345-ABC")
+        item_parte = st.text_input("N° de Parte", key=f"item_parte_{reset_key}", placeholder="Ej: 12345-ABC")
     
     # Fila 2: Marca (texto libre), Garantía (desde BD), Cantidad (1-1000)
     item_col3, item_col4, item_col5 = st.columns(3)
     with item_col3:
-        item_marca = st.text_input("Marca", placeholder="Ej: TOYOTA, BOSCH, DENSO...", key="item_marca")
+        item_marca = st.text_input("Marca", placeholder="Ej: TOYOTA, BOSCH, DENSO...", key=f"item_marca_{reset_key}")
     with item_col4:
-        item_garantia = st.selectbox("Garantía", config["garantias"], key="item_garantia")
+        item_garantia = st.selectbox("Garantía", config["garantias"], key=f"item_garantia_{reset_key}")
     with item_col5:
-        item_cantidad = st.selectbox("Cantidad", CANTIDADES, key="item_cantidad")
+        item_cantidad = st.selectbox("Cantidad", CANTIDADES, key=f"item_cantidad_{reset_key}")
     
     # Fila 3: Origen (desde BD), Envío (desde BD), Tiempo de Entrega (desde BD)
     item_col6, item_col7, item_col8 = st.columns(3)
     with item_col6:
-        item_origen = st.selectbox("País de Localización", config["paises_origen"], key="item_origen")
+        item_origen = st.selectbox("País de Localización", config["paises_origen"], key=f"item_origen_{reset_key}")
     with item_col7:
-        item_envio_tipo = st.selectbox("Tipo de Envío", config["tipos_envio"], key="item_envio_tipo")
+        item_envio_tipo = st.selectbox("Tipo de Envío", config["tipos_envio"], key=f"item_envio_tipo_{reset_key}")
     with item_col8:
-        item_tiempo = st.selectbox("Tiempo de Entrega", config["tiempos_entrega"], key="item_tiempo")
+        item_tiempo = st.selectbox("Tiempo de Entrega", config["tiempos_entrega"], key=f"item_tiempo_{reset_key}")
     
     # Fila 4: País de Fabricación (desde BD) y Link
     item_col9, item_col10 = st.columns(2)
     with item_col9:
-        item_fabricacion = st.selectbox("País de Fabricación", config["paises_origen"], key="item_fabricacion")
+        item_fabricacion = st.selectbox("País de Fabricación", config["paises_origen"], key=f"item_fabricacion_{reset_key}")
     with item_col10:
-        item_link = st.text_input("Link del Producto (opcional)", placeholder="https://...", key="item_link")
+        item_link = st.text_input("Link del Producto (opcional)", placeholder="https://...", key=f"item_link_{reset_key}")
     
     st.markdown("---")
     
