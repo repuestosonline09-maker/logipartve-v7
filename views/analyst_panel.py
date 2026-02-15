@@ -407,9 +407,9 @@ def render_analyst_panel():
     else:
         utilidad_calculada = 0
     
-    # 3. TAX = (FOB + Handling + Manejo + Utilidad + Envío) * 7%
-    # NOTA: El TAX NO incluye el Impuesto Internacional en su base
-    base_tax = costo_fob + costo_handling + costo_manejo + utilidad_calculada + costo_envio
+    # 3. TAX = (FOB + Handling + Manejo + Impuesto + Utilidad + Envío) * 7%
+    # NOTA: El TAX SÍ incluye el Impuesto Internacional en su base (según Excel)
+    base_tax = costo_fob + costo_handling + costo_manejo + costo_impuesto + utilidad_calculada + costo_envio
     costo_tax = base_tax * (tax_porcentaje / 100)
     
     # 4. PRECIO USD = FOB + Handling + Manejo + Impuesto + Utilidad + Envío + TAX
