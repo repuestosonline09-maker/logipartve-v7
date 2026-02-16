@@ -746,18 +746,7 @@ def render_analyst_panel():
                     # Por ahora solo mostramos confirmación
                     st.success(f"✅ Cotización {final_quote_number} guardada exitosamente")
                     st.session_state.saved_quote_number = final_quote_number
-                    
-                    # Limpiar la cotización actual para empezar una nueva
-                    st.session_state.cotizacion_items = []
-                    st.session_state.cliente_datos = {}
-                    if 'mostrar_cotizacion' in st.session_state:
-                        del st.session_state.mostrar_cotizacion
-                    # Incrementar contador para limpiar campos del formulario
-                    st.session_state.item_reset_counter += 1
-                    
-                    # Mostrar mensaje y hacer rerun después de un momento
-                    import time
-                    time.sleep(1)
+                    st.session_state.cotizacion_guardada = True  # Marcar que la cotización fue guardada
                     st.rerun()
                 else:
                     st.error("❌ Error al generar número de cotización")
@@ -863,3 +852,20 @@ def render_analyst_panel():
                         st.error(f"❌ Error: {str(e)}")
                 else:
                     st.warning("⚠️ Primero debe guardar la cotización")
+        
+        # Botón NUEVA COTIZACIÓN (solo visible si la cotización fue guardada)
+        if st.session_state.get('cotizacion_guardada', False):
+            st.markdown("---")
+            if st.button("🆕 NUEVA COTIZACIÓN", use_container_width=True, type="primary", key="btn_nueva_cotizacion"):
+                # Limpiar TODO: datos del cliente + ítems + vista previa
+                st.session_state.cotizacion_items = []
+                st.session_state.cliente_datos = {}
+                if 'mostrar_cotizacion' in st.session_state:
+                    del st.session_state.mostrar_cotizacion
+                if 'saved_quote_number' in st.session_state:
+                    del st.session_state.saved_quote_number
+                if 'cotizacion_guardada' in st.session_state:
+                    del st.session_state.cotizacion_guardada
+                # Incrementar contador para limpiar campos del formulario
+                st.session_state.item_reset_counter += 1
+                st.rerun()
