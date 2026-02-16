@@ -759,16 +759,17 @@ def render_analyst_panel():
                         import os
                         
                         # Preparar datos para PDF
+                        cliente = st.session_state.get('cliente_datos', {})
                         quote_data = {
                             'quote_number': st.session_state.saved_quote_number,
                             'analyst_name': st.session_state.full_name,
                             'client': {
-                                'nombre': nombre_cliente,
-                                'telefono': telefono,
-                                'email': email,
-                                'vehiculo': vehiculo,
-                                'motor': motor,
-                                'áño': año
+                                'nombre': cliente.get('nombre', ''),
+                                'telefono': cliente.get('telefono', ''),
+                                'email': cliente.get('email', ''),
+                                'vehiculo': cliente.get('vehiculo', ''),
+                                'motor': cliente.get('cilindrada', ''),
+                                'áño': cliente.get('ano', '')
                             },
                             'items': items,
                             'total_usd': total_cotizacion_usd,
@@ -810,16 +811,17 @@ def render_analyst_panel():
                         import os
                         
                         # Preparar datos para PNG
+                        cliente = st.session_state.get('cliente_datos', {})
                         quote_data = {
                             'quote_number': st.session_state.saved_quote_number,
                             'analyst_name': st.session_state.full_name,
                             'client': {
-                                'nombre': nombre_cliente,
-                                'telefono': telefono,
-                                'email': email,
-                                'vehiculo': vehiculo,
-                                'motor': motor,
-                                'áño': año
+                                'nombre': cliente.get('nombre', ''),
+                                'telefono': cliente.get('telefono', ''),
+                                'email': cliente.get('email', ''),
+                                'vehiculo': cliente.get('vehiculo', ''),
+                                'motor': cliente.get('cilindrada', ''),
+                                'áño': cliente.get('ano', '')
                             },
                             'items': items,
                             'total_usd': total_cotizacion_usd,
@@ -866,6 +868,14 @@ def render_analyst_panel():
                     del st.session_state.saved_quote_number
                 if 'cotizacion_guardada' in st.session_state:
                     del st.session_state.cotizacion_guardada
-                # Incrementar contador para limpiar campos del formulario
+                
+                # Limpiar campos del formulario del cliente
+                campos_cliente = ['cliente_nombre', 'cliente_telefono', 'cliente_email', 'cliente_vehiculo', 
+                                  'cliente_cilindrada', 'cliente_ano', 'cliente_vin', 'cliente_direccion', 'cliente_ci_rif']
+                for campo in campos_cliente:
+                    if campo in st.session_state:
+                        del st.session_state[campo]
+                
+                # Incrementar contador para limpiar campos del formulario de ítem
                 st.session_state.item_reset_counter += 1
                 st.rerun()
