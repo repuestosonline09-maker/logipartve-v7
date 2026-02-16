@@ -258,7 +258,9 @@ def render_analyst_panel():
     with col7:
         cliente_direccion = st.text_input("Dirección (opcional)", key=f"cliente_direccion_{reset_key}")
     with col8:
-        cliente_ci_rif = st.text_input("C.I. / RIF (opcional)", key=f"cliente_ci_rif_{reset_key}")"---")
+        cliente_ci_rif = st.text_input("C.I. / RIF (opcional)", key=f"cliente_ci_rif_{reset_key}")
+    
+    st.markdown("---")
     
     # ==========================================
     # SECCIÓN 3: FORMULARIO DE ÍTEM
