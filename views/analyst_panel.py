@@ -775,7 +775,10 @@ def render_analyst_panel():
                                 'email': cliente.get('email', ''),
                                 'vehiculo': cliente.get('vehiculo', ''),
                                 'motor': cliente.get('cilindrada', ''),
-                                'año': cliente.get('ano', '')
+                                'año': cliente.get('ano', ''),
+                                'vin': cliente.get('vin', ''),
+                                'direccion': cliente.get('direccion', ''),
+                                'ci_rif': cliente.get('ci_rif', '')
                             },
                             'items': items,
                             'total_usd': total_cotizacion_usd,
@@ -827,7 +830,10 @@ def render_analyst_panel():
                                 'email': cliente.get('email', ''),
                                 'vehiculo': cliente.get('vehiculo', ''),
                                 'motor': cliente.get('cilindrada', ''),
-                                'año': cliente.get('ano', '')
+                                'año': cliente.get('ano', ''),
+                                'vin': cliente.get('vin', ''),
+                                'direccion': cliente.get('direccion', ''),
+                                'ci_rif': cliente.get('ci_rif', '')
                             },
                             'items': items,
                             'total_usd': total_cotizacion_usd,
