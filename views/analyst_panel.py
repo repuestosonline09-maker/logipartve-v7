@@ -775,7 +775,7 @@ def render_analyst_panel():
                                 'email': cliente.get('email', ''),
                                 'vehiculo': cliente.get('vehiculo', ''),
                                 'motor': cliente.get('cilindrada', ''),
-                                'áño': cliente.get('ano', '')
+                                'año': cliente.get('ano', '')
                             },
                             'items': items,
                             'total_usd': total_cotizacion_usd,
@@ -827,7 +827,7 @@ def render_analyst_panel():
                                 'email': cliente.get('email', ''),
                                 'vehiculo': cliente.get('vehiculo', ''),
                                 'motor': cliente.get('cilindrada', ''),
-                                'áño': cliente.get('ano', '')
+                                'año': cliente.get('ano', '')
                             },
                             'items': items,
                             'total_usd': total_cotizacion_usd,
