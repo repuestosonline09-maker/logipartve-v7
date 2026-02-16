@@ -733,12 +733,66 @@ def render_analyst_panel():
             total_cotizacion_bs += item.get('costo_total_bs', item['costo_total'])
             st.markdown("---")
         
+        # Calcular totales correctos
+        sub_total = 0
+        iva_total = 0
+        abona_ya = 0
+        total_usd_divisas = 0
+        
+        for item in items:
+            cantidad = item.get('cantidad', 1)
+            
+            # Sub-Total (precio Bs con diferencial, sin IVA)
+            precio_bs_sin_iva = item.get('precio_usd', 0) + item.get('diferencial_valor', 0)
+            sub_total += precio_bs_sin_iva * cantidad
+            
+            # IVA
+            if item.get('aplicar_iva', False):
+                iva_total += item.get('iva_valor', 0) * cantidad
+            
+            # Abona Ya (costos base SIN envío)
+            abona_item = (
+                item.get('costo_fob', 0) +
+                item.get('costo_handling', 0) +
+                item.get('costo_manejo', 0) +
+                item.get('costo_impuesto', 0) +
+                item.get('utilidad_valor', 0) +
+                item.get('costo_tax', 0)
+            ) * cantidad
+            abona_ya += abona_item
+            
+            # Total USD Divisas (costos base CON envío)
+            total_usd_item = (
+                item.get('costo_fob', 0) +
+                item.get('costo_handling', 0) +
+                item.get('costo_manejo', 0) +
+                item.get('costo_impuesto', 0) +
+                item.get('utilidad_valor', 0) +
+                item.get('costo_envio', 0) +
+                item.get('costo_tax', 0)
+            ) * cantidad
+            total_usd_divisas += total_usd_item
+        
+        # Total a Pagar
+        total_a_pagar = sub_total + iva_total
+        
+        # Y en la Entrega
+        y_en_entrega = total_a_pagar - abona_ya
+        
         # Mostrar totales
-        total_col1, total_col2 = st.columns(2)
+        st.markdown("### 📊 Totales de la Cotización")
+        
+        total_col1, total_col2, total_col3 = st.columns(3)
         with total_col1:
-            st.success(f"**💵 TOTAL USD: ${total_cotizacion_usd:.2f}**")
+            st.metric("Sub-Total", f"${sub_total:.2f}")
+            st.metric("I.V.A. 16%", f"${iva_total:.2f}")
+            st.metric("Total a Pagar", f"${total_a_pagar:.2f}")
         with total_col2:
-            st.success(f"**🇻🇪 TOTAL Bs: ${total_cotizacion_bs:.2f}**")
+            st.metric("Abona Ya", f"${abona_ya:.2f}")
+            st.metric("Y en la Entrega", f"${y_en_entrega:.2f}")
+        with total_col3:
+            st.info(f"💵 **Total si paga en USD/Divisas:**\n\n${total_usd_divisas:.2f}")
+            st.caption("⚠️ Este monto NO aparece en el PDF. Comunícalo al cliente por mensaje aparte.")
         
         # Botones de generación
         gen_col1, gen_col2, gen_col3 = st.columns(3)
