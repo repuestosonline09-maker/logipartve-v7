@@ -400,42 +400,60 @@ def render_analyst_panel():
     # ==========================================
     # SECCIÓN 6: CÁLCULOS AUTOMÁTICOS
     # FÓRMULAS CORREGIDAS SEGÚN EXCEL DEL USUARIO
+    # IMPORTANTE: Se calcula TODO sobre FOB × Cantidad desde el inicio
     # ==========================================
     st.markdown("### 📊 Cálculos Automáticos")
     
-    # 1. IMPUESTO INTERNACIONAL = FOB * %
-    costo_impuesto = costo_fob * (impuesto_porcentaje / 100)
+    # PASO 1: FOB TOTAL = FOB × Cantidad
+    # Según Excel: Z20 = Y20 * S20
+    fob_total = costo_fob * item_cantidad
     
-    # 2. UTILIDAD = (FOB * Factor) - FOB
-    # Ejemplo: (84 * 1.4285) - 84 = 35.99
+    # PASO 2: IMPUESTO INTERNACIONAL = FOB_TOTAL × %
+    # Según Excel: AC20 = Z20 * AC16
+    costo_impuesto_total = fob_total * (impuesto_porcentaje / 100)
+    
+    # PASO 3: UTILIDAD = (FOB_TOTAL × Factor) - FOB_TOTAL
+    # Según Excel: AD20 = (Z20 * 1.4285) - Z20
     if factor_utilidad > 0:
-        utilidad_calculada = (costo_fob * factor_utilidad) - costo_fob
+        utilidad_total = (fob_total * factor_utilidad) - fob_total
     else:
-        utilidad_calculada = 0
+        utilidad_total = 0
     
-    # 3. TAX = (FOB + Handling + Manejo + Impuesto + Utilidad + Envío) * 7%
-    # NOTA: El TAX SÍ incluye el Impuesto Internacional en su base (según Excel)
-    base_tax = costo_fob + costo_handling + costo_manejo + costo_impuesto + utilidad_calculada + costo_envio
-    costo_tax = base_tax * (tax_porcentaje / 100)
+    # PASO 4: BASE TAX = FOB_TOTAL + Handling + Manejo + Impuesto + Utilidad + Envío
+    # Según Excel: AF20 = (Z20 + AA20 + AB20 + AC20 + AD20 + AE20) * 7%
+    base_tax_total = fob_total + costo_handling + costo_manejo + costo_impuesto_total + utilidad_total + costo_envio
+    costo_tax_total = base_tax_total * (tax_porcentaje / 100)
     
-    # 4. PRECIO USD = FOB + Handling + Manejo + Impuesto + Utilidad + Envío + TAX
-    # (SIN diferencial - para clientes que pagan en dólares)
-    precio_usd = costo_fob + costo_handling + costo_manejo + costo_impuesto + utilidad_calculada + costo_envio + costo_tax
+    # PASO 5: PRECIO USD TOTAL (sin diferencial)
+    # Según Excel: Z20 + AA20 + AB20 + AC20 + AD20 + AE20 + AF20
+    precio_usd_total = fob_total + costo_handling + costo_manejo + costo_impuesto_total + utilidad_total + costo_envio + costo_tax_total
     
-    # 5. DIFERENCIAL = PRECIO_USD * %
-    diferencial_valor = precio_usd * (diferencial_porcentaje / 100)
+    # PASO 6: DIFERENCIAL = PRECIO_USD_TOTAL × % × Factor_Y30
+    # Según Excel: AG20 = (Z20 + AA20 + AB20 + AD20 + AE20 + AC20 + AF20) * Y30
+    # Nota: Y30 es el factor de diferencial (45% = 0.45)
+    diferencial_total = precio_usd_total * (diferencial_porcentaje / 100)
     
-    # 6. PRECIO Bs = PRECIO_USD + DIFERENCIAL
-    # (Para clientes que pagan en bolívares a tasa BCV)
-    precio_bs_sin_iva = precio_usd + diferencial_valor
+    # PASO 7: PRECIO Bs TOTAL (sin IVA) = PRECIO_USD_TOTAL + DIFERENCIAL
+    # Según Excel: AH20 = Z20 + AA20 + AB20 + AD20 + AE20 + AG20 + AC20 + AF20
+    precio_bs_total_sin_iva = precio_usd_total + diferencial_total
     
-    # 7. IVA VENEZUELA (solo si el analista seleccionó SÍ)
+    # PASO 8: IVA VENEZUELA (solo si el analista seleccionó SÍ)
     if aplicar_iva == "SÍ":
-        iva_valor = precio_bs_sin_iva * (iva_porcentaje / 100)
-        precio_bs = precio_bs_sin_iva + iva_valor
+        iva_total = precio_bs_total_sin_iva * (iva_porcentaje / 100)
+        precio_bs_total = precio_bs_total_sin_iva + iva_total
     else:
-        iva_valor = 0
-        precio_bs = precio_bs_sin_iva
+        iva_total = 0
+        precio_bs_total = precio_bs_total_sin_iva
+    
+    # Calcular valores UNITARIOS para mostrar
+    costo_impuesto = costo_impuesto_total / item_cantidad if item_cantidad > 0 else 0
+    utilidad_calculada = utilidad_total / item_cantidad if item_cantidad > 0 else 0
+    costo_tax = costo_tax_total / item_cantidad if item_cantidad > 0 else 0
+    diferencial_valor = diferencial_total / item_cantidad if item_cantidad > 0 else 0
+    iva_valor = iva_total / item_cantidad if item_cantidad > 0 else 0
+    precio_usd = precio_usd_total / item_cantidad if item_cantidad > 0 else 0
+    precio_bs = precio_bs_total / item_cantidad if item_cantidad > 0 else 0
+    precio_bs_sin_iva = precio_bs_total_sin_iva / item_cantidad if item_cantidad > 0 else 0
     
     # Mostrar cálculos intermedios
     if aplicar_iva == "SÍ":
@@ -471,9 +489,9 @@ def render_analyst_panel():
         else:
             st.metric("🇻🇪 PRECIO Bs (sin IVA)", f"${precio_bs:.2f}")
     
-    # Costo total (cantidad × unitario)
-    costo_total_usd = precio_usd * item_cantidad
-    costo_total_bs = precio_bs * item_cantidad
+    # Costo total (ya calculado)
+    costo_total_usd = precio_usd_total
+    costo_total_bs = precio_bs_total
     
     if aplicar_iva == "SÍ":
         st.success(f"**TOTAL USD (Cant. {item_cantidad}): ${costo_total_usd:.2f}** | **TOTAL Bs (con IVA): ${costo_total_bs:.2f}**")
@@ -515,23 +533,24 @@ def render_analyst_panel():
                     "costo_fob": costo_fob,
                     "costo_handling": costo_handling,
                     "costo_manejo": costo_manejo,
-                    "costo_impuesto": costo_impuesto,
+                    "costo_impuesto": costo_impuesto_total,
                     "impuesto_porcentaje": impuesto_porcentaje,
                     "factor_utilidad": factor_utilidad,
-                    "utilidad_valor": utilidad_calculada,
+                    "utilidad_valor": utilidad_total,
                     "costo_envio": costo_envio,
-                    "costo_tax": costo_tax,
+                    "costo_tax": costo_tax_total,
                     "tax_porcentaje": tax_porcentaje,
-                    "diferencial": diferencial_valor,
+                    "diferencial_valor": diferencial_total,
                     "diferencial_porcentaje": diferencial_porcentaje,
                     "aplicar_iva": aplicar_iva == "SÍ",
                     "iva_porcentaje": iva_porcentaje,
-                    "iva_valor": iva_valor,
-                    "precio_usd": precio_usd,
-                    "precio_bs": precio_bs,
+                    "iva_valor": iva_total,
+                    "precio_usd": precio_usd_total,
+                    "precio_bs": precio_bs_total,
                     "costo_unitario": precio_usd,
                     "costo_total": costo_total_usd,
-                    "costo_total_bs": costo_total_bs
+                    "costo_total_bs": costo_total_bs,
+                    "fob_total": fob_total
                 }
                 # Protección adicional antes de append
                 try:
@@ -578,22 +597,23 @@ def render_analyst_panel():
                         "costo_fob": costo_fob,
                         "costo_handling": costo_handling,
                         "costo_manejo": costo_manejo,
-                        "costo_impuesto": costo_impuesto,
+                        "costo_impuesto": costo_impuesto_total,
                         "impuesto_porcentaje": impuesto_porcentaje,
                         "factor_utilidad": factor_utilidad,
-                        "utilidad_valor": utilidad_calculada,
+                        "utilidad_valor": utilidad_total,
                         "costo_envio": costo_envio,
-                        "costo_tax": costo_tax,
+                        "costo_tax": costo_tax_total,
                         "tax_porcentaje": tax_porcentaje,
-                        "diferencial": diferencial_valor,
+                        "diferencial_valor": diferencial_total,
                         "diferencial_porcentaje": diferencial_porcentaje,
                         "aplicar_iva": aplicar_iva == "SÍ",
                         "iva_porcentaje": iva_porcentaje,
-                        "iva_valor": iva_valor,
-                        "precio_usd": precio_usd,
-                        "precio_bs": precio_bs,
+                        "iva_valor": iva_total,
+                        "precio_usd": precio_usd_total,
+                        "precio_bs": precio_bs_total,
                         "costo_unitario": precio_usd,
                         "costo_total": costo_total_usd,
+                        "fob_total": fob_total,
                         "costo_total_bs": costo_total_bs
                     }
                     st.session_state.cotizacion_items.append(nuevo_item)
@@ -734,6 +754,7 @@ def render_analyst_panel():
             st.markdown("---")
         
         # Calcular totales correctos
+        # IMPORTANTE: Los valores ya vienen calculados con cantidad desde el ítem
         sub_total = 0
         iva_total = 0
         abona_ya = 0
@@ -742,35 +763,36 @@ def render_analyst_panel():
         for item in items:
             cantidad = item.get('cantidad', 1)
             
-            # Sub-Total (precio Bs con diferencial, sin IVA)
-            precio_bs_sin_iva = item.get('precio_usd', 0) + item.get('diferencial_valor', 0)
-            sub_total += precio_bs_sin_iva * cantidad
+            # Sub-Total (precio USD + diferencial, sin IVA) - YA VIENE CALCULADO CON CANTIDAD
+            precio_usd_total = item.get('precio_usd', 0)
+            diferencial_total = item.get('diferencial_valor', 0)
+            sub_total += precio_usd_total + diferencial_total
             
-            # IVA
+            # IVA - YA VIENE CALCULADO CON CANTIDAD
             if item.get('aplicar_iva', False):
-                iva_total += item.get('iva_valor', 0) * cantidad
+                iva_total += item.get('iva_valor', 0)
             
-            # Abona Ya (costos base SIN envío)
+            # Abona Ya (costos base SIN envío) - YA VIENEN CALCULADOS CON CANTIDAD
             abona_item = (
-                item.get('costo_fob', 0) +
+                item.get('fob_total', 0) +
                 item.get('costo_handling', 0) +
                 item.get('costo_manejo', 0) +
                 item.get('costo_impuesto', 0) +
                 item.get('utilidad_valor', 0) +
                 item.get('costo_tax', 0)
-            ) * cantidad
+            )
             abona_ya += abona_item
             
-            # Total USD Divisas (costos base CON envío)
+            # Total USD Divisas (costos base CON envío) - YA VIENEN CALCULADOS CON CANTIDAD
             total_usd_item = (
-                item.get('costo_fob', 0) +
+                item.get('fob_total', 0) +
                 item.get('costo_handling', 0) +
                 item.get('costo_manejo', 0) +
                 item.get('costo_impuesto', 0) +
                 item.get('utilidad_valor', 0) +
                 item.get('costo_envio', 0) +
                 item.get('costo_tax', 0)
-            ) * cantidad
+            )
             total_usd_divisas += total_usd_item
         
         # Total a Pagar
