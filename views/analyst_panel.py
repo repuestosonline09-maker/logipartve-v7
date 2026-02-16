@@ -228,33 +228,37 @@ def render_analyst_panel():
     
     # ==========================================
     # SECCIÓN 1: DATOS DEL CLIENTE
-    # ==========================================
-    st.markdown("### 👤 Datos del Cliente")
+    # ================================    # Inicializar contador de reset para formulario del cliente
+    if 'cliente_reset_counter' not in st.session_state:
+        st.session_state.cliente_reset_counter = 0
     
+    # Generar keys únicas basadas en el contador
+    reset_key = st.session_state.cliente_reset_counter
+    
+    # Formulario de datos del cliente
+    st.markdown("### 👤 Datos del Cliente")
     col1, col2 = st.columns(2)
     with col1:
-        cliente_nombre = st.text_input("Nombre del Cliente", key="cliente_nombre")
-        cliente_telefono = st.text_input("Teléfono", key="cliente_telefono")
+        cliente_nombre = st.text_input("Nombre del Cliente", key=f"cliente_nombre_{reset_key}")
+        cliente_telefono = st.text_input("Teléfono", key=f"cliente_telefono_{reset_key}")
     with col2:
-        cliente_email = st.text_input("Email (opcional)", key="cliente_email")
-        cliente_vehiculo = st.text_input("Vehículo", placeholder="Ej: Hyundai Santa Fe 2006", key="cliente_vehiculo")
+        cliente_email = st.text_input("Email (opcional)", key=f"cliente_email_{reset_key}")
+        cliente_vehiculo = st.text_input("Vehículo", placeholder="Ej: Hyundai Santa Fe 2006", key=f"cliente_vehiculo_{reset_key}")
     
     col3, col4, col5 = st.columns(3)
     with col3:
-        cliente_cilindrada = st.text_input("Cilindrada/Motor", placeholder="Ej: V6 3.5L", key="cliente_cilindrada")
+        cliente_cilindrada = st.text_input("Cilindrada/Motor", placeholder="Ej: V6 3.5L", key=f"cliente_cilindrada_{reset_key}")
     with col4:
-        cliente_ano = st.text_input("Año del Vehículo", key="cliente_ano")
+        cliente_ano = st.text_input("Año del Vehículo", key=f"cliente_ano_{reset_key}")
     with col5:
-        cliente_vin = st.text_input("Nro. VIN (opcional)", key="cliente_vin")
+        cliente_vin = st.text_input("Nro. VIN (opcional)", key=f"cliente_vin_{reset_key}")
     
     # Nuevos campos opcionales: Dirección y C.I./RIF
     col7, col8 = st.columns(2)
     with col7:
-        cliente_direccion = st.text_input("Dirección (opcional)", key="cliente_direccion")
+        cliente_direccion = st.text_input("Dirección (opcional)", key=f"cliente_direccion_{reset_key}")
     with col8:
-        cliente_ci_rif = st.text_input("C.I. / RIF (opcional)", key="cliente_ci_rif")
-    
-    st.markdown("---")
+        cliente_ci_rif = st.text_input("C.I. / RIF (opcional)", key=f"cliente_ci_rif_{reset_key}")"---")
     
     # ==========================================
     # SECCIÓN 3: FORMULARIO DE ÍTEM
@@ -869,13 +873,7 @@ def render_analyst_panel():
                 if 'cotizacion_guardada' in st.session_state:
                     del st.session_state.cotizacion_guardada
                 
-                # Limpiar campos del formulario del cliente
-                campos_cliente = ['cliente_nombre', 'cliente_telefono', 'cliente_email', 'cliente_vehiculo', 
-                                  'cliente_cilindrada', 'cliente_ano', 'cliente_vin', 'cliente_direccion', 'cliente_ci_rif']
-                for campo in campos_cliente:
-                    if campo in st.session_state:
-                        del st.session_state[campo]
-                
-                # Incrementar contador para limpiar campos del formulario de ítem
+                # Incrementar contadores para limpiar todos los formularios
+                st.session_state.cliente_reset_counter += 1
                 st.session_state.item_reset_counter += 1
                 st.rerun()
