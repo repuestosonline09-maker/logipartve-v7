@@ -829,10 +829,19 @@ def render_analyst_panel():
         for item in items:
             cantidad = item.get('cantidad', 1)
             
-            # Sub-Total (precio USD + diferencial, sin IVA) - YA VIENE CALCULADO CON CANTIDAD
-            precio_usd_total = item.get('precio_usd', 0)
-            diferencial_total = item.get('diferencial_valor', 0)
-            sub_total += precio_usd_total + diferencial_total
+            # Sub-Total = TODOS los costos (FOB + Handling + Manejo + Imp.Int + Utilidad + Envío + TAX + Diferencial)
+            # Es decir, el precio completo SIN IVA
+            sub_total_item = (
+                item.get('fob_total', 0) +
+                item.get('costo_handling', 0) +
+                item.get('costo_manejo', 0) +
+                item.get('costo_impuesto', 0) +
+                item.get('utilidad_valor', 0) +
+                item.get('costo_envio', 0) +
+                item.get('costo_tax', 0) +
+                item.get('diferencial_valor', 0)
+            )
+            sub_total += sub_total_item
             
             # IVA - YA VIENE CALCULADO CON CANTIDAD
             if item.get('aplicar_iva', False):
