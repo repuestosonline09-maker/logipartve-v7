@@ -65,8 +65,7 @@ class PNGQuoteGenerator:
                 tmp_pdf_path = tmp_pdf.name
             
             # Generar PDF
-            pdf_gen = PDFQuoteGenerator()
-            pdf_path = pdf_gen.generate_quote_pdf(quote_data, tmp_pdf_path)
+            pdf_path = PDFQuoteGenerator.generate(quote_data, tmp_pdf_path)
             
             if not pdf_path:
                 return None

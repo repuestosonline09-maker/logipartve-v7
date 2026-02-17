@@ -933,8 +933,7 @@ def render_analyst_panel():
                         os.makedirs(output_dir, exist_ok=True)
                         output_path = f"{output_dir}/cotizacion_{st.session_state.saved_quote_number}.pdf"
                         
-                        pdf_gen = PDFQuoteGenerator()
-                        result = pdf_gen.generate_quote_pdf(quote_data, output_path)
+                        result = PDFQuoteGenerator.generate(quote_data, output_path)
                         
                         if result:
                             # Ofrecer descarga
