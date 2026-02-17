@@ -303,7 +303,7 @@ def show_user_management():
                 
                 with col2:
                     st.markdown("**Cambiar Contraseña**")
-                    with st.form("change_password_form"):
+                    with st.form("edit_user_change_password_form"):
                         new_password = st.text_input("Nueva Contraseña", type="password", placeholder="Mínimo 6 caracteres")
                         confirm_password = st.text_input("Confirmar Contraseña", type="password")
                         
