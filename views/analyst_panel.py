@@ -151,7 +151,13 @@ def render_analyst_panel():
         next_quote_number = "N/A"
     
     # Título con información del analista y número de cotización
-    st.title("📝 Nueva Cotización")
+    st.title("📋 Nueva Cotización")
+    
+    # Mostrar mensaje de éxito si se acaba de guardar
+    if st.session_state.get('show_save_success', False):
+        st.success(f"✅ ¡Cotización {st.session_state.saved_quote_number} guardada exitosamente! Ahora puedes generar el PDF.")
+        # Limpiar el flag después de mostrar
+        st.session_state.show_save_success = False
     
     # ==========================================
     # SIDEBAR: CONVERTIDOR DE MONEDA EUR → USD
@@ -886,9 +892,9 @@ def render_analyst_panel():
                 if final_quote_number:
                     # Aquí se guardaría en la base de datos
                     # Por ahora solo mostramos confirmación
-                    st.success(f"✅ Cotización {final_quote_number} guardada exitosamente")
                     st.session_state.saved_quote_number = final_quote_number
                     st.session_state.cotizacion_guardada = True  # Marcar que la cotización fue guardada
+                    st.session_state.show_save_success = True  # Flag para mostrar mensaje
                     st.rerun()
                 else:
                     st.error("❌ Error al generar número de cotización")
