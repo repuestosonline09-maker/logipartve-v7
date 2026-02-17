@@ -570,6 +570,41 @@ def show_system_configuration():
                 st.rerun()
     
     st.markdown("---")
+    
+    # ==========================================
+    # SECCIÓN: CONVERSIÓN DE MONEDA EUR → USD
+    # ==========================================
+    st.markdown("#### 💱 Conversión de Moneda EUR → USD")
+    st.info("🇪🇺 **Factor de Conversión para Repuestos de Europa** - Este factor incluye la comisión bancaria y gastos de paridad. Se utiliza en el convertidor de moneda de la barra lateral.")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        with st.form("eur_usd_factor_form"):
+            eur_usd_factor = st.number_input(
+                "Factor de Conversión EUR → USD",
+                min_value=1.0,
+                max_value=2.0,
+                value=float(config.get('eur_usd_factor', {}).get('value', 1.23)),
+                step=0.01,
+                help="Factor multiplicador para convertir EUR a USD. Incluye comisiones bancarias. Ej: 1.23 significa que €100 = $123"
+            )
+            submit_eur_usd = st.form_submit_button("💾 Guardar Factor EUR → USD", use_container_width=True)
+            if submit_eur_usd:
+                DBManager.set_config('eur_usd_factor', str(eur_usd_factor), "Factor de conversión EUR a USD con comisiones bancarias", st.session_state.user_id)
+                st.success(f"✅ Factor EUR → USD actualizado a {eur_usd_factor}")
+                DBManager.log_activity(st.session_state.user_id, "update_config", f"Actualizó factor EUR → USD a {eur_usd_factor}")
+                st.rerun()
+    
+    with col2:
+        # Mostrar ejemplo de conversión
+        current_factor = float(config.get('eur_usd_factor', {}).get('value', 1.23))
+        st.markdown("**Ejemplo de Conversión:**")
+        st.markdown(f"- €100 × {current_factor} = **${100 * current_factor:.2f}**")
+        st.markdown(f"- €250 × {current_factor} = **${250 * current_factor:.2f}**")
+        st.markdown(f"- €500 × {current_factor} = **${500 * current_factor:.2f}**")
+    
+    st.markdown("---")
     st.markdown("#### Tarifas de Flete")
     
     # Obtener tarifas actuales

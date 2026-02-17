@@ -154,6 +154,55 @@ def render_analyst_panel():
     st.title("📝 Nueva Cotización")
     
     # ==========================================
+    # SIDEBAR: CONVERTIDOR DE MONEDA EUR → USD
+    # ==========================================
+    with st.sidebar:
+        st.markdown("### 💱 Convertidor de Moneda")
+        st.info("🇪🇺 Convierte precios de repuestos europeos de EUR a USD")
+        
+        # Obtener factor de conversión desde configuración
+        config_list = DBManager.get_all_config()
+        config = {item['key']: item for item in config_list}
+        eur_usd_factor = float(config.get('eur_usd_factor', {}).get('value', 1.23))
+        
+        # Inicializar estado para el convertidor
+        if 'eur_amount' not in st.session_state:
+            st.session_state.eur_amount = 0.0
+        if 'usd_amount' not in st.session_state:
+            st.session_state.usd_amount = 0.0
+        
+        # Input para EUR
+        eur_input = st.number_input(
+            "💶 EURO (€)",
+            min_value=0.0,
+            value=st.session_state.eur_amount,
+            step=1.0,
+            placeholder="Ej: 100",
+            help="Ingrese el precio en euros",
+            key="eur_input_field"
+        )
+        
+        # Calcular automáticamente USD
+        if eur_input != st.session_state.eur_amount:
+            st.session_state.eur_amount = eur_input
+            st.session_state.usd_amount = eur_input * eur_usd_factor
+        
+        # Mostrar resultado USD
+        st.markdown(f"### 💵 DÓLAR ($)")
+        st.success(f"**${st.session_state.usd_amount:.2f} USD**")
+        st.caption(f"📊 Factor: €1 = ${eur_usd_factor}")
+        
+        # Botón para limpiar
+        if st.button("🧹 Limpiar Convertidor", use_container_width=True, key="btn_limpiar_convertidor"):
+            st.session_state.eur_amount = 0.0
+            st.session_state.usd_amount = 0.0
+            st.rerun()
+        
+        st.markdown("---")
+        st.caption("📋 Copie el monto USD al campo 'Costo FOB ($)' en el formulario")
+        st.markdown("---")
+    
+    # ==========================================
     # SIDEBAR: CALCULADORA DE ENVÍO
     # ==========================================
     with st.sidebar:
