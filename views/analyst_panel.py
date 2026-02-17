@@ -165,11 +165,16 @@ def render_analyst_panel():
         config = {item['key']: item for item in config_list}
         eur_usd_factor = float(config.get('eur_usd_factor', {}).get('value', 1.23))
         
-        # Inicializar estado para el convertidor
+        # Inicializar contador de reset para el convertidor si no existe
+        if 'converter_reset_counter' not in st.session_state:
+            st.session_state.converter_reset_counter = 0
         if 'eur_amount' not in st.session_state:
             st.session_state.eur_amount = 0.0
         if 'usd_amount' not in st.session_state:
             st.session_state.usd_amount = 0.0
+        
+        # Usar el contador para generar key única que cambie al resetear
+        converter_key = st.session_state.converter_reset_counter
         
         # Input para EUR
         eur_input = st.number_input(
@@ -179,7 +184,7 @@ def render_analyst_panel():
             step=1.0,
             placeholder="Ej: 100",
             help="Ingrese el precio en euros",
-            key="eur_input_field"
+            key=f"eur_input_field_{converter_key}"
         )
         
         # Calcular automáticamente USD
@@ -197,6 +202,8 @@ def render_analyst_panel():
         
         # Botón para limpiar
         if st.button("🧹 Limpiar Convertidor", use_container_width=True, key="btn_limpiar_convertidor"):
+            # Incrementar el contador de reset para forzar la recreación del widget
+            st.session_state.converter_reset_counter += 1
             st.session_state.eur_amount = 0.0
             st.session_state.usd_amount = 0.0
             st.rerun()
