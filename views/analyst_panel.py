@@ -162,8 +162,8 @@ def render_analyst_panel():
         
         # Obtener factor de conversión desde configuración
         config_list = DBManager.get_all_config()
-        config = {item['key']: item for item in config_list}
-        eur_usd_factor = float(config.get('eur_usd_factor', {}).get('value', 1.23))
+        config_eur = {item['key']: item for item in config_list}
+        eur_usd_factor = float(config_eur.get('eur_usd_factor', {}).get('value', 1.23))
         
         # Inicializar contador de reset para el convertidor si no existe
         if 'converter_reset_counter' not in st.session_state:
