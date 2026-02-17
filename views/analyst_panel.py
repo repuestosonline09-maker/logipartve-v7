@@ -142,6 +142,7 @@ def render_analyst_panel():
     current_user = AuthManager.get_current_user()
     user_id = current_user.get('user_id') if current_user else None
     username = current_user.get('username', 'Usuario') if current_user else 'Usuario'
+    full_name = current_user.get('full_name', username) if current_user else 'Usuario'
     
     # Obtener vista previa del número de cotización
     if user_id:
@@ -220,7 +221,7 @@ def render_analyst_panel():
     # Mostrar información del analista y número de cotización
     info_col1, info_col2 = st.columns([1, 1])
     with info_col1:
-        st.info(f"👤 **Analista:** {username}")
+        st.info(f"👤 **Analista:** {full_name}")
     with info_col2:
         st.success(f"🔢 **Número de Cotización:** {next_quote_number}")
     
@@ -690,7 +691,7 @@ def render_analyst_panel():
         with quote_info_col1:
             st.info(f"🔢 **Cotización:** {next_quote_number}")
         with quote_info_col2:
-            st.info(f"👤 **Analista:** {username}")
+            st.info(f"👤 **Analista:** {full_name}")
         with quote_info_col3:
             fecha_actual = datetime.now().strftime("%d/%m/%Y")
             st.info(f"📅 **Fecha:** {fecha_actual}")
