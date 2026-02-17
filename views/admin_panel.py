@@ -277,6 +277,11 @@ def show_user_management():
                 with col1:
                     st.markdown("**Editar Información**")
                     with st.form("edit_user_form"):
+                        edit_username = st.text_input(
+                            "Nombre de Usuario (para login)",
+                            value=selected_user['username'],
+                            help="Este es el nombre que usa para iniciar sesión"
+                        )
                         edit_full_name = st.text_input("Nombre Completo", value=selected_user['full_name'])
                         edit_email = st.text_input("Email", value=selected_user.get('email', ''), placeholder="usuario@ejemplo.com")
                         edit_role = st.selectbox(
@@ -289,17 +294,27 @@ def show_user_management():
                         submit_edit = st.form_submit_button("💾 Guardar Cambios", use_container_width=True)
                         
                         if submit_edit:
-                            success = DBManager.update_user(selected_user_id, edit_full_name, edit_role, edit_email if edit_email else None)
-                            if success:
-                                st.success("✅ Usuario actualizado exitosamente")
-                                DBManager.log_activity(
-                                    st.session_state.user_id,
-                                    "update_user",
-                                    f"Actualizó usuario: {selected_user['username']}"
-                                )
-                                st.rerun()
+                            # Validar que el username no esté vacío
+                            if not edit_username or edit_username.strip() == "":
+                                st.error("❌ El nombre de usuario no puede estar vacío")
                             else:
-                                st.error("❌ Error al actualizar usuario")
+                                success = DBManager.update_user(
+                                    selected_user_id,
+                                    edit_full_name,
+                                    edit_role,
+                                    edit_email if edit_email else None,
+                                    edit_username.strip()
+                                )
+                                if success:
+                                    st.success("✅ Usuario actualizado exitosamente")
+                                    DBManager.log_activity(
+                                        st.session_state.user_id,
+                                        "update_user",
+                                        f"Actualizó usuario: {edit_username}"
+                                    )
+                                    st.rerun()
+                                else:
+                                    st.error("❌ Error al actualizar usuario. El nombre de usuario puede estar en uso.")
                 
                 with col2:
                     st.markdown("**Cambiar Contraseña**")

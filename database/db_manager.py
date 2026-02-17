@@ -357,11 +357,12 @@ class DBManager:
             return None
     
     @staticmethod
-    def update_user(user_id: int, full_name: str, role: str, email: str = None) -> bool:
-        """Actualiza el nombre completo, rol y email de un usuario."""
+    def update_user(user_id: int, full_name: str, role: str, email: str = None, username: str = None) -> bool:
+        """Actualiza el nombre completo, rol, email y username de un usuario."""
         try:
             print(f"[DEBUG] update_user llamado con:")
             print(f"  - user_id: {user_id}")
+            print(f"  - username: {username}")
             print(f"  - full_name: {full_name}")
             print(f"  - role: {role}")
             print(f"  - email: {email}")
@@ -372,11 +373,19 @@ class DBManager:
             is_postgres = DBManager.USE_POSTGRES
             print(f"[DEBUG] Usando {'PostgreSQL' if is_postgres else 'SQLite'}")
             
-            cursor.execute("""
-                UPDATE users SET full_name = %s, role = %s, email = %s WHERE id = %s
-            """ if is_postgres else """
-                UPDATE users SET full_name = ?, role = ?, email = ? WHERE id = ?
-            """, (full_name, role, email, user_id))
+            # Si se proporciona username, actualizar también
+            if username:
+                cursor.execute("""
+                    UPDATE users SET username = %s, full_name = %s, role = %s, email = %s WHERE id = %s
+                """ if is_postgres else """
+                    UPDATE users SET username = ?, full_name = ?, role = ?, email = ? WHERE id = ?
+                """, (username, full_name, role, email, user_id))
+            else:
+                cursor.execute("""
+                    UPDATE users SET full_name = %s, role = %s, email = %s WHERE id = %s
+                """ if is_postgres else """
+                    UPDATE users SET full_name = ?, role = ?, email = ? WHERE id = ?
+                """, (full_name, role, email, user_id))
             
             rows_affected = cursor.rowcount
             print(f"[DEBUG] Filas actualizadas: {rows_affected}")
