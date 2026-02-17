@@ -175,7 +175,7 @@ def render_analyst_panel():
         eur_input = st.number_input(
             "💶 EURO (€)",
             min_value=0.0,
-            value=st.session_state.eur_amount,
+            value=None,
             step=1.0,
             placeholder="Ej: 100",
             help="Ingrese el precio en euros",
@@ -183,9 +183,12 @@ def render_analyst_panel():
         )
         
         # Calcular automáticamente USD
-        if eur_input != st.session_state.eur_amount:
+        if eur_input is not None and eur_input > 0:
             st.session_state.eur_amount = eur_input
             st.session_state.usd_amount = eur_input * eur_usd_factor
+        else:
+            st.session_state.eur_amount = 0.0
+            st.session_state.usd_amount = 0.0
         
         # Mostrar resultado USD
         st.markdown(f"### 💵 DÓLAR ($)")
