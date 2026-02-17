@@ -923,6 +923,11 @@ def render_analyst_panel():
                                 'ci_rif': cliente.get('ci_rif', '')
                             },
                             'items': items,
+                            'sub_total': sub_total,
+                            'iva_total': iva_total,
+                            'total_a_pagar': total_a_pagar,
+                            'abona_ya': abona_ya,
+                            'y_en_entrega': y_en_entrega,
                             'total_usd': total_cotizacion_usd,
                             'total_bs': total_cotizacion_bs,
                             'terms': config.get('terms_conditions', 'Términos y condiciones estándar.')
@@ -977,6 +982,11 @@ def render_analyst_panel():
                                 'ci_rif': cliente.get('ci_rif', '')
                             },
                             'items': items,
+                            'sub_total': sub_total,
+                            'iva_total': iva_total,
+                            'total_a_pagar': total_a_pagar,
+                            'abona_ya': abona_ya,
+                            'y_en_entrega': y_en_entrega,
                             'total_usd': total_cotizacion_usd,
                             'total_bs': total_cotizacion_bs,
                             'terms': config.get('terms_conditions', 'Términos y condiciones estándar.')
