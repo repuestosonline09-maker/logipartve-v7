@@ -64,23 +64,146 @@ def show_admin_panel():
     st.title("🔧 Panel de Administración")
     
     # Tabs para organizar las secciones
-    tab1, tab2, tab3 = st.tabs([
+    tab1, tab2, tab3, tab4 = st.tabs([
+        "👤 Mi Perfil",
         "👥 Gestión de Usuarios",
         "⚙️ Configuración del Sistema",
         "📊 Reportes y Estadísticas"
     ])
     
-    # TAB 1: GESTIÓN DE USUARIOS
+    # TAB 1: MI PERFIL
     with tab1:
+        show_my_profile()
+    
+    # TAB 2: GESTIÓN DE USUARIOS
+    with tab2:
         show_user_management()
     
-    # TAB 2: CONFIGURACIÓN DEL SISTEMA
-    with tab2:
+    # TAB 3: CONFIGURACIÓN DEL SISTEMA
+    with tab3:
         show_system_configuration()
     
-    # TAB 3: REPORTES Y ESTADÍSTICAS
-    with tab3:
+    # TAB 4: REPORTES Y ESTADÍSTICAS
+    with tab4:
         show_reports_and_stats()
+
+
+def show_my_profile():
+    """Módulo para editar el perfil del usuario actual."""
+    
+    st.markdown('<div class="admin-section">', unsafe_allow_html=True)
+    st.markdown("### 👤 Mi Perfil")
+    
+    # Obtener datos del usuario actual
+    current_user = DBManager.get_user_by_id(st.session_state.user_id)
+    
+    if not current_user:
+        st.error("⚠️ No se pudo cargar la información del usuario")
+        st.markdown('</div>', unsafe_allow_html=True)
+        return
+    
+    st.info("📝 Aquí puedes actualizar tu información personal")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("#### Información Personal")
+        
+        with st.form("my_profile_form"):
+            new_full_name = st.text_input(
+                "Nombre Completo",
+                value=current_user['full_name'],
+                help="Tu nombre completo que aparecerá en las cotizaciones"
+            )
+            
+            new_email = st.text_input(
+                "Email (opcional)",
+                value=current_user.get('email', '') or '',
+                help="Tu correo electrónico"
+            )
+            
+            st.markdown("**Información de Cuenta:**")
+            st.text(f"Usuario: {current_user['username']}")
+            st.text(f"Rol: {current_user['role']}")
+            
+            submit_profile = st.form_submit_button("💾 Guardar Cambios", use_container_width=True)
+            
+            if submit_profile:
+                # Validar que el nombre no esté vacío
+                if not new_full_name or new_full_name.strip() == "":
+                    st.error("❌ El nombre no puede estar vacío")
+                else:
+                    # Actualizar el usuario
+                    success = DBManager.update_user(
+                        st.session_state.user_id,
+                        new_full_name.strip(),
+                        current_user['role'],  # No cambiar el rol
+                        new_email.strip() if new_email else None
+                    )
+                    
+                    if success:
+                        st.success("✅ Perfil actualizado exitosamente")
+                        # Actualizar el nombre en la sesión
+                        st.session_state.full_name = new_full_name.strip()
+                        DBManager.log_activity(
+                            st.session_state.user_id,
+                            "update_profile",
+                            f"Actualizó su perfil: {new_full_name}"
+                        )
+                        st.rerun()
+                    else:
+                        st.error("❌ Error al actualizar el perfil")
+    
+    with col2:
+        st.markdown("#### Cambiar Contraseña")
+        
+        with st.form("change_password_form"):
+            current_password = st.text_input(
+                "Contraseña Actual",
+                type="password",
+                help="Ingresa tu contraseña actual"
+            )
+            
+            new_password = st.text_input(
+                "Nueva Contraseña",
+                type="password",
+                help="Mínimo 6 caracteres"
+            )
+            
+            confirm_password = st.text_input(
+                "Confirmar Nueva Contraseña",
+                type="password"
+            )
+            
+            submit_password = st.form_submit_button("🔐 Cambiar Contraseña", use_container_width=True)
+            
+            if submit_password:
+                # Validaciones
+                if not current_password:
+                    st.error("❌ Debes ingresar tu contraseña actual")
+                elif not new_password or len(new_password) < 6:
+                    st.error("❌ La nueva contraseña debe tener al menos 6 caracteres")
+                elif new_password != confirm_password:
+                    st.error("❌ Las contraseñas no coinciden")
+                else:
+                    # Verificar contraseña actual
+                    if AuthManager.verify_password(current_user['username'], current_password):
+                        # Cambiar contraseña
+                        success = DBManager.update_password(st.session_state.user_id, new_password)
+                        
+                        if success:
+                            st.success("✅ Contraseña cambiada exitosamente")
+                            DBManager.log_activity(
+                                st.session_state.user_id,
+                                "change_password",
+                                "Cambió su contraseña"
+                            )
+                        else:
+                            st.error("❌ Error al cambiar la contraseña")
+                    else:
+                        st.error("❌ Contraseña actual incorrecta")
+    
+    st.markdown('</div>', unsafe_allow_html=True)
 
 
 def show_user_management():
