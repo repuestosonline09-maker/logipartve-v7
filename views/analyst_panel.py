@@ -847,8 +847,10 @@ def render_analyst_panel():
             if item.get('aplicar_iva', False):
                 iva_total += item.get('iva_valor', 0)
             
-            # Abona Ya (costos base SIN envío) - YA VIENEN CALCULADOS CON CANTIDAD
-            abona_item = (
+            # Abona Ya = (costos base SIN envío ni diferencial) × (1 + diferencial%)
+            # Según Excel: P34 = (Z29+AA29+AB29+AC29+AD29+AF29) + (Z30+AA30+AB30+AC30+AD30+AF30)
+            # Donde fila 30 = fila 29 × Y30 (factor diferencial)
+            costos_base_item = (
                 item.get('fob_total', 0) +
                 item.get('costo_handling', 0) +
                 item.get('costo_manejo', 0) +
@@ -856,6 +858,9 @@ def render_analyst_panel():
                 item.get('utilidad_valor', 0) +
                 item.get('costo_tax', 0)
             )
+            # Multiplicar por (1 + diferencial%) para obtener Abona Ya
+            diferencial_factor = item.get('diferencial_porcentaje', 0) / 100
+            abona_item = costos_base_item * (1 + diferencial_factor)
             abona_ya += abona_item
             
             # Total USD Divisas (costos base CON envío) - YA VIENEN CALCULADOS CON CANTIDAD
