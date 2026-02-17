@@ -463,3 +463,28 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
     doc.build(story, onFirstPage=background.draw_watermark, onLaterPages=background.draw_watermark)
     
     return output_path
+
+
+
+# ==========================================
+# CLASE WRAPPER PARA COMPATIBILIDAD
+# ==========================================
+
+class PDFQuoteGenerator:
+    """
+    Clase wrapper para mantener compatibilidad con el código existente
+    """
+    
+    @staticmethod
+    def generate(datos_cotizacion, output_path):
+        """
+        Genera un PDF de cotización
+        
+        Args:
+            datos_cotizacion: Diccionario con los datos de la cotización
+            output_path: Ruta donde se guardará el PDF
+            
+        Returns:
+            str: Ruta del archivo PDF generado
+        """
+        return generar_pdf_cotizacion(datos_cotizacion, output_path)
