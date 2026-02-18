@@ -104,10 +104,10 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
     doc = SimpleDocTemplate(
         output_path,
         pagesize=landscape(letter),
-        rightMargin=0.5*inch,
-        leftMargin=0.5*inch,
-        topMargin=0.5*inch,
-        bottomMargin=0.5*inch
+        rightMargin=0.4*inch,
+        leftMargin=0.4*inch,
+        topMargin=0.3*inch,
+        bottomMargin=0.3*inch
     )
     
     # Colores del tema
@@ -166,80 +166,186 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
     story = []
     
     # ==========================================
-    # ENCABEZADO CON LOGOS
+    # ENCABEZADO CON LOGOS Y DISEÑO COMPLETO
     # ==========================================
     
-    # Buscar logos
+    # Buscar todos los logos
     logo_jdae_path = find_logo_path("LOGOJDAEAUTOPARTES.png")
     logo_aop_path = find_logo_path("LogoAutoOnlinePro.png")
-    logo_logipart_path = find_logo_path("LOGOLogiPartVE.png")
+    logo_fb_path = find_logo_path("LOGOFACEBOOK.png")
+    logo_ig_path = find_logo_path("LOGOINSTAGRAM.png")
+    logo_tel_path = find_logo_path("LOGOTELEFONO.png")
+    logo_wa_path = find_logo_path("LOGOWHATSAPP.png")
     
-    # Crear tabla para encabezado con logos
-    encabezado_data = []
-    
-    # Fila 1: Logos y título
-    fila_logos = []
-    
-    # Logo JDAE (izquierda)
-    if logo_jdae_path:
-        img_jdae = Image(logo_jdae_path, width=1.2*inch, height=1.2*inch)
-        fila_logos.append(img_jdae)
-    else:
-        fila_logos.append(Paragraph("<b>JDAE<br/>AUTO PARTES</b>", style_normal))
-    
-    # Título central
-    titulo_central = Paragraph(
-        "✈ <b>COTIZACIÓN INTERNACIONAL DE REPUESTOS</b> ✈<br/>"
-        "<font size=8>INTERNATIONAL AUTO PARTS QUOTATION</font>",
-        style_titulo
+    # Estilos para el header
+    style_header_titulo = ParagraphStyle(
+        'HeaderTitulo',
+        parent=styles['Normal'],
+        fontSize=10,
+        textColor=COLOR_AZUL_AVIACION,
+        alignment=TA_CENTER,
+        fontName='Helvetica-Bold'
     )
-    fila_logos.append(titulo_central)
     
-    # Logo Auto Online Pro (derecha)
-    if logo_aop_path:
-        img_aop = Image(logo_aop_path, width=1.2*inch, height=1.2*inch)
-        fila_logos.append(img_aop)
-    else:
-        fila_logos.append(Paragraph("<b>AUTO<br/>ONLINE<br/>PRO USA</b>", style_normal))
+    style_header_empresa = ParagraphStyle(
+        'HeaderEmpresa',
+        parent=styles['Normal'],
+        fontSize=11,
+        textColor=COLOR_AZUL_AVIACION,
+        alignment=TA_CENTER,
+        fontName='Helvetica-Bold'
+    )
     
-    encabezado_data.append(fila_logos)
+    style_header_direccion = ParagraphStyle(
+        'HeaderDireccion',
+        parent=styles['Normal'],
+        fontSize=9,
+        textColor=colors.black,
+        alignment=TA_CENTER
+    )
     
-    # Fila 2: RIF, subtítulo, representantes
-    fila_info = [
-        Paragraph("<b>RIF:</b> J-5072639-5", style_normal),
-        Paragraph("<b>REPRESENTANTES EXCLUSIVOS</b><br/><font size=7>EXCLUSIVE REPRESENTATIVES</font>", style_subtitulo),
-        Paragraph("", style_normal)
-    ]
-    encabezado_data.append(fila_info)
+    style_header_contacto = ParagraphStyle(
+        'HeaderContacto',
+        parent=styles['Normal'],
+        fontSize=9,
+        textColor=colors.black,
+        alignment=TA_CENTER
+    )
     
-    tabla_encabezado = Table(encabezado_data, colWidths=[2*inch, 5.5*inch, 2*inch])
-    tabla_encabezado.setStyle(TableStyle([
-        ('ALIGN', (0, 0), (0, -1), 'LEFT'),
-        ('ALIGN', (1, 0), (1, -1), 'CENTER'),
-        ('ALIGN', (2, 0), (2, -1), 'RIGHT'),
+    style_header_web = ParagraphStyle(
+        'HeaderWeb',
+        parent=styles['Normal'],
+        fontSize=11,
+        textColor=COLOR_AZUL_AVIACION,
+        alignment=TA_CENTER,
+        fontName='Helvetica-Bold'
+    )
+    
+    style_rif_representantes = ParagraphStyle(
+        'RifRepresentantes',
+        parent=styles['Normal'],
+        fontSize=9,
+        textColor=COLOR_AZUL_AVIACION,
+        alignment=TA_CENTER,
+        fontName='Helvetica-Bold'
+    )
+    
+    # Crear bloque central
+    bloque_central_data = []
+    
+    # Línea 1: Título principal
+    bloque_central_data.append([Paragraph("✈ <b>COTIZACIÓN INTERNACIONAL DE REPUESTOS</b> ✈", style_header_titulo)])
+    
+    # Línea 2: Nombre empresa
+    bloque_central_data.append([Paragraph("<b>JDAE AUTO PARTS, C.A.</b>", style_header_empresa)])
+    
+    # Línea 3-4: Dirección (2 líneas)
+    bloque_central_data.append([Paragraph("Av. Francisco de Miranda cruce con calle Los Laboratorios,", style_header_direccion)])
+    bloque_central_data.append([Paragraph("Centro Empresarial Quorum. Piso 3 ofic 3J. Los Ruices, Caracas.", style_header_direccion)])
+    
+    # Línea 5: Redes sociales con logos (usando imágenes inline)
+    redes_html = '<para alignment="center">'
+    if logo_ig_path:
+        redes_html += f'<img src="{logo_ig_path}" width="12" height="12" valign="middle"/> '
+    if logo_fb_path:
+        redes_html += f'<img src="{logo_fb_path}" width="12" height="12" valign="middle"/> '
+    redes_html += '@repuestosonlinecaracas</para>'
+    bloque_central_data.append([Paragraph(redes_html, style_header_contacto)])
+    
+    # Línea 6: Contacto con logos (usando imágenes inline)
+    contacto_html = '<para alignment="center">'
+    if logo_tel_path:
+        contacto_html += f'<img src="{logo_tel_path}" width="12" height="12" valign="middle"/> '
+    if logo_wa_path:
+        contacto_html += f'<img src="{logo_wa_path}" width="12" height="12" valign="middle"/> '
+    contacto_html += 'Contáctanos 0424-1354148</para>'
+    bloque_central_data.append([Paragraph(contacto_html, style_header_contacto)])
+    
+    # Línea 7: Website
+    bloque_central_data.append([Paragraph("<b>www.autoonlinepro.com</b>", style_header_web)])
+    
+    tabla_bloque_central = Table(bloque_central_data, colWidths=[3.5*inch])
+    tabla_bloque_central.setStyle(TableStyle([
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('TOPPADDING', (0, 0), (-1, -1), 6),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ('TOPPADDING', (0, 0), (-1, -1), 1),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 1),
     ]))
     
-    story.append(tabla_encabezado)
-    story.append(Spacer(1, 0.1*inch))
+    # Crear columna izquierda (Logo JDAE + RIF)
+    columna_izq_data = []
+    if logo_jdae_path:
+        columna_izq_data.append([Image(logo_jdae_path, width=1.5*inch, height=1.5*inch)])
+    columna_izq_data.append([Paragraph("<b>J-5072639-5</b>", style_rif_representantes)])
+    
+    tabla_izq = Table(columna_izq_data, colWidths=[1.5*inch])
+    tabla_izq.setStyle(TableStyle([
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('TOPPADDING', (0, 0), (-1, -1), 1),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 1),
+    ]))
+    
+    # Crear columna derecha (Logo AOP + Representantes)
+    columna_der_data = []
+    if logo_aop_path:
+        columna_der_data.append([Image(logo_aop_path, width=1.2*inch, height=1.2*inch)])
+    columna_der_data.append([Paragraph("<b>REPRESENTANTES EXCLUSIVOS<br/>PARA VENEZUELA</b>", style_rif_representantes)])
+    
+    tabla_der = Table(columna_der_data, colWidths=[1.8*inch])
+    tabla_der.setStyle(TableStyle([
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('TOPPADDING', (0, 0), (-1, -1), 2),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+    ]))
+    
+    # Ensamblar header completo (3 columnas)
+    header_completo = Table([[tabla_izq, tabla_bloque_central, tabla_der]], colWidths=[2*inch, 3.5*inch, 2*inch])
+    header_completo.setStyle(TableStyle([
+        ('ALIGN', (0, 0), (0, 0), 'CENTER'),
+        ('ALIGN', (1, 0), (1, 0), 'CENTER'),
+        ('ALIGN', (2, 0), (2, 0), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('TOPPADDING', (0, 0), (-1, -1), 2),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+    ]))
+    
+    story.append(header_completo)
+    story.append(Spacer(1, 0.02*inch))
     
     # ==========================================
     # INFORMACIÓN DEL DOCUMENTO
     # ==========================================
     
     presupuesto = datos_cotizacion.get('numero_cotizacion', 'N/A')
-    fecha = datos_cotizacion.get('fecha', 'N/A')
+    fecha_raw = datos_cotizacion.get('fecha', 'N/A')
+    
+    # Convertir fecha a formato dd/mm/aa
+    from datetime import datetime
+    try:
+        if fecha_raw != 'N/A':
+            fecha_obj = datetime.strptime(fecha_raw, '%Y-%m-%d')
+            fecha = fecha_obj.strftime('%d/%m/%y')
+        else:
+            fecha = 'N/A'
+    except:
+        fecha = fecha_raw
+    
+    # Obtener nombre del asesor de ventas (usuario que creó la cotización)
+    asesor = datos_cotizacion.get('asesor_ventas', 'N/A')
+    
+    # Crear estilo para texto rojo
+    style_rojo = ParagraphStyle(
+        'Rojo',
+        parent=style_normal,
+        textColor=colors.red
+    )
     
     info_doc_data = [[
-        Paragraph(f"<b>DOCUMENTO / DOCUMENT:</b> {presupuesto}", style_normal),
-        Paragraph(f"<b>FECHA / DATE:</b> {fecha}", style_normal),
-        Paragraph(f"<b>ORIGEN / ORIGIN:</b> EEUU", style_normal),
-    ], [
-        Paragraph(f"<b>RIF:</b> J-5072639-5", style_normal),
-        Paragraph(f"<b>DESTINO / DESTINATION:</b> VENEZUELA", style_normal),
-        Paragraph(f"<b>STATUS:</b> COTIZADO / QUOTED", style_normal),
+        Paragraph(f"<b><font color='red'>COTIZACIÓN Nº:</font></b> {presupuesto}", style_normal),
+        Paragraph(f"<b>FECHA:</b> {fecha}", style_normal),
+        Paragraph(f"<b>ASESOR DE VENTAS:</b> {asesor}", style_normal),
     ]]
     
     tabla_info_doc = Table(info_doc_data, colWidths=[3.16*inch, 3.16*inch, 3.16*inch])
@@ -435,12 +541,8 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
         Paragraph("<b>@repuestosonlinecaracas</b>", style_normal),
     ]]
     
-    if logo_logipart_path:
-        img_logipart = Image(logo_logipart_path, width=0.4*inch, height=0.4*inch)
-        pie_data[0].insert(0, img_logipart)
-        col_widths_pie = [0.5*inch, 3*inch, 3*inch, 3*inch]
-    else:
-        col_widths_pie = [3.16*inch, 3.16*inch, 3.16*inch]
+    # Logo removido del pie de página
+    col_widths_pie = [3.16*inch, 3.16*inch, 3.16*inch]
     
     tabla_pie = Table(pie_data, colWidths=col_widths_pie)
     tabla_pie.setStyle(TableStyle([
