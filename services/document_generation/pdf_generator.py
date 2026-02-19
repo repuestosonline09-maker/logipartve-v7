@@ -364,21 +364,31 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
     story.append(Spacer(1, 0.15*inch))
     
     # ==========================================
-    # DATOS DEL CLIENTE (CONSIGNEE)
+    # DATOS DEL CLIENTE
     # ==========================================
     
-    story.append(Paragraph("▼ CONSIGNEE (DESTINATARIO)", style_seccion))
+    story.append(Paragraph("▼ DATOS DEL CLIENTE", style_seccion))
     
     cliente = datos_cotizacion.get('cliente', {})
     
+    # Combinar vehículo y cilindrada/motor
+    vehiculo_completo = cliente.get('vehiculo', '')
+    cilindrada = cliente.get('cilindrada', '')
+    if cilindrada:
+        vehiculo_completo = f"{vehiculo_completo} {cilindrada}"
+    
     cliente_data = [[
-        Paragraph(f"<b>Nombre / Name:</b> {cliente.get('nombre', '')}", style_normal),
-        Paragraph(f"<b>Teléfono / Phone:</b> {cliente.get('telefono', '')}", style_normal),
-        Paragraph(f"<b>Email:</b> {cliente.get('email', '')}", style_normal),
+        Paragraph(f"<b>NOMBRE:</b> {cliente.get('nombre', '')}", style_normal),
+        Paragraph(f"<b>CÉDULA O RIF:</b> {cliente.get('ci_rif', '')}", style_normal),
+        Paragraph(f"<b>TELÉFONO:</b> {cliente.get('telefono', '')}", style_normal),
     ], [
-        Paragraph(f"<b>Vehículo / Vehicle:</b> {cliente.get('vehiculo', '')}", style_normal),
-        Paragraph(f"<b>Año / Year:</b> {cliente.get('año', '')}", style_normal),
+        Paragraph(f"<b>EMAIL:</b> {cliente.get('email', '')}", style_normal),
+        Paragraph(f"<b>DIRECCIÓN:</b> {cliente.get('direccion', '')}", style_normal),
+        Paragraph(f"<b>VEHÍCULO:</b> {vehiculo_completo}", style_normal),
+    ], [
+        Paragraph(f"<b>AÑO:</b> {cliente.get('año', '')}", style_normal),
         Paragraph(f"<b>VIN:</b> {cliente.get('vin', '')}", style_normal),
+        Paragraph("", style_normal),  # Celda vacía
     ]]
     
     tabla_cliente = Table(cliente_data, colWidths=[3.16*inch, 3.16*inch, 3.16*inch])
