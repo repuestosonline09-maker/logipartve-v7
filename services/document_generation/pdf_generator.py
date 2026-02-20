@@ -318,8 +318,14 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
     # INFORMACIÓN DEL DOCUMENTO
     # ==========================================
     
-    presupuesto = datos_cotizacion.get('numero_cotizacion', 'N/A')
+    # Soportar ambos formatos de nombres de campos (compatibilidad)
+    presupuesto = datos_cotizacion.get('numero_cotizacion') or datos_cotizacion.get('quote_number', 'N/A')
     fecha_raw = datos_cotizacion.get('fecha', 'N/A')
+    
+    # Si no hay fecha, intentar obtener la fecha actual
+    if fecha_raw == 'N/A':
+        from datetime import datetime
+        fecha_raw = datetime.now().strftime('%Y-%m-%d')
     
     # Convertir fecha a formato dd/mm/aa
     from datetime import datetime
@@ -333,7 +339,8 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
         fecha = fecha_raw
     
     # Obtener nombre del asesor de ventas (usuario que creó la cotización)
-    asesor = datos_cotizacion.get('asesor_ventas', 'N/A')
+    # Soportar ambos formatos: 'asesor_ventas' o 'analyst_name'
+    asesor = datos_cotizacion.get('asesor_ventas') or datos_cotizacion.get('analyst_name', 'N/A')
     
     # Crear estilo para texto rojo
     style_rojo = ParagraphStyle(
@@ -369,11 +376,13 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
     
     story.append(Paragraph("▼ DATOS DEL CLIENTE", style_seccion))
     
-    cliente = datos_cotizacion.get('cliente', {})
+    # Soportar ambos formatos: 'cliente' o 'client'
+    cliente = datos_cotizacion.get('cliente') or datos_cotizacion.get('client', {})
     
     # Combinar vehículo y cilindrada/motor
+    # Soportar ambos formatos: 'cilindrada' o 'motor'
     vehiculo_completo = cliente.get('vehiculo', '')
-    cilindrada = cliente.get('cilindrada', '')
+    cilindrada = cliente.get('cilindrada') or cliente.get('motor', '')
     if cilindrada:
         vehiculo_completo = f"{vehiculo_completo} {cilindrada}"
     
