@@ -511,87 +511,75 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
     story.append(Spacer(1, 0.12*inch))
     
     # ==========================================
-    # 4TO BLOQUE: TÉRMINOS Y CONDICIONES
+    # 4TO Y 5TO BLOQUE: TÉRMINOS (IZQ) + FINANCIAL SUMMARY (DER)
+    # Layout de 2 columnas en el mismo nivel horizontal
     # ==========================================
     
-    story.append(Paragraph("▼ TÉRMINOS Y CONDICIONES", style_seccion))
-    
-    # Obtener términos y condiciones desde datos_cotizacion
-    terminos = datos_cotizacion.get('terminos_condiciones', 'Términos y condiciones estándar')
-    
-    # Crear tabla para términos y condiciones
-    terminos_data = [[Paragraph(terminos, style_normal)]]
-    tabla_terminos = Table(terminos_data, colWidths=[10.0*inch])
-    tabla_terminos.setStyle(TableStyle([
-        ('BOX', (0, 0), (-1, -1), 1.5, COLOR_AZUL_AVIACION),
-        ('BACKGROUND', (0, 0), (-1, -1), colors.white),
-        ('TOPPADDING', (0, 0), (-1, -1), 10),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
-        ('LEFTPADDING', (0, 0), (-1, -1), 12),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 12),
-        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-    ]))
-    
-    story.append(tabla_terminos)
-    story.append(Spacer(1, 0.12*inch))
-    
-    # ==========================================
-    # 5TO BLOQUE: RESUMEN FINANCIERO
-    # ==========================================
-    
-    # Sin título (como solicitó el usuario)
-    
-    # Calcular totales
+    # Calcular totales para FINANCIAL SUMMARY
     sub_total = datos_cotizacion.get('sub_total', 0)
     iva = datos_cotizacion.get('iva_total', 0)
     total = datos_cotizacion.get('total_a_pagar', 0)
     abona_ya = datos_cotizacion.get('abona_ya', 0)
     en_entrega = datos_cotizacion.get('y_en_entrega', 0)
     
-    # Crear tabla de resumen (alineada a la derecha)
-    resumen_data = [
-        ['', Paragraph("<b>SUBTOTAL ..................</b>", style_normal), Paragraph(f"<b>${sub_total:.2f}</b>", style_normal)],
-        ['', Paragraph("<b>VAT 16% ..................</b>", style_normal), Paragraph(f"<b>${iva:.2f}</b>", style_normal)],
-        ['', Paragraph("<b>═══════════════════</b>", style_normal), Paragraph("<b>═══════════</b>", style_normal)],
-        ['', Paragraph("<b>TOTAL AMOUNT ..........</b>", style_normal), Paragraph(f"<b>${total:.2f}</b>", style_normal)],
-        ['', Paragraph("<b>ADVANCE PAYMENT ......</b>", style_normal), Paragraph(f"<b>${abona_ya:.2f}</b>", style_normal)],
-        ['', Paragraph("<b>BALANCE ..............</b>", style_normal), Paragraph(f"<b>${en_entrega:.2f}</b>", style_normal)],
+    # Obtener términos y condiciones desde datos_cotizacion
+    terminos = datos_cotizacion.get('terminos_condiciones', 'Términos y condiciones estándar')
+    
+    # COLUMNA IZQUIERDA: TÉRMINOS Y CONDICIONES
+    col_izq_data = [
+        [Paragraph("<b>▼ TÉRMINOS Y CONDICIONES</b>", style_seccion)],
+        [Paragraph(terminos, style_normal)]
     ]
     
-    tabla_resumen = Table(resumen_data, colWidths=[4.5*inch, 2.5*inch, 1.5*inch])
+    tabla_col_izq = Table(col_izq_data, colWidths=[5.5*inch])
+    tabla_col_izq.setStyle(TableStyle([
+        ('BOX', (0, 1), (-1, -1), 1.5, COLOR_AZUL_AVIACION),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+        ('TOPPADDING', (0, 1), (-1, -1), 10),
+        ('BOTTOMPADDING', (0, 1), (-1, -1), 10),
+        ('LEFTPADDING', (0, 1), (-1, -1), 12),
+        ('RIGHTPADDING', (0, 1), (-1, -1), 12),
+        ('VALIGN', (0, 1), (-1, -1), 'TOP'),
+        ('TOPPADDING', (0, 0), (0, 0), 0),
+        ('BOTTOMPADDING', (0, 0), (0, 0), 5),
+    ]))
+    
+    # COLUMNA DERECHA: FINANCIAL SUMMARY
+    resumen_data = [
+        [Paragraph("<b>SUBTOTAL ..................</b>", style_normal), Paragraph(f"<b>${sub_total:.2f}</b>", style_normal)],
+        [Paragraph("<b>VAT 16% ..................</b>", style_normal), Paragraph(f"<b>${iva:.2f}</b>", style_normal)],
+        [Paragraph("<b>═══════════════════</b>", style_normal), Paragraph("<b>═══════════</b>", style_normal)],
+        [Paragraph("<b>TOTAL AMOUNT ..........</b>", style_normal), Paragraph(f"<b>${total:.2f}</b>", style_normal)],
+        [Paragraph("<b>ADVANCE PAYMENT ......</b>", style_normal), Paragraph(f"<b>${abona_ya:.2f}</b>", style_normal)],
+        [Paragraph("<b>BALANCE ..............</b>", style_normal), Paragraph(f"<b>${en_entrega:.2f}</b>", style_normal)],
+    ]
+    
+    tabla_resumen = Table(resumen_data, colWidths=[2.5*inch, 1.5*inch])
     tabla_resumen.setStyle(TableStyle([
+        ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
         ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
-        ('ALIGN', (2, 0), (2, -1), 'RIGHT'),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ('TOPPADDING', (0, 0), (-1, -1), 3),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
-        ('BOX', (1, 0), (2, -1), 1.5, COLOR_AZUL_AVIACION),
-        ('BACKGROUND', (1, 3), (2, 3), COLOR_GRIS_CLARO),  # Total destacado
+        ('BOX', (0, 0), (1, -1), 1.5, COLOR_AZUL_AVIACION),
+        ('BACKGROUND', (0, 3), (1, 3), COLOR_GRIS_CLARO),  # Total destacado
     ]))
     
-    story.append(tabla_resumen)
+    # Crear tabla principal de 2 columnas
+    layout_2col_data = [[tabla_col_izq, tabla_resumen]]
+    tabla_2col = Table(layout_2col_data, colWidths=[5.5*inch, 4.5*inch])
+    tabla_2col.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ('TOPPADDING', (0, 0), (-1, -1), 0),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+    ]))
+    
+    story.append(tabla_2col)
     story.append(Spacer(1, 0.15*inch))
     
-    # ==========================================
-    # TÉRMINOS Y CONDICIONES
-    # ==========================================
-    
-    story.append(Paragraph("▼ TERMS & CONDITIONS (TÉRMINOS Y CONDICIONES)", style_seccion))
-    
-    terminos = datos_cotizacion.get('terminos_condiciones', 'No especificados')
-    
-    terminos_data = [[Paragraph(terminos, style_normal)]]
-    tabla_terminos = Table(terminos_data, colWidths=[9.5*inch])
-    tabla_terminos.setStyle(TableStyle([
-        ('BOX', (0, 0), (-1, -1), 1, COLOR_GRIS),
-        ('TOPPADDING', (0, 0), (-1, -1), 8),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-        ('LEFTPADDING', (0, 0), (-1, -1), 10),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 10),
-    ]))
-    
-    story.append(tabla_terminos)
-    story.append(Spacer(1, 0.1*inch))
+    # Bloque de TÉRMINOS Y CONDICIONES eliminado (ahora está en layout de 2 columnas arriba)
     
     # ==========================================
     # PIE DE PÁGINA
