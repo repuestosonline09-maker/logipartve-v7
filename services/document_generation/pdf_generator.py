@@ -461,8 +461,8 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
             Paragraph(f"${precio_total:.2f}", style_normal),
         ])
     
-    # Anchos de columna optimizados (12 columnas) - Aumentados para evitar corte de palabras
-    col_widths = [0.3*inch, 1.5*inch, 0.9*inch, 0.8*inch, 0.7*inch, 0.3*inch, 0.7*inch, 0.8*inch, 0.9*inch, 0.8*inch, 0.6*inch, 0.7*inch]
+    # Anchos de columna optimizados (12 columnas) - Ajustados para evitar corte de palabras
+    col_widths = [0.4*inch, 1.5*inch, 0.9*inch, 0.8*inch, 0.7*inch, 0.4*inch, 0.7*inch, 0.8*inch, 0.9*inch, 0.8*inch, 0.6*inch, 0.6*inch]
     
     tabla_items = Table(items_data, colWidths=col_widths)
     tabla_items.setStyle(TableStyle([
@@ -472,6 +472,7 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
         ('FONTSIZE', (0, 0), (-1, 0), 7),
         ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, 0), 'MIDDLE'),  # Centrar verticalmente encabezados
         
         # Contenido
         ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
