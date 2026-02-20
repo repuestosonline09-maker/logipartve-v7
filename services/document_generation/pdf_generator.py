@@ -151,6 +151,16 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
         alignment=TA_LEFT
     )
     
+    # Estilo para encabezados de tabla (centrado)
+    style_header = ParagraphStyle(
+        'CustomHeader',
+        parent=styles['Normal'],
+        fontSize=7,
+        textColor=colors.white,
+        alignment=TA_CENTER,
+        fontName='Helvetica-Bold'
+    )
+    
     # Estilo para encabezados de sección
     style_seccion = ParagraphStyle(
         'CustomSection',
@@ -419,20 +429,20 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
     # TABLA DE ITEMS (SIN TÍTULO)
     # ==========================================
     
-    # Encabezados de tabla con nuevos nombres
+    # Encabezados de tabla con nuevos nombres (usando style_header centrado)
     items_data = [[
-        Paragraph("<b>ITEM</b>", style_normal),
-        Paragraph("<b>DESCRIPCION</b>", style_normal),
-        Paragraph("<b># PARTE</b>", style_normal),
-        Paragraph("<b>MARCA</b>", style_normal),
-        Paragraph("<b>GARANTIA</b>", style_normal),
-        Paragraph("<b>QTY</b>", style_normal),
-        Paragraph("<b>ENVIO</b>", style_normal),
-        Paragraph("<b>ORIGEN</b>", style_normal),
-        Paragraph("<b>FABRICACION</b>", style_normal),
-        Paragraph("<b>ENTREGA</b>", style_normal),
-        Paragraph("<b>UNIT</b>", style_normal),
-        Paragraph("<b>TOTAL</b>", style_normal),
+        Paragraph("<b>ITEM</b>", style_header),
+        Paragraph("<b>DESCRIPCION</b>", style_header),
+        Paragraph("<b># PARTE</b>", style_header),
+        Paragraph("<b>MARCA</b>", style_header),
+        Paragraph("<b>GARANTIA</b>", style_header),
+        Paragraph("<b>QTY</b>", style_header),
+        Paragraph("<b>ENVIO</b>", style_header),
+        Paragraph("<b>ORIGEN</b>", style_header),
+        Paragraph("<b>FABRICACION</b>", style_header),
+        Paragraph("<b>ENTREGA</b>", style_header),
+        Paragraph("<b>UNIT</b>", style_header),
+        Paragraph("<b>TOTAL</b>", style_header),
     ]]
     
     # Agregar ítems
