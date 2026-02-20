@@ -523,12 +523,15 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
     en_entrega = datos_cotizacion.get('y_en_entrega', 0)
     
     # Obtener términos y condiciones desde datos_cotizacion
-    terminos = datos_cotizacion.get('terminos_condiciones', 'Términos y condiciones estándar')
+    terminos_raw = datos_cotizacion.get('terminos_condiciones', 'Términos y condiciones estándar')
+    
+    # Preservar saltos de línea reemplazando \n con <br/>
+    terminos_html = terminos_raw.replace('\n', '<br/>')
     
     # COLUMNA IZQUIERDA: TÉRMINOS Y CONDICIONES
     col_izq_data = [
         [Paragraph("<b>▼ TÉRMINOS Y CONDICIONES</b>", style_seccion)],
-        [Paragraph(terminos, style_normal)]
+        [Paragraph(terminos_html, style_normal)]
     ]
     
     tabla_col_izq = Table(col_izq_data, colWidths=[5.5*inch])
@@ -565,13 +568,15 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
         ('BACKGROUND', (0, 3), (1, 3), COLOR_GRIS_CLARO),  # Total destacado
     ]))
     
-    # Crear tabla principal de 2 columnas
+    # Crear tabla principal de 2 columnas con espacio entre ellas
     layout_2col_data = [[tabla_col_izq, tabla_resumen]]
-    tabla_2col = Table(layout_2col_data, colWidths=[5.5*inch, 4.5*inch])
+    tabla_2col = Table(layout_2col_data, colWidths=[5.2*inch, 4.5*inch])
     tabla_2col.setStyle(TableStyle([
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('LEFTPADDING', (0, 0), (-1, -1), 0),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ('LEFTPADDING', (0, 0), (0, 0), 0),
+        ('RIGHTPADDING', (0, 0), (0, 0), 0.3*inch),  # Espacio entre columnas
+        ('LEFTPADDING', (1, 0), (1, 0), 0),
+        ('RIGHTPADDING', (1, 0), (1, 0), 0),
         ('TOPPADDING', (0, 0), (-1, -1), 0),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
     ]))
