@@ -550,11 +550,11 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
     # COLUMNA DERECHA: FINANCIAL SUMMARY
     resumen_data = [
         [Paragraph("<b>SUBTOTAL ..................</b>", style_normal), Paragraph(f"<b>${sub_total:.2f}</b>", style_normal)],
-        [Paragraph("<b>VAT 16% ..................</b>", style_normal), Paragraph(f"<b>${iva:.2f}</b>", style_normal)],
+        [Paragraph("<b>IVA 16% ..................</b>", style_normal), Paragraph(f"<b>${iva:.2f}</b>", style_normal)],
         [Paragraph("<b>═══════════════════</b>", style_normal), Paragraph("<b>═══════════</b>", style_normal)],
-        [Paragraph("<b>TOTAL AMOUNT ..........</b>", style_normal), Paragraph(f"<b>${total:.2f}</b>", style_normal)],
-        [Paragraph("<b>ADVANCE PAYMENT ......</b>", style_normal), Paragraph(f"<b>${abona_ya:.2f}</b>", style_normal)],
-        [Paragraph("<b>BALANCE ..............</b>", style_normal), Paragraph(f"<b>${en_entrega:.2f}</b>", style_normal)],
+        [Paragraph("<b>TOTAL A PAGAR ........</b>", style_normal), Paragraph(f"<b>${total:.2f}</b>", style_normal)],
+        [Paragraph("<b>PUEDES ABONAR ........</b>", style_normal), Paragraph(f"<b>${abona_ya:.2f}</b>", style_normal)],
+        [Paragraph("<b>Y EN LA ENTREGA ......</b>", style_normal), Paragraph(f"<b>${en_entrega:.2f}</b>", style_normal)],
     ]
     
     tabla_resumen = Table(resumen_data, colWidths=[2.5*inch, 1.5*inch])
