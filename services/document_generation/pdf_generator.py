@@ -534,7 +534,7 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
         [Paragraph(terminos_html, style_normal)]
     ]
     
-    tabla_col_izq = Table(col_izq_data, colWidths=[5.5*inch])
+    tabla_col_izq = Table(col_izq_data, colWidths=[4.8*inch])
     tabla_col_izq.setStyle(TableStyle([
         ('BOX', (0, 1), (-1, -1), 1.5, COLOR_AZUL_AVIACION),
         ('BACKGROUND', (0, 1), (-1, -1), colors.white),
@@ -570,7 +570,7 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
     
     # Crear tabla principal de 2 columnas con espacio entre ellas
     layout_2col_data = [[tabla_col_izq, tabla_resumen]]
-    tabla_2col = Table(layout_2col_data, colWidths=[5.2*inch, 4.5*inch])
+    tabla_2col = Table(layout_2col_data, colWidths=[5.0*inch, 4.5*inch])
     tabla_2col.setStyle(TableStyle([
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
         ('LEFTPADDING', (0, 0), (0, 0), 0),
