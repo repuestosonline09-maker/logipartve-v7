@@ -508,13 +508,38 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
     ]))
     
     story.append(tabla_items)
-    story.append(Spacer(1, 0.15*inch))
+    story.append(Spacer(1, 0.12*inch))
     
     # ==========================================
-    # RESUMEN FINANCIERO (FINANCIAL SUMMARY)
+    # 4TO BLOQUE: TÉRMINOS Y CONDICIONES
     # ==========================================
     
-    story.append(Paragraph("▼ FINANCIAL SUMMARY (RESUMEN FINANCIERO)", style_seccion))
+    story.append(Paragraph("▼ TÉRMINOS Y CONDICIONES", style_seccion))
+    
+    # Obtener términos y condiciones desde datos_cotizacion
+    terminos = datos_cotizacion.get('terminos_condiciones', 'Términos y condiciones estándar')
+    
+    # Crear tabla para términos y condiciones
+    terminos_data = [[Paragraph(terminos, style_normal)]]
+    tabla_terminos = Table(terminos_data, colWidths=[10.0*inch])
+    tabla_terminos.setStyle(TableStyle([
+        ('BOX', (0, 0), (-1, -1), 1.5, COLOR_AZUL_AVIACION),
+        ('BACKGROUND', (0, 0), (-1, -1), colors.white),
+        ('TOPPADDING', (0, 0), (-1, -1), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
+        ('LEFTPADDING', (0, 0), (-1, -1), 12),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 12),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+    ]))
+    
+    story.append(tabla_terminos)
+    story.append(Spacer(1, 0.12*inch))
+    
+    # ==========================================
+    # 5TO BLOQUE: RESUMEN FINANCIERO
+    # ==========================================
+    
+    # Sin título (como solicitó el usuario)
     
     # Calcular totales
     sub_total = datos_cotizacion.get('sub_total', 0)
