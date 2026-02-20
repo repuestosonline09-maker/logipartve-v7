@@ -111,7 +111,8 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
     )
     
     # Colores del tema
-    COLOR_AZUL_AVIACION = colors.HexColor('#003D82')
+    COLOR_AZUL_AVIACION = colors.HexColor('#003D82')  # Azul aviación original
+    COLOR_AZUL_AOP = colors.HexColor('#2c7ebe')  # Azul del logo AUTO ONLINE PRO
     COLOR_NARANJA = colors.HexColor('#FF6B35')
     COLOR_GRIS = colors.HexColor('#2C3E50')
     COLOR_GRIS_CLARO = colors.HexColor('#E8E8E8')
@@ -412,38 +413,42 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
     ]))
     
     story.append(tabla_cliente)
-    story.append(Spacer(1, 0.15*inch))
+    story.append(Spacer(1, 0.08*inch))  # Espacio reducido (antes 0.15)
     
     # ==========================================
-    # DETALLE DE REPUESTOS (CARGO DETAILS)
+    # TABLA DE ITEMS (SIN TÍTULO)
     # ==========================================
     
-    story.append(Paragraph("▼ CARGO DETAILS (DETALLE DE CARGA)", style_seccion))
-    
-    # Encabezados de tabla
+    # Encabezados de tabla con nuevos nombres
     items_data = [[
         Paragraph("<b>ITEM</b>", style_normal),
-        Paragraph("<b>PART #</b>", style_normal),
-        Paragraph("<b>BRAND</b>", style_normal),
-        Paragraph("<b>WARR.</b>", style_normal),
+        Paragraph("<b>DESCRIPCION</b>", style_normal),
+        Paragraph("<b># PARTE</b>", style_normal),
+        Paragraph("<b>MARCA</b>", style_normal),
+        Paragraph("<b>GARANTIA</b>", style_normal),
         Paragraph("<b>QTY</b>", style_normal),
-        Paragraph("<b>SHIP</b>", style_normal),
-        Paragraph("<b>ORIGIN</b>", style_normal),
-        Paragraph("<b>MANUF.</b>", style_normal),
-        Paragraph("<b>DELIV.</b>", style_normal),
-        Paragraph("<b>VALUE<br/>USD</b>", style_normal),
+        Paragraph("<b>ENVIO</b>", style_normal),
+        Paragraph("<b>ORIGEN</b>", style_normal),
+        Paragraph("<b>FABRICACION</b>", style_normal),
+        Paragraph("<b>ENTREGA</b>", style_normal),
+        Paragraph("<b>UNIT</b>", style_normal),
+        Paragraph("<b>TOTAL</b>", style_normal),
     ]]
     
     # Agregar ítems
     items = datos_cotizacion.get('items', [])
     for idx, item in enumerate(items, 1):
-        # Calcular precio unitario
+        # Calcular precio unitario y total
         cantidad = item.get('cantidad', 1)
         precio_total = item.get('precio_bs', 0)
         precio_unitario = precio_total / cantidad if cantidad > 0 else 0
         
+        # Obtener descripción del repuesto
+        descripcion = item.get('descripcion', '') or item.get('descripcion_repuesto', '')
+        
         items_data.append([
             Paragraph(str(idx), style_normal),
+            Paragraph(str(descripcion), style_normal),
             Paragraph(str(item.get('parte', '')), style_normal),
             Paragraph(str(item.get('marca', '')), style_normal),
             Paragraph(str(item.get('garantia', '')), style_normal),
@@ -453,29 +458,31 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
             Paragraph(str(item.get('fabricacion', '')), style_normal),
             Paragraph(str(item.get('tiempo_entrega', '')), style_normal),
             Paragraph(f"${precio_unitario:.2f}", style_normal),
+            Paragraph(f"${precio_total:.2f}", style_normal),
         ])
     
-    # Anchos de columna optimizados para horizontal
-    col_widths = [0.4*inch, 0.9*inch, 0.8*inch, 0.7*inch, 0.4*inch, 0.7*inch, 0.8*inch, 0.8*inch, 0.9*inch, 0.8*inch]
+    # Anchos de columna optimizados (12 columnas)
+    col_widths = [0.3*inch, 1.2*inch, 0.8*inch, 0.7*inch, 0.6*inch, 0.3*inch, 0.6*inch, 0.7*inch, 0.8*inch, 0.7*inch, 0.5*inch, 0.6*inch]
     
     tabla_items = Table(items_data, colWidths=col_widths)
     tabla_items.setStyle(TableStyle([
-        # Encabezado
-        ('BACKGROUND', (0, 0), (-1, 0), COLOR_AZUL_AVIACION),
+        # Encabezado con color azul AUTO ONLINE PRO
+        ('BACKGROUND', (0, 0), (-1, 0), COLOR_AZUL_AOP),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 8),
+        ('FONTSIZE', (0, 0), (-1, 0), 7),
         ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
         
         # Contenido
         ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 1), (-1, -1), 7),
+        ('FONTSIZE', (0, 1), (-1, -1), 6.5),
         ('ALIGN', (0, 1), (0, -1), 'CENTER'),  # ITEM centrado
-        ('ALIGN', (4, 1), (4, -1), 'CENTER'),  # QTY centrado
-        ('ALIGN', (9, 1), (9, -1), 'RIGHT'),   # VALUE alineado a derecha
+        ('ALIGN', (5, 1), (5, -1), 'CENTER'),  # QTY centrado
+        ('ALIGN', (10, 1), (10, -1), 'RIGHT'),  # UNIT alineado a derecha
+        ('ALIGN', (11, 1), (11, -1), 'RIGHT'),  # TOTAL alineado a derecha
         
-        # Bordes y fondos
-        ('BOX', (0, 0), (-1, -1), 1.5, COLOR_AZUL_AVIACION),
+        # Bordes y fondos con color azul AUTO ONLINE PRO
+        ('BOX', (0, 0), (-1, -1), 1.5, COLOR_AZUL_AOP),
         ('INNERGRID', (0, 0), (-1, -1), 0.5, COLOR_GRIS_CLARO),
         ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, COLOR_GRIS_CLARO]),
         
