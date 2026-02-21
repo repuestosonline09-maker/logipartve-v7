@@ -568,10 +568,12 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
     ]))
     
     # Crear tabla principal de 2 columnas con espacio entre ellas
+    # Ajustado para alinear FINANCIAL SUMMARY a la derecha con DATOS DEL CLIENTE
     layout_2col_data = [[tabla_col_izq, tabla_resumen]]
-    tabla_2col = Table(layout_2col_data, colWidths=[5.0*inch, 4.5*inch])
+    tabla_2col = Table(layout_2col_data, colWidths=[5.0*inch, 5.0*inch])
     tabla_2col.setStyle(TableStyle([
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('ALIGN', (1, 0), (1, 0), 'RIGHT'),  # Alinear columna derecha a la derecha
         ('LEFTPADDING', (0, 0), (0, 0), 0),
         ('RIGHTPADDING', (0, 0), (0, 0), 0.3*inch),  # Espacio entre columnas
         ('LEFTPADDING', (1, 0), (1, 0), 0),
