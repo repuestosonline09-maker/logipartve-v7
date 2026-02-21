@@ -93,7 +93,8 @@ def cargar_configuraciones():
             "utilidad_factors": DBManager.get_profit_factors(),
             "tax_percentage": DBManager.get_tax_percentage(),
             "diferencial": DBManager.get_diferencial(),
-            "iva_venezuela": DBManager.get_iva_venezuela()
+            "iva_venezuela": DBManager.get_iva_venezuela(),
+            "terms_conditions": DBManager.get_config('terms_conditions')
         }
         return config
     except Exception as e:
@@ -108,7 +109,8 @@ def cargar_configuraciones():
             "utilidad_factors": [1.4285, 1.35, 1.30, 1.25, 1.20, 1.15, 1.10, 0],
             "tax_percentage": 7.0,
             "diferencial": 45.0,
-            "iva_venezuela": 16.0
+            "iva_venezuela": 16.0,
+            "terms_conditions": "Términos y condiciones estándar."
         }
 
 
