@@ -551,7 +551,6 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
     resumen_data = [
         [Paragraph("<b>SUBTOTAL ..................</b>", style_normal), Paragraph(f"<b>${sub_total:.2f}</b>", style_normal)],
         [Paragraph("<b>IVA 16% ..................</b>", style_normal), Paragraph(f"<b>${iva:.2f}</b>", style_normal)],
-        [Paragraph("<b>═══════════════════</b>", style_normal), Paragraph("<b>═══════════</b>", style_normal)],
         [Paragraph("<b>TOTAL A PAGAR ........</b>", style_normal), Paragraph(f"<b>${total:.2f}</b>", style_normal)],
         [Paragraph("<b>PUEDES ABONAR ........</b>", style_normal), Paragraph(f"<b>${abona_ya:.2f}</b>", style_normal)],
         [Paragraph("<b>Y EN LA ENTREGA ......</b>", style_normal), Paragraph(f"<b>${en_entrega:.2f}</b>", style_normal)],
@@ -565,7 +564,7 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
         ('TOPPADDING', (0, 0), (-1, -1), 3),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
         ('BOX', (0, 0), (1, -1), 1.5, COLOR_AZUL_AVIACION),
-        ('BACKGROUND', (0, 3), (1, 3), COLOR_GRIS_CLARO),  # Total destacado
+        ('BACKGROUND', (0, 2), (1, 2), COLOR_GRIS_CLARO),  # Total destacado
     ]))
     
     # Crear tabla principal de 2 columnas con espacio entre ellas
