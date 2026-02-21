@@ -471,8 +471,8 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
             Paragraph(f"${precio_total:.2f}", style_normal),
         ])
     
-    # Anchos de columna optimizados (12 columnas) - Ajustados para evitar corte de palabras
-    col_widths = [0.4*inch, 1.5*inch, 0.9*inch, 0.8*inch, 0.7*inch, 0.4*inch, 0.7*inch, 0.8*inch, 0.9*inch, 0.8*inch, 0.6*inch, 0.6*inch]
+    # Anchos de columna optimizados (12 columnas) - Ajustados para alineación perfecta con DATOS DEL CLIENTE (9.48 inches total)
+    col_widths = [0.4*inch, 1.88*inch, 0.9*inch, 0.8*inch, 0.7*inch, 0.4*inch, 0.7*inch, 0.8*inch, 0.9*inch, 0.8*inch, 0.6*inch, 0.6*inch]
     
     tabla_items = Table(items_data, colWidths=col_widths)
     tabla_items.setStyle(TableStyle([
@@ -568,16 +568,16 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
     ]))
     
     # Crear tabla principal de 2 columnas con espacio entre ellas
-    # Ajustado para alinear FINANCIAL SUMMARY a la derecha con DATOS DEL CLIENTE
+    # Ajustado para alinear perfectamente con DATOS DEL CLIENTE (9.48 inches total)
+    # Columna izquierda: 4.8 inches, Columna derecha: 4.0 inches, Espacio: 0.68 inches
     layout_2col_data = [[tabla_col_izq, tabla_resumen]]
-    tabla_2col = Table(layout_2col_data, colWidths=[5.0*inch, 5.0*inch])
+    tabla_2col = Table(layout_2col_data, colWidths=[4.8*inch, 4.68*inch])
     tabla_2col.setStyle(TableStyle([
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('ALIGN', (0, 0), (0, 0), 'LEFT'),   # Alinear columna izquierda a la izquierda
         ('ALIGN', (1, 0), (1, 0), 'RIGHT'),  # Alinear columna derecha a la derecha
-        ('LEFTPADDING', (0, 0), (0, 0), 0),
-        ('RIGHTPADDING', (0, 0), (0, 0), 0.3*inch),  # Espacio entre columnas
-        ('LEFTPADDING', (1, 0), (1, 0), 0),
-        ('RIGHTPADDING', (1, 0), (1, 0), 0),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),   # Sin padding izquierdo
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),  # Sin padding derecho
         ('TOPPADDING', (0, 0), (-1, -1), 0),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
     ]))
