@@ -556,13 +556,18 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
         [Paragraph("<b>Y EN LA ENTREGA ......</b>", style_normal), Paragraph(f"<b>${en_entrega:.2f}</b>", style_normal)],
     ]
     
-    tabla_resumen = Table(resumen_data, colWidths=[2.5*inch, 1.5*inch])
+    # Anchos ajustados para alinear con columnas UNIT y TOTAL de la tabla azul
+    # Columna izquierda: desde inicio hasta antes de TOTAL (8.88 inches)
+    # Columna derecha: ancho de columna TOTAL (0.6 inches)
+    tabla_resumen = Table(resumen_data, colWidths=[3.68*inch, 0.6*inch])
     tabla_resumen.setStyle(TableStyle([
-        ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
-        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+        ('ALIGN', (0, 0), (0, -1), 'RIGHT'),   # Etiquetas alineadas a la derecha
+        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),   # Valores alineados a la derecha
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ('TOPPADDING', (0, 0), (-1, -1), 3),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+        ('LEFTPADDING', (0, 0), (0, -1), 4),   # Padding izquierdo para etiquetas
+        ('RIGHTPADDING', (1, 0), (1, -1), 4),  # Padding derecho para valores
         ('BOX', (0, 0), (1, -1), 1.5, COLOR_AZUL_AVIACION),
         ('BACKGROUND', (0, 2), (1, 2), COLOR_GRIS_CLARO),  # Total destacado
     ]))
