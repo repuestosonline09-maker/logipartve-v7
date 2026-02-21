@@ -461,9 +461,10 @@ def show_system_configuration():
         st.markdown("**MANEJO ($)**")
         with st.form("manejo_form"):
             manejo_str = config.get('manejo_options', {}).get('value', '0,15,23,25')
-            manejo_options = st.text_input(
+            manejo_options = st.text_area(
                 "Opciones de Manejo (separadas por coma)",
                 value=manejo_str,
+                height=100,
                 help="Valores en dólares que el analista puede seleccionar. Ej: 0,15,23,25"
             )
             submit_manejo = st.form_submit_button("💾 Guardar", use_container_width=True)
@@ -703,8 +704,8 @@ def show_system_configuration():
             paises_options = st.text_area(
                 "Países (separados por coma)",
                 value=paises_str,
-                height=150,
-                help="Lista de países que aparecerán en 'País de Localización' y 'País de Fabricación'"
+                height=200,
+                help="Lista de países que aparecerán en 'País de Localización' y 'País de Fabricación'. Puede agregar todos los países que necesite."
             )
             submit_paises = st.form_submit_button("💾 Guardar Países", use_container_width=True)
             if submit_paises:
