@@ -67,11 +67,11 @@ def calcular_envio(largo_cm, ancho_cm, alto_cm, peso_kg, origen, tipo_envio, tar
 def cargar_configuraciones():
     """Carga todas las configuraciones desde la base de datos"""
     try:
-        # Obtener listas desde BD
-        paises_origen = DBManager.get_paises_origen()
-        tipos_envio = DBManager.get_tipos_envio()
-        tiempos_entrega = DBManager.get_tiempos_entrega()
-        garantias = DBManager.get_warranties()
+        # Obtener listas desde BD usando ConfigHelpers
+        paises_origen = ConfigHelpers.get_paises_origen()
+        tipos_envio = ConfigHelpers.get_tipos_envio()
+        tiempos_entrega = ConfigHelpers.get_tiempos_entrega()
+        garantias = ConfigHelpers.get_garantias()
         
         # Solo agregar "-- Seleccione --" si la lista NO está vacía y NO empieza con él
         if paises_origen and paises_origen[0] != "-- Seleccione --":
@@ -88,12 +88,12 @@ def cargar_configuraciones():
             "tipos_envio": tipos_envio,
             "tiempos_entrega": tiempos_entrega,
             "garantias": garantias,
-            "manejo_options": DBManager.get_manejo_options(),
-            "impuesto_options": DBManager.get_impuesto_internacional_options(),
-            "utilidad_factors": DBManager.get_profit_factors(),
-            "tax_percentage": DBManager.get_tax_percentage(),
-            "diferencial": DBManager.get_diferencial(),
-            "iva_venezuela": DBManager.get_iva_venezuela(),
+            "manejo_options": ConfigHelpers.get_manejo_options(),
+            "impuesto_options": ConfigHelpers.get_impuesto_internacional_options(),
+            "utilidad_factors": ConfigHelpers.get_utilidad_factors(),
+            "tax_percentage": ConfigHelpers.get_tax_percentage(),
+            "diferencial": ConfigHelpers.get_diferencial(),
+            "iva_venezuela": ConfigHelpers.get_iva_venezuela(),
             "terms_conditions": DBManager.get_config('terms_conditions', {}).get('value', 'Términos y condiciones estándar.')
         }
         return config

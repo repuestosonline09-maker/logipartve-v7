@@ -142,14 +142,28 @@ class ConfigHelpers:
             return 16.0
 
 
+    # Alias para compatibilidad
+    @staticmethod
+    def get_garantias() -> List[str]:
+        """Alias para get_warranties"""
+        return ConfigHelpers.get_warranties()
+    
+    @staticmethod
+    def get_utilidad_factors() -> List[float]:
+        """Alias para get_profit_factors"""
+        return ConfigHelpers.get_profit_factors()
+
+
 # Agregar métodos estáticos a DBManager para compatibilidad
 DBManager.get_paises_origen = ConfigHelpers.get_paises_origen
 DBManager.get_tipos_envio = ConfigHelpers.get_tipos_envio
 DBManager.get_tiempos_entrega = ConfigHelpers.get_tiempos_entrega
 DBManager.get_warranties = ConfigHelpers.get_warranties
+DBManager.get_garantias = ConfigHelpers.get_garantias
 DBManager.get_manejo_options = ConfigHelpers.get_manejo_options
 DBManager.get_impuesto_internacional_options = ConfigHelpers.get_impuesto_internacional_options
 DBManager.get_profit_factors = ConfigHelpers.get_profit_factors
+DBManager.get_utilidad_factors = ConfigHelpers.get_utilidad_factors
 DBManager.get_tax_percentage = ConfigHelpers.get_tax_percentage
 DBManager.get_diferencial = ConfigHelpers.get_diferencial
 DBManager.get_iva_venezuela = ConfigHelpers.get_iva_venezuela
