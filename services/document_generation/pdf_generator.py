@@ -472,7 +472,7 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
         ])
     
     # Anchos de columna optimizados (12 columnas) - Ajustados para alineación perfecta con DATOS DEL CLIENTE (9.48 inches total)
-    col_widths = [0.4*inch, 1.88*inch, 0.9*inch, 0.8*inch, 0.7*inch, 0.4*inch, 0.7*inch, 0.8*inch, 0.9*inch, 0.8*inch, 0.6*inch, 0.6*inch]
+    col_widths = [0.4*inch, 1.48*inch, 0.9*inch, 0.8*inch, 0.7*inch, 0.4*inch, 0.7*inch, 0.8*inch, 0.7*inch, 0.6*inch, 1.0*inch, 1.0*inch]
     
     tabla_items = Table(items_data, colWidths=col_widths)
     tabla_items.setStyle(TableStyle([
@@ -557,9 +557,9 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
     ]
     
     # Anchos ajustados para alinear con columna TOTAL de la tabla azul
-    # Columna izquierda: 5.08 inches (para que valores queden en posición 8.88 desde borde izquierdo)
-    # Columna derecha: 0.6 inches (mismo ancho que columna TOTAL)
-    tabla_resumen = Table(resumen_data, colWidths=[5.08*inch, 0.6*inch])
+    # Columna izquierda: 4.68 inches (para que valores queden en posición 8.48 desde borde izquierdo)
+    # Columna derecha: 1.0 inches (mismo ancho que columna TOTAL - soporta hasta $99,999.99)
+    tabla_resumen = Table(resumen_data, colWidths=[4.68*inch, 1.0*inch])
     tabla_resumen.setStyle(TableStyle([
         ('ALIGN', (0, 0), (0, -1), 'RIGHT'),   # Etiquetas alineadas a la derecha
         ('ALIGN', (1, 0), (1, -1), 'RIGHT'),   # Valores alineados a la derecha
