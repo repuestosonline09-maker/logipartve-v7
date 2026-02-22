@@ -946,7 +946,7 @@ def render_analyst_panel():
                             'y_en_entrega': y_en_entrega,
                             'total_usd': total_cotizacion_usd,
                             'total_bs': total_cotizacion_bs,
-                            'terminos_condiciones': config.get('terms_conditions', {}).get('value', 'Términos y condiciones estándar.')
+                            'terminos_condiciones': config.get('terms_conditions', 'Términos y condiciones estándar.')
                         }
                         
                         # Generar PDF
@@ -1005,7 +1005,7 @@ def render_analyst_panel():
                             'y_en_entrega': y_en_entrega,
                             'total_usd': total_cotizacion_usd,
                             'total_bs': total_cotizacion_bs,
-                            'terminos_condiciones': config.get('terms_conditions', {}).get('value', 'Términos y condiciones estándar.')
+                            'terminos_condiciones': config.get('terms_conditions', 'Términos y condiciones estándar.')
                         }
                         
                         # Generar PNG
