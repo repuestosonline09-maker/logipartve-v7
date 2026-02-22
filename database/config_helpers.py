@@ -14,20 +14,14 @@ class ConfigHelpers:
         """Obtiene la lista de países de origen desde la configuración"""
         try:
             config_value = DBManager.get_config('paises_origen')
-            print(f"[DEBUG ConfigHelpers] get_paises_origen() - config_value type: {type(config_value)}")
-            print(f"[DEBUG ConfigHelpers] get_paises_origen() - config_value: {config_value[:100] if config_value else 'None'}...")
             if config_value:
                 # Asumiendo que están separados por comas
-                paises = [p.strip() for p in config_value.split(',')]
-                print(f"[DEBUG ConfigHelpers] get_paises_origen() - países procesados: {len(paises)} países")
-                print(f"[DEBUG ConfigHelpers] get_paises_origen() - primeros 5: {paises[:5]}")
-                return paises
+                return [p.strip() for p in config_value.split(',')]
             else:
                 # Valores por defecto
-                print(f"[DEBUG ConfigHelpers] get_paises_origen() - usando valores por defecto")
                 return ["EEUU", "MIAMI", "ESPAÑA", "MADRID", "DUBAI", "CHINA"]
         except Exception as e:
-            print(f"[ERROR ConfigHelpers] get_paises_origen() - Exception: {e}")
+            print(f"Error al obtener países de origen: {e}")
             return ["EEUU", "MIAMI", "ESPAÑA", "MADRID", "DUBAI", "CHINA"]
     
     @staticmethod
@@ -74,16 +68,12 @@ class ConfigHelpers:
         """Obtiene las opciones de manejo desde la configuración"""
         try:
             config_value = DBManager.get_config('manejo_options')
-            print(f"[DEBUG ConfigHelpers] get_manejo_options() - config_value: {config_value}")
             if config_value:
-                manejo = [float(m.strip()) for m in config_value.split(',')]
-                print(f"[DEBUG ConfigHelpers] get_manejo_options() - opciones procesadas: {manejo}")
-                return manejo
+                return [float(m.strip()) for m in config_value.split(',')]
             else:
-                print(f"[DEBUG ConfigHelpers] get_manejo_options() - usando valores por defecto")
                 return [0.0, 15.0, 23.0, 25.0]
         except Exception as e:
-            print(f"[ERROR ConfigHelpers] get_manejo_options() - Exception: {e}")
+            print(f"Error al obtener opciones de manejo: {e}")
             return [0.0, 15.0, 23.0, 25.0]
     
     @staticmethod

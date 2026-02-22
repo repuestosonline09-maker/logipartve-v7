@@ -94,7 +94,7 @@ def cargar_configuraciones():
             "tax_percentage": ConfigHelpers.get_tax_percentage(),
             "diferencial": ConfigHelpers.get_diferencial(),
             "iva_venezuela": ConfigHelpers.get_iva_venezuela(),
-            "terms_conditions": DBManager.get_config('terms_conditions', {}).get('value', 'Términos y condiciones estándar.')
+            "terms_conditions": DBManager.get_config('terms_conditions') or 'Términos y condiciones estándar.'
         }
         return config
     except Exception as e:
