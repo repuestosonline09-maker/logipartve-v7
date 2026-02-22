@@ -140,6 +140,17 @@ def ensure_admin_user():
 
 ensure_admin_user()
 
+# Inicializar configuraciones por defecto
+def ensure_default_config():
+    """Verifica y crea configuraciones por defecto si no existen."""
+    try:
+        from database.init_default_config import initialize_default_config
+        initialize_default_config()
+    except Exception as e:
+        print(f"⚠️  Error al inicializar configuraciones por defecto: {e}")
+
+ensure_default_config()
+
 def main():
     """Función principal de la aplicación."""
     
