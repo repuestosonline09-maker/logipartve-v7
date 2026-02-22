@@ -1038,17 +1038,26 @@ def render_analyst_panel():
         if st.session_state.get('cotizacion_guardada', False):
             st.markdown("---")
             if st.button("🆕 NUEVA COTIZACIÓN", use_container_width=True, type="primary", key="btn_nueva_cotizacion"):
-                # Limpiar TODO: datos del cliente + ítems + vista previa
-                st.session_state.cotizacion_items = []
-                st.session_state.cliente_datos = {}
-                if 'mostrar_cotizacion' in st.session_state:
-                    del st.session_state.mostrar_cotizacion
-                if 'saved_quote_number' in st.session_state:
-                    del st.session_state.saved_quote_number
-                if 'cotizacion_guardada' in st.session_state:
-                    del st.session_state.cotizacion_guardada
-                
-                # Incrementar contadores para limpiar todos los formularios
-                st.session_state.cliente_reset_counter += 1
-                st.session_state.item_reset_counter += 1
-                st.rerun()
+                try:
+                    # Limpiar TODO: datos del cliente + ítems + vista previa
+                    st.session_state.cotizacion_items = []
+                    st.session_state.cliente_datos = {}
+                    if 'mostrar_cotizacion' in st.session_state:
+                        del st.session_state.mostrar_cotizacion
+                    if 'saved_quote_number' in st.session_state:
+                        del st.session_state.saved_quote_number
+                    if 'cotizacion_guardada' in st.session_state:
+                        del st.session_state.cotizacion_guardada
+                    
+                    # Incrementar contadores para limpiar todos los formularios (con verificación de seguridad)
+                    if 'cliente_reset_counter' not in st.session_state:
+                        st.session_state.cliente_reset_counter = 0
+                    if 'item_reset_counter' not in st.session_state:
+                        st.session_state.item_reset_counter = 0
+                    
+                    st.session_state.cliente_reset_counter += 1
+                    st.session_state.item_reset_counter += 1
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Error al crear nueva cotización: {str(e)}")
+                    print(f"ERROR en NUEVA COTIZACIÓN: {str(e)}")  # Log para debugging

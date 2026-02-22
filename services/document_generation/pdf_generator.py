@@ -472,7 +472,7 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
         ])
     
     # Anchos de columna optimizados (12 columnas) - Ajustados para alineación perfecta con DATOS DEL CLIENTE (9.48 inches total)
-    col_widths = [0.4*inch, 1.48*inch, 0.9*inch, 0.8*inch, 0.7*inch, 0.4*inch, 0.7*inch, 0.8*inch, 0.7*inch, 0.6*inch, 1.0*inch, 1.0*inch]
+    col_widths = [0.4*inch, 1.7*inch, 0.95*inch, 0.85*inch, 0.6*inch, 0.4*inch, 0.6*inch, 0.7*inch, 0.78*inch, 0.5*inch, 1.0*inch, 1.0*inch]
     
     tabla_items = Table(items_data, colWidths=col_widths)
     tabla_items.setStyle(TableStyle([
