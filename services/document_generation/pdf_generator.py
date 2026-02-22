@@ -534,7 +534,7 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
         [Paragraph(terminos_html, style_normal)]
     ]
     
-    tabla_col_izq = Table(col_izq_data, colWidths=[4.8*inch])
+    tabla_col_izq = Table(col_izq_data, colWidths=[3.8*inch])
     tabla_col_izq.setStyle(TableStyle([
         ('BOX', (0, 1), (-1, -1), 1.5, COLOR_AZUL_AVIACION),
         ('BACKGROUND', (0, 1), (-1, -1), colors.white),
@@ -559,7 +559,7 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
     # Anchos ajustados para alinear con columnas UNIT y TOTAL de la tabla azul
     # Columna izquierda: desde inicio hasta antes de TOTAL (8.88 inches)
     # Columna derecha: ancho de columna TOTAL (0.6 inches)
-    tabla_resumen = Table(resumen_data, colWidths=[3.68*inch, 0.6*inch])
+    tabla_resumen = Table(resumen_data, colWidths=[4.48*inch, 1.2*inch])
     tabla_resumen.setStyle(TableStyle([
         ('ALIGN', (0, 0), (0, -1), 'RIGHT'),   # Etiquetas alineadas a la derecha
         ('ALIGN', (1, 0), (1, -1), 'RIGHT'),   # Valores alineados a la derecha
@@ -574,9 +574,9 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
     
     # Crear tabla principal de 2 columnas con espacio entre ellas
     # Ajustado para alinear perfectamente con DATOS DEL CLIENTE (9.48 inches total)
-    # Columna izquierda: 4.8 inches, Columna derecha: 4.0 inches, Espacio: 0.68 inches
+    # Columna izquierda: 3.8 inches, Columna derecha: 5.68 inches (más espacio para valores numéricos largos)
     layout_2col_data = [[tabla_col_izq, tabla_resumen]]
-    tabla_2col = Table(layout_2col_data, colWidths=[4.8*inch, 4.68*inch])
+    tabla_2col = Table(layout_2col_data, colWidths=[3.8*inch, 5.68*inch])
     tabla_2col.setStyle(TableStyle([
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
         ('ALIGN', (0, 0), (0, 0), 'LEFT'),   # Alinear columna izquierda a la izquierda
