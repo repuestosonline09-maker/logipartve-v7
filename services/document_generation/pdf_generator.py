@@ -556,10 +556,10 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
         [Paragraph("<b>Y EN LA ENTREGA ......</b>", style_normal), Paragraph(f"<b>${en_entrega:.2f}</b>", style_normal)],
     ]
     
-    # Anchos ajustados para alinear con columnas UNIT y TOTAL de la tabla azul
-    # Columna izquierda: desde inicio hasta antes de TOTAL (8.88 inches)
-    # Columna derecha: ancho de columna TOTAL (0.6 inches)
-    tabla_resumen = Table(resumen_data, colWidths=[4.48*inch, 1.2*inch])
+    # Anchos ajustados para alinear con columna TOTAL de la tabla azul
+    # Columna izquierda: 5.08 inches (para que valores queden en posición 8.88 desde borde izquierdo)
+    # Columna derecha: 0.6 inches (mismo ancho que columna TOTAL)
+    tabla_resumen = Table(resumen_data, colWidths=[5.08*inch, 0.6*inch])
     tabla_resumen.setStyle(TableStyle([
         ('ALIGN', (0, 0), (0, -1), 'RIGHT'),   # Etiquetas alineadas a la derecha
         ('ALIGN', (1, 0), (1, -1), 'RIGHT'),   # Valores alineados a la derecha
