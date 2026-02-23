@@ -902,70 +902,91 @@ def render_analyst_panel():
         gen_col1, gen_col2, gen_col3 = st.columns(3)
         with gen_col1:
             if st.button("💾 GUARDAR COTIZACIÓN", use_container_width=True, type="primary", key="btn_guardar_cotizacion"):
-                # Generar número de cotización definitivo
-                final_quote_number = QuoteNumberingService.generate_quote_number(user_id, username)
-                
-                if final_quote_number:
-                    try:
-                        # Preparar datos del cliente
-                        cliente = st.session_state.get('cliente_datos', {})
-                        
-                        # Preparar datos de la cotización para guardar
-                        quote_data = {
-                            'quote_number': final_quote_number,
-                            'analyst_id': user_id,
-                            'client_name': cliente.get('nombre', ''),
-                            'client_phone': cliente.get('telefono', ''),
-                            'client_email': cliente.get('email', ''),
-                            'client_cedula': cliente.get('ci_rif', ''),
-                            'client_address': cliente.get('direccion', ''),
-                            'client_vehicle': f"{cliente.get('vehiculo', '')} {cliente.get('cilindrada', '')}".strip(),
-                            'client_year': cliente.get('ano', ''),
-                            'client_vin': cliente.get('vin', ''),
-                            'total_amount': total_cotizacion_bs,
-                            'sub_total': sub_total,
-                            'iva_total': iva_total,
-                            'abona_ya': abona_ya,
-                            'en_entrega': y_en_entrega,
-                            'terms_conditions': config.get('terms_conditions', ''),
-                            'status': 'draft',
-                            'pdf_path': '',  # Se actualizará cuando se genere el PDF
-                            'jpeg_path': ''  # Se actualizará cuando se genere el PNG
-                        }
-                        
-                        # Guardar cotización en base de datos
-                        quote_id = DBManager.save_quote(quote_data)
-                        
-                        if quote_id:
-                            # Guardar ítems de la cotización
-                            items_guardados = DBManager.save_quote_items(quote_id, items)
-                            
-                            if items_guardados:
-                                # Guardar en session_state
-                                st.session_state.saved_quote_number = final_quote_number
-                                st.session_state.saved_quote_id = quote_id
-                                st.session_state.cotizacion_guardada = True
-                                st.session_state.show_save_success = True
-                                
-                                # Registrar actividad
-                                DBManager.log_activity(
-                                    user_id,
-                                    'quote_created',
-                                    f'Cotización {final_quote_number} creada con {len(items)} ítems'
-                                )
-                                
-                                st.rerun()
-                            else:
-                                st.error("❌ Error al guardar ítems de la cotización")
-                        else:
-                            st.error("❌ Error al guardar cotización en base de datos")
-                    
-                    except Exception as e:
-                        st.error(f"❌ Error al guardar cotización: {str(e)}")
-                        import traceback
-                        traceback.print_exc()
+                # Validar que haya ítems
+                if not items or len(items) == 0:
+                    st.error("❌ Debes agregar al menos un ítem para guardar la cotización")
                 else:
-                    st.error("❌ Error al generar número de cotización")
+                    # Generar número de cotización definitivo
+                    final_quote_number = QuoteNumberingService.generate_quote_number(user_id, username)
+                    
+                    if final_quote_number:
+                        try:
+                            # Preparar datos del cliente
+                            cliente = st.session_state.get('cliente_datos', {})
+                            
+                            # Validar que las variables de totales existan
+                            if 'total_cotizacion_bs' not in locals():
+                                st.error("❌ Error: No se pudieron calcular los totales. Por favor, recarga la página.")
+                            else:
+                                print(f"📊 DEBUG - Guardando cotización {final_quote_number}")
+                                print(f"📊 DEBUG - Total BS: {total_cotizacion_bs}")
+                                print(f"📊 DEBUG - Subtotal: {sub_total}")
+                                print(f"📊 DEBUG - IVA: {iva_total}")
+                                print(f"📊 DEBUG - Ítems: {len(items)}")
+                                
+                                # Preparar datos de la cotización para guardar
+                                quote_data = {
+                                    'quote_number': final_quote_number,
+                                    'analyst_id': user_id,
+                                    'client_name': cliente.get('nombre', ''),
+                                    'client_phone': cliente.get('telefono', ''),
+                                    'client_email': cliente.get('email', ''),
+                                    'client_cedula': cliente.get('ci_rif', ''),
+                                    'client_address': cliente.get('direccion', ''),
+                                    'client_vehicle': f"{cliente.get('vehiculo', '')} {cliente.get('cilindrada', '')}".strip(),
+                                    'client_year': cliente.get('ano', ''),
+                                    'client_vin': cliente.get('vin', ''),
+                                    'total_amount': total_cotizacion_bs,
+                                    'sub_total': sub_total,
+                                    'iva_total': iva_total,
+                                    'abona_ya': abona_ya,
+                                    'en_entrega': y_en_entrega,
+                                    'terms_conditions': config.get('terms_conditions', ''),
+                                    'status': 'draft',
+                                    'pdf_path': '',  # Se actualizará cuando se genere el PDF
+                                    'jpeg_path': ''  # Se actualizará cuando se genere el PNG
+                                }
+                                
+                                print(f"📊 DEBUG - Llamando a DBManager.save_quote()...")
+                                # Guardar cotización en base de datos
+                                quote_id = DBManager.save_quote(quote_data)
+                                print(f"📊 DEBUG - Resultado save_quote: {quote_id}")
+                                
+                                if quote_id:
+                                    print(f"📊 DEBUG - Guardando {len(items)} ítems...")
+                                    # Guardar ítems de la cotización
+                                    items_guardados = DBManager.save_quote_items(quote_id, items)
+                                    print(f"📊 DEBUG - Resultado save_quote_items: {items_guardados}")
+                                    
+                                    if items_guardados:
+                                        # Guardar en session_state
+                                        st.session_state.saved_quote_number = final_quote_number
+                                        st.session_state.saved_quote_id = quote_id
+                                        st.session_state.cotizacion_guardada = True
+                                        st.session_state.show_save_success = True
+                                        
+                                        print(f"✅ DEBUG - Cotización guardada exitosamente: {final_quote_number} (ID: {quote_id})")
+                                        
+                                        # Registrar actividad
+                                        DBManager.log_activity(
+                                            user_id,
+                                            'quote_created',
+                                            f'Cotización {final_quote_number} creada con {len(items)} ítems'
+                                        )
+                                        
+                                        st.rerun()
+                                    else:
+                                        st.error("❌ Error al guardar ítems de la cotización. Revisa los logs para más detalles.")
+                                else:
+                                    st.error("❌ Error al guardar cotización en base de datos. Revisa los logs para más detalles.")
+                        
+                        except Exception as e:
+                            st.error(f"❌ Error al guardar cotización: {str(e)}")
+                            print(f"❌ DEBUG - Excepción al guardar: {str(e)}")
+                            import traceback
+                            traceback.print_exc()
+                    else:
+                        st.error("❌ Error al generar número de cotización")
         
         with gen_col2:
             if st.button("📅 GENERAR PDF", use_container_width=True, type="secondary", key="btn_generar_pdf"):
