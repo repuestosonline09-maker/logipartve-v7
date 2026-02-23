@@ -195,6 +195,7 @@ def render_analyst_panel():
             'cedula': editing_quote_data.get('client_cedula', ''),
             'direccion': editing_quote_data.get('client_address', ''),
             'vehiculo': editing_quote_data.get('client_vehicle', ''),
+            'cilindrada': editing_quote_data.get('client_cilindrada', ''),
             'year': editing_quote_data.get('client_year', ''),
             'vin': editing_quote_data.get('client_vin', '')
         }
@@ -363,28 +364,40 @@ def render_analyst_panel():
     
     # Formulario de datos del cliente
     st.markdown("### 👤 Datos del Cliente")
+    
+    # Obtener valores por defecto en modo edición
+    default_nombre = st.session_state.cliente_datos.get('nombre', '') if editing_mode else ''
+    default_telefono = st.session_state.cliente_datos.get('telefono', '') if editing_mode else ''
+    default_email = st.session_state.cliente_datos.get('email', '') if editing_mode else ''
+    default_vehiculo = st.session_state.cliente_datos.get('vehiculo', '') if editing_mode else ''
+    default_cilindrada = st.session_state.cliente_datos.get('cilindrada', '') if editing_mode else ''
+    default_ano = st.session_state.cliente_datos.get('year', '') if editing_mode else ''
+    default_vin = st.session_state.cliente_datos.get('vin', '') if editing_mode else ''
+    default_direccion = st.session_state.cliente_datos.get('direccion', '') if editing_mode else ''
+    default_ci_rif = st.session_state.cliente_datos.get('cedula', '') if editing_mode else ''
+    
     col1, col2 = st.columns(2)
     with col1:
-        cliente_nombre = st.text_input("Nombre del Cliente", key=f"cliente_nombre_{reset_key}")
-        cliente_telefono = st.text_input("Teléfono", key=f"cliente_telefono_{reset_key}")
+        cliente_nombre = st.text_input("Nombre del Cliente", value=default_nombre, key=f"cliente_nombre_{reset_key}")
+        cliente_telefono = st.text_input("Teléfono", value=default_telefono, key=f"cliente_telefono_{reset_key}")
     with col2:
-        cliente_email = st.text_input("Email (opcional)", key=f"cliente_email_{reset_key}")
-        cliente_vehiculo = st.text_input("Vehículo", placeholder="Ej: Hyundai Santa Fe 2006", key=f"cliente_vehiculo_{reset_key}")
+        cliente_email = st.text_input("Email (opcional)", value=default_email, key=f"cliente_email_{reset_key}")
+        cliente_vehiculo = st.text_input("Vehículo", value=default_vehiculo, placeholder="Ej: Hyundai Santa Fe 2006", key=f"cliente_vehiculo_{reset_key}")
     
     col3, col4, col5 = st.columns(3)
     with col3:
-        cliente_cilindrada = st.text_input("Cilindrada/Motor", placeholder="Ej: V6 3.5L", key=f"cliente_cilindrada_{reset_key}")
+        cliente_cilindrada = st.text_input("Cilindrada/Motor", value=default_cilindrada, placeholder="Ej: V6 3.5L", key=f"cliente_cilindrada_{reset_key}")
     with col4:
-        cliente_ano = st.text_input("Año del Vehículo", key=f"cliente_ano_{reset_key}")
+        cliente_ano = st.text_input("Año del Vehículo", value=default_ano, key=f"cliente_ano_{reset_key}")
     with col5:
-        cliente_vin = st.text_input("Nro. VIN (opcional)", key=f"cliente_vin_{reset_key}")
+        cliente_vin = st.text_input("Nro. VIN (opcional)", value=default_vin, key=f"cliente_vin_{reset_key}")
     
     # Nuevos campos opcionales: Dirección y C.I./RIF
     col7, col8 = st.columns(2)
     with col7:
-        cliente_direccion = st.text_input("Dirección (opcional)", key=f"cliente_direccion_{reset_key}")
+        cliente_direccion = st.text_input("Dirección (opcional)", value=default_direccion, key=f"cliente_direccion_{reset_key}")
     with col8:
-        cliente_ci_rif = st.text_input("C.I. / RIF (opcional)", key=f"cliente_ci_rif_{reset_key}")
+        cliente_ci_rif = st.text_input("C.I. / RIF (opcional)", value=default_ci_rif, key=f"cliente_ci_rif_{reset_key}")
     
     st.markdown("---")
     
