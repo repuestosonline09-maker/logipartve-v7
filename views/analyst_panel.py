@@ -94,6 +94,7 @@ def cargar_configuraciones():
             "tax_percentage": ConfigHelpers.get_tax_percentage(),
             "diferencial": ConfigHelpers.get_diferencial(),
             "iva_venezuela": ConfigHelpers.get_iva_venezuela(),
+            "eur_usd_factor": float(DBManager.get_config('eur_usd_factor') or 1.23),
             "terms_conditions": DBManager.get_config('terms_conditions') or 'Términos y condiciones estándar.'
         }
         return config
@@ -168,13 +169,8 @@ def render_analyst_panel():
         st.markdown("### 💱 Convertidor de Moneda")
         st.info("🇪🇺 Convierte precios de repuestos europeos de EUR a USD")
         
-        # Obtener factor de conversión desde configuración
-        try:
-            eur_usd_config = DBManager.get_config('eur_usd_factor')
-            eur_usd_factor = float(eur_usd_config) if eur_usd_config else 1.23
-        except Exception as e:
-            st.warning(f"⚠️ Error al cargar configuración de moneda: {str(e)}")
-            eur_usd_factor = 1.23  # Valor por defecto
+        # Obtener factor de conversión desde config (ya cargado al inicio)
+        eur_usd_factor = config.get('eur_usd_factor', 1.23)
         
         # Inicializar contador de reset para el convertidor si no existe
         if 'converter_reset_counter' not in st.session_state:
