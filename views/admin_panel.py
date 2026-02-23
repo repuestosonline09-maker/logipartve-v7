@@ -906,58 +906,122 @@ def show_system_configuration():
 
 
 def show_reports_and_stats():
-    """Módulo de reportes y estadísticas."""
+    """Módulo de reportes y estadísticas globales."""
+    
+    import pandas as pd
     
     st.markdown('<div class="admin-section">', unsafe_allow_html=True)
-    st.markdown("### 📊 Reportes y Estadísticas")
+    st.markdown("### 📊 Estadísticas Globales")
     
-    # Obtener estadísticas
-    stats = DBManager.get_quote_stats()
+    # Filtro de período
+    period_col1, period_col2 = st.columns([3, 1])
     
-    # Tarjetas de estadísticas generales
-    st.markdown("#### Estadísticas Generales")
+    with period_col1:
+        period_global = st.selectbox(
+            "Período de estadísticas",
+            options=['all', 'year', 'quarter', 'month'],
+            format_func=lambda x: {
+                'all': 'Todo el tiempo',
+                'year': 'Último año',
+                'quarter': 'Últimos 3 meses',
+                'month': 'Último mes'
+            }.get(x, x),
+            key="period_global_stats"
+        )
     
-    col1, col2, col3, col4 = st.columns(4)
+    # Obtener estadísticas globales
+    stats = DBManager.get_global_statistics(period_global)
     
-    with col1:
-        st.markdown(f"""
-            <div class="stat-card">
-                <div class="stat-number">{stats['total']}</div>
-                <div class="stat-label">Total Cotizaciones</div>
-            </div>
-        """, unsafe_allow_html=True)
+    # Métricas principales
+    st.markdown("#### Resumen Global")
     
-    with col2:
-        draft_count = stats['by_status'].get('draft', 0)
-        st.markdown(f"""
-            <div class="stat-card">
-                <div class="stat-number">{draft_count}</div>
-                <div class="stat-label">Borradores</div>
-            </div>
-        """, unsafe_allow_html=True)
+    metric_col1, metric_col2, metric_col3, metric_col4, metric_col5 = st.columns(5)
     
-    with col3:
-        sent_count = stats['by_status'].get('sent', 0)
-        st.markdown(f"""
-            <div class="stat-card">
-                <div class="stat-number">{sent_count}</div>
-                <div class="stat-label">Enviadas</div>
-            </div>
-        """, unsafe_allow_html=True)
+    with metric_col1:
+        st.metric("📊 Total Cotizaciones", stats['total_quotes'])
     
-    with col4:
-        approved_count = stats['by_status'].get('approved', 0)
-        st.markdown(f"""
-            <div class="stat-card">
-                <div class="stat-number">{approved_count}</div>
-                <div class="stat-label">Aprobadas</div>
-            </div>
-        """, unsafe_allow_html=True)
+    with metric_col2:
+        st.metric("💰 Monto Total", f"${stats['total_amount']:,.2f}")
+    
+    with metric_col3:
+        st.metric("📈 Tasa de Aprobación", f"{stats['approval_rate']}%")
+    
+    with metric_col4:
+        st.metric("👥 Analistas Activos", stats['active_analysts'])
+    
+    with metric_col5:
+        # Promedio por cotización
+        avg_amount = stats['total_amount'] / stats['total_quotes'] if stats['total_quotes'] > 0 else 0
+        st.metric("💵 Promedio", f"${avg_amount:,.2f}")
     
     st.markdown("---")
     
-    # Reportes por período
-    st.markdown("#### Reportes por Período")
+    # Gráfico de distribución por estado
+    st.subheader("📊 Distribución por Estado")
+    
+    if stats['quotes_by_status']:
+        status_map = {
+            'draft': '📝 Borrador',
+            'sent': '📤 Enviada',
+            'approved': '✅ Aprobada',
+            'rejected': '❌ Rechazada'
+        }
+        
+        # Preparar datos para gráfico
+        status_data = pd.DataFrame([
+            {'Estado': status_map.get(status, status), 'Cantidad': count}
+            for status, count in stats['quotes_by_status'].items()
+        ])
+        
+        # Gráfico de barras
+        st.bar_chart(status_data.set_index('Estado'))
+    else:
+        st.info("ℹ️ No hay datos para mostrar")
+    
+    st.markdown("---")
+    
+    # Ranking de analistas
+    st.subheader("🏆 RANKING DE ANALISTAS")
+    
+    ranking_col1, ranking_col2, ranking_col3 = st.columns(3)
+    
+    with ranking_col1:
+        st.markdown("##### 📊 Por Número de Cotizaciones")
+        ranking_count = DBManager.get_analyst_ranking('quote_count', period_global, limit=10)
+        
+        if ranking_count:
+            for idx, analyst in enumerate(ranking_count, 1):
+                medal = "🥇" if idx == 1 else ("🥈" if idx == 2 else ("🥉" if idx == 3 else f"{idx}."))
+                st.markdown(f"{medal} **{analyst['analyst_name']}** - {int(analyst['metric_value'])} cotizaciones")
+        else:
+            st.info("ℹ️ No hay datos")
+    
+    with ranking_col2:
+        st.markdown("##### 💰 Por Monto Total")
+        ranking_amount = DBManager.get_analyst_ranking('total_amount', period_global, limit=10)
+        
+        if ranking_amount:
+            for idx, analyst in enumerate(ranking_amount, 1):
+                medal = "🥇" if idx == 1 else ("🥈" if idx == 2 else ("🥉" if idx == 3 else f"{idx}."))
+                st.markdown(f"{medal} **{analyst['analyst_name']}** - ${analyst['metric_value']:,.2f}")
+        else:
+            st.info("ℹ️ No hay datos")
+    
+    with ranking_col3:
+        st.markdown("##### 📈 Por Tasa de Aprobación")
+        ranking_approval = DBManager.get_analyst_ranking('approval_rate', period_global, limit=10)
+        
+        if ranking_approval:
+            for idx, analyst in enumerate(ranking_approval, 1):
+                medal = "🥇" if idx == 1 else ("🥈" if idx == 2 else ("🥉" if idx == 3 else f"{idx}."))
+                st.markdown(f"{medal} **{analyst['analyst_name']}** - {analyst['metric_value']:.1f}%")
+        else:
+            st.info("ℹ️ No hay datos")
+    
+    st.markdown("---")
+    
+    # Reportes por período (simplificado)
+    st.subheader("📅 Reportes por Período")
     
     col1, col2 = st.columns(2)
     

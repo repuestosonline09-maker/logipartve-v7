@@ -27,6 +27,88 @@ def render_my_quotes_panel():
     st.title("📋 MIS COTIZACIONES")
     st.markdown("---")
     
+    # ==================== ESTADÍSTICAS ====================
+    
+    st.subheader("📊 MIS ESTADÍSTICAS")
+    
+    # Filtro de período para estadísticas
+    period_stats = st.selectbox(
+        "Período de estadísticas",
+        options=['all', 'year', 'quarter', 'month'],
+        format_func=lambda x: {
+            'all': 'Todo el tiempo',
+            'year': 'Último año',
+            'quarter': 'Últimos 3 meses',
+            'month': 'Último mes'
+        }.get(x, x),
+        key="period_stats"
+    )
+    
+    # Obtener estadísticas
+    stats = DBManager.get_analyst_statistics(user_id, period_stats)
+    
+    # Mostrar métricas principales
+    metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
+    
+    with metric_col1:
+        st.metric("📊 Total Cotizaciones", stats['total_quotes'])
+    
+    with metric_col2:
+        st.metric("💰 Monto Total", f"${stats['total_amount']:,.2f}")
+    
+    with metric_col3:
+        st.metric("📈 Tasa de Aprobación", f"{stats['approval_rate']}%")
+    
+    with metric_col4:
+        # Calcular promedio por cotización
+        avg_amount = stats['total_amount'] / stats['total_quotes'] if stats['total_quotes'] > 0 else 0
+        st.metric("💵 Promedio por Cotización", f"${avg_amount:,.2f}")
+    
+    st.markdown("---")
+    
+    # Gráficos
+    graph_col1, graph_col2 = st.columns(2)
+    
+    with graph_col1:
+        st.subheader("📊 Distribución por Estado")
+        
+        if stats['quotes_by_status']:
+            status_map = {
+                'draft': '📝 Borrador',
+                'sent': '📤 Enviada',
+                'approved': '✅ Aprobada',
+                'rejected': '❌ Rechazada'
+            }
+            
+            # Preparar datos para gráfico
+            status_data = pd.DataFrame([
+                {'Estado': status_map.get(status, status), 'Cantidad': count}
+                for status, count in stats['quotes_by_status'].items()
+            ])
+            
+            # Gráfico de barras
+            st.bar_chart(status_data.set_index('Estado'))
+        else:
+            st.info("ℹ️ No hay datos para mostrar")
+    
+    with graph_col2:
+        st.subheader("📈 Evolución Mensual")
+        
+        # Obtener evolución mensual
+        evolution = DBManager.get_analyst_monthly_evolution(user_id, months=6)
+        
+        if evolution:
+            # Preparar datos para gráfico
+            evolution_data = pd.DataFrame(evolution)
+            evolution_data = evolution_data.rename(columns={'month': 'Mes', 'quote_count': 'Cotizaciones'})
+            
+            # Gráfico de líneas
+            st.line_chart(evolution_data.set_index('Mes')['Cotizaciones'])
+        else:
+            st.info("ℹ️ No hay datos para mostrar")
+    
+    st.markdown("---")
+    
     # ==================== FILTROS Y BÚSQUEDA ====================
     
     st.subheader("🔍 Filtros y Búsqueda")
@@ -176,7 +258,7 @@ def render_my_quotes_panel():
         selected_quote_id = quote_options[selected_quote_display]
         
         # Botones de acción
-        action_col1, action_col2, action_col3, action_col4 = st.columns(4)
+        action_col1, action_col2, action_col3, action_col4, action_col5 = st.columns(5)
         
         with action_col1:
             if st.button("👁️ VER DETALLES", use_container_width=True, type="primary"):
@@ -184,6 +266,21 @@ def render_my_quotes_panel():
                 st.rerun()
         
         with action_col2:
+            if st.button("✏️ EDITAR", use_container_width=True, type="secondary"):
+                # Cargar cotización para edición
+                quote_details = DBManager.get_quote_full_details(selected_quote_id)
+                if quote_details:
+                    # Activar modo edición
+                    st.session_state.editing_mode = True
+                    st.session_state.editing_quote_id = selected_quote_id
+                    st.session_state.editing_quote_number = quote_details['quote_number']
+                    st.session_state.editing_quote_data = quote_details
+                    st.success(f"✅ Cotización #{quote_details['quote_number']} cargada para edición")
+                    st.info("👉 Vaya a la pestaña 'Panel de Analista' para editar")
+                else:
+                    st.error("❌ Error al cargar cotización")
+        
+        with action_col3:
             if st.button("📄 DESCARGAR PDF", use_container_width=True):
                 quote = DBManager.get_quote_by_id(selected_quote_id)
                 if quote and quote.get('pdf_path'):
@@ -202,7 +299,7 @@ def render_my_quotes_panel():
                 else:
                     st.warning("⚠️ Esta cotización no tiene PDF generado")
         
-        with action_col3:
+        with action_col4:
             if st.button("🖼️ DESCARGAR PNG", use_container_width=True):
                 quote = DBManager.get_quote_by_id(selected_quote_id)
                 if quote and quote.get('jpeg_path'):
@@ -221,8 +318,8 @@ def render_my_quotes_panel():
                 else:
                     st.warning("⚠️ Esta cotización no tiene PNG generado")
         
-        with action_col4:
-            if st.button("🗑️ ELIMINAR", use_container_width=True, type="secondary"):
+        with action_col5:
+            if st.button("🕑️ ELIMINAR", use_container_width=True, type="secondary"):
                 st.session_state.delete_quote_id = selected_quote_id
                 st.rerun()
     
@@ -281,8 +378,37 @@ def show_quote_details(quote_id: int):
             "approved": "✅ Aprobada",
             "rejected": "❌ Rechazada"
         }
-        status_display = status_map.get(quote.get('status', 'draft'), '❓ Desconocido')
+        current_status = quote.get('status', 'draft')
+        status_display = status_map.get(current_status, '❓ Desconocido')
         st.metric("Estado", status_display)
+    
+    # Cambiar estado
+    st.markdown("---")
+    st.subheader("🔄 CAMBIAR ESTADO")
+    
+    status_col1, status_col2 = st.columns([2, 1])
+    
+    with status_col1:
+        new_status = st.selectbox(
+            "Nuevo estado",
+            options=['draft', 'sent', 'approved', 'rejected'],
+            format_func=lambda x: status_map.get(x, x),
+            index=['draft', 'sent', 'approved', 'rejected'].index(current_status),
+            key=f"status_change_{quote_id}"
+        )
+    
+    with status_col2:
+        if new_status != current_status:
+            if st.button("✅ CAMBIAR ESTADO", use_container_width=True, type="primary"):
+                user = AuthManager.get_current_user()
+                success = DBManager.update_quote_status(quote_id, new_status, user['user_id'])
+                if success:
+                    st.success(f"✅ Estado actualizado a: {status_map.get(new_status)}")
+                    st.rerun()
+                else:
+                    st.error("❌ Error al actualizar estado")
+        else:
+            st.info("ℹ️ Seleccione un estado diferente")
     
     st.markdown("---")
     
@@ -344,6 +470,36 @@ def show_quote_details(quote_id: int):
     
     with total_col4:
         st.metric("Abona Ya", f"${quote.get('abona_ya', 0):,.2f}")
+    
+    st.markdown("---")
+    
+    # Historial de cambios
+    st.subheader("📜 HISTORIAL DE CAMBIOS")
+    
+    history = DBManager.get_quote_history(quote_id)
+    
+    if history:
+        for change in history:
+            edited_at = change.get('edited_at')
+            if edited_at:
+                try:
+                    date_obj = datetime.fromisoformat(str(edited_at))
+                    date_display = date_obj.strftime("%d/%m/%Y %H:%M")
+                except:
+                    date_display = str(edited_at)
+            else:
+                date_display = "N/A"
+            
+            editor_name = change.get('editor_name', 'Usuario desconocido')
+            change_summary = change.get('change_summary', 'Sin descripción')
+            
+            st.markdown(f"""
+            📅 **{date_display}** - {editor_name}  
+            {change_summary}
+            """)
+            st.markdown("---")
+    else:
+        st.info("ℹ️ Esta cotización no tiene historial de cambios")
     
     st.markdown("---")
     

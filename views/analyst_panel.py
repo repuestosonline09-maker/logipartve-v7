@@ -154,14 +154,72 @@ def render_analyst_panel():
     else:
         next_quote_number = "N/A"
     
+    # Detectar modo edición
+    editing_mode = st.session_state.get('editing_mode', False)
+    editing_quote_id = st.session_state.get('editing_quote_id', None)
+    editing_quote_number = st.session_state.get('editing_quote_number', None)
+    editing_quote_data = st.session_state.get('editing_quote_data', None)
+    
     # Título con información del analista y número de cotización
-    st.title("📋 Nueva Cotización")
+    if editing_mode and editing_quote_number:
+        st.title(f"✏️ Editando Cotización #{editing_quote_number}")
+        st.info("📝 Modo edición activado. Modifique los datos y haga clic en 'ACTUALIZAR COTIZACIÓN' para guardar los cambios.")
+        
+        # Botón para cancelar edición
+        if st.button("❌ CANCELAR EDICIÓN", type="secondary"):
+            # Limpiar modo edición
+            st.session_state.editing_mode = False
+            st.session_state.editing_quote_id = None
+            st.session_state.editing_quote_number = None
+            st.session_state.editing_quote_data = None
+            st.session_state.cotizacion_items = []
+            st.session_state.cliente_datos = {}
+            st.success("✅ Edición cancelada")
+            st.rerun()
+    else:
+        st.title("📋 Nueva Cotización")
     
     # Mostrar mensaje de éxito si se acaba de guardar
     if st.session_state.get('show_save_success', False):
         st.success(f"✅ ¡Cotización {st.session_state.saved_quote_number} guardada exitosamente! Ahora puedes generar el PDF.")
         # Limpiar el flag después de mostrar
         st.session_state.show_save_success = False
+    
+    # Cargar datos en modo edición (solo la primera vez)
+    if editing_mode and editing_quote_data and not st.session_state.get('editing_data_loaded', False):
+        # Cargar datos del cliente
+        st.session_state.cliente_datos = {
+            'nombre': editing_quote_data.get('client_name', ''),
+            'telefono': editing_quote_data.get('client_phone', ''),
+            'email': editing_quote_data.get('client_email', ''),
+            'cedula': editing_quote_data.get('client_cedula', ''),
+            'direccion': editing_quote_data.get('client_address', ''),
+            'vehiculo': editing_quote_data.get('client_vehicle', ''),
+            'year': editing_quote_data.get('client_year', ''),
+            'vin': editing_quote_data.get('client_vin', '')
+        }
+        
+        # Cargar ítems
+        items = editing_quote_data.get('items', [])
+        st.session_state.cotizacion_items = []
+        for item in items:
+            st.session_state.cotizacion_items.append({
+                'descripcion': item.get('description', ''),
+                'parte': item.get('part_number', ''),
+                'marca': item.get('marca', ''),
+                'garantia': item.get('garantia', ''),
+                'cantidad': item.get('quantity', 1),
+                'unit': item.get('unit_cost', 0),
+                'total': item.get('total_cost', 0),
+                'envio_tipo': item.get('envio_tipo', ''),
+                'origen': item.get('origen', ''),
+                'fabricacion': item.get('fabricacion', ''),
+                'tiempo_entrega': item.get('tiempo_entrega', '')
+            })
+        
+        # Marcar como cargado
+        st.session_state.editing_data_loaded = True
+        st.rerun()
     
     # ==========================================
     # SIDEBAR: CONVERTIDOR DE MONEDA EUR → USD
@@ -901,11 +959,91 @@ def render_analyst_panel():
         # Botones de generación
         gen_col1, gen_col2, gen_col3 = st.columns(3)
         with gen_col1:
-            if st.button("💾 GUARDAR COTIZACIÓN", use_container_width=True, type="primary", key="btn_guardar_cotizacion"):
+            # Cambiar botón según modo
+            button_label = "🔄 ACTUALIZAR COTIZACIÓN" if editing_mode else "💾 GUARDAR COTIZACIÓN"
+            
+            if st.button(button_label, use_container_width=True, type="primary", key="btn_guardar_cotizacion"):
                 # Validar que haya ítems
                 if not items or len(items) == 0:
                     st.error("❌ Debes agregar al menos un ítem para guardar la cotización")
+                elif editing_mode and editing_quote_id:
+                    # MODO EDICIÓN: Actualizar cotización existente
+                    try:
+                        # Preparar datos del cliente
+                        cliente = st.session_state.get('cliente_datos', {})
+                        
+                        # Validar que las variables de totales existan
+                        if 'total_cotizacion_bs' not in locals():
+                            st.error("❌ Error: No se pudieron calcular los totales. Por favor, recarga la página.")
+                        else:
+                            print(f"📊 DEBUG - Actualizando cotización {editing_quote_number}")
+                            print(f"📊 DEBUG - Total BS: {total_cotizacion_bs}")
+                            print(f"📊 DEBUG - Ítems: {len(items)}")
+                            
+                            # Preparar datos de la cotización para actualizar
+                            quote_data = {
+                                'client_name': cliente.get('nombre', ''),
+                                'client_phone': cliente.get('telefono', ''),
+                                'client_email': cliente.get('email', ''),
+                                'client_cedula': cliente.get('ci_rif', ''),
+                                'client_address': cliente.get('direccion', ''),
+                                'client_vehicle': f"{cliente.get('vehiculo', '')} {cliente.get('cilindrada', '')}".strip(),
+                                'client_year': cliente.get('ano', ''),
+                                'client_vin': cliente.get('vin', ''),
+                                'total_amount': total_cotizacion_bs,
+                                'sub_total': sub_total,
+                                'iva_total': iva_total,
+                                'abona_ya': abona_ya,
+                                'en_entrega': y_en_entrega,
+                                'terms_conditions': config.get('terms_conditions', ''),
+                                'pdf_path': '',  # Se actualizará cuando se regenere el PDF
+                                'jpeg_path': ''  # Se actualizará cuando se regenere el PNG
+                            }
+                            
+                            print(f"📊 DEBUG - Llamando a DBManager.update_quote()...")
+                            # Actualizar cotización en base de datos
+                            success = DBManager.update_quote(editing_quote_id, quote_data, user_id)
+                            print(f"📊 DEBUG - Resultado update_quote: {success}")
+                            
+                            if success:
+                                print(f"📊 DEBUG - Actualizando {len(items)} ítems...")
+                                # Actualizar ítems de la cotización
+                                items_actualizados = DBManager.update_quote_items(editing_quote_id, items, user_id)
+                                print(f"📊 DEBUG - Resultado update_quote_items: {items_actualizados}")
+                                
+                                if items_actualizados:
+                                    # Limpiar modo edición
+                                    st.session_state.editing_mode = False
+                                    st.session_state.editing_quote_id = None
+                                    st.session_state.editing_quote_number = None
+                                    st.session_state.editing_quote_data = None
+                                    st.session_state.editing_data_loaded = False
+                                    st.session_state.cotizacion_items = []
+                                    st.session_state.cliente_datos = {}
+                                    
+                                    print(f"✅ DEBUG - Cotización actualizada exitosamente: {editing_quote_number}")
+                                    
+                                    # Registrar actividad
+                                    DBManager.log_activity(
+                                        user_id,
+                                        'quote_updated',
+                                        f'Cotización {editing_quote_number} actualizada con {len(items)} ítems'
+                                    )
+                                    
+                                    st.success(f"✅ ¡Cotización {editing_quote_number} actualizada exitosamente!")
+                                    st.info("👉 Vaya a 'Mis Cotizaciones' para ver los cambios o regenerar el PDF")
+                                else:
+                                    st.error("❌ Error al actualizar ítems de la cotización. Revisa los logs para más detalles.")
+                            else:
+                                st.error("❌ Error al actualizar cotización en base de datos. Revisa los logs para más detalles.")
+                    
+                    except Exception as e:
+                        st.error(f"❌ Error al actualizar cotización: {str(e)}")
+                        print(f"❌ DEBUG - Excepción al actualizar: {str(e)}")
+                        import traceback
+                        traceback.print_exc()
                 else:
+                    # MODO NORMAL: Crear nueva cotización
                     # Generar número de cotización definitivo
                     final_quote_number = QuoteNumberingService.generate_quote_number(user_id, username)
                     

@@ -187,6 +187,38 @@ class DBManager:
             )
         """)
         
+        # Tabla 10: quote_history (historial de cambios de cotizaciones)
+        cursor.execute(f"""
+            CREATE TABLE IF NOT EXISTS quote_history (
+                id {id_type},
+                quote_id INTEGER NOT NULL,
+                edited_by INTEGER NOT NULL,
+                edited_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                field_changed TEXT,
+                old_value TEXT,
+                new_value TEXT,
+                change_summary TEXT,
+                FOREIGN KEY (quote_id) REFERENCES quotes(id) ON DELETE CASCADE,
+                FOREIGN KEY (edited_by) REFERENCES users(id)
+            )
+        """)
+        
+        # Tabla 11: quote_notifications (notificaciones de cotizaciones)
+        cursor.execute(f"""
+            CREATE TABLE IF NOT EXISTS quote_notifications (
+                id {id_type},
+                quote_id INTEGER NOT NULL,
+                notification_type TEXT NOT NULL CHECK(notification_type IN ('status_change', 'edit', 'comment')),
+                message TEXT NOT NULL,
+                created_by INTEGER NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                read_by_user INTEGER DEFAULT 0,
+                read_at TIMESTAMP,
+                FOREIGN KEY (quote_id) REFERENCES quotes(id) ON DELETE CASCADE,
+                FOREIGN KEY (created_by) REFERENCES users(id)
+            )
+        """)
+        
         conn.commit()
         
         # ==================== MIGRACIONES AUTOMÁTICAS ====================
@@ -1575,4 +1607,914 @@ class DBManager:
             
         except Exception as e:
             print(f"❌ Error al buscar cotizaciones: {e}")
+            return []
+
+    # ==================== FUNCIONES DE EDICIÓN DE COTIZACIONES ====================
+    
+    @staticmethod
+    def get_quote_full_details(quote_id: int) -> Optional[Dict[str, Any]]:
+        """
+        Obtiene todos los detalles de una cotización incluyendo ítems e historial.
+        
+        Args:
+            quote_id: ID de la cotización
+            
+        Returns:
+            Diccionario con todos los datos de la cotización o None si no existe
+        """
+        try:
+            conn = DBManager.get_connection()
+            cursor = conn.cursor()
+            is_postgres = DBManager.USE_POSTGRES
+            
+            # Obtener datos de la cotización
+            cursor.execute("""
+                SELECT q.*, u.full_name as analyst_name
+                FROM quotes q
+                JOIN users u ON q.analyst_id = u.id
+                WHERE q.id = %s
+            """ if is_postgres else """
+                SELECT q.*, u.full_name as analyst_name
+                FROM quotes q
+                JOIN users u ON q.analyst_id = u.id
+                WHERE q.id = ?
+            """, (quote_id,))
+            
+            quote = cursor.fetchone()
+            if not quote:
+                cursor.close()
+                conn.close()
+                return None
+            
+            quote_data = dict(quote)
+            
+            # Obtener ítems de la cotización
+            cursor.execute("""
+                SELECT * FROM quote_items WHERE quote_id = %s ORDER BY id
+            """ if is_postgres else """
+                SELECT * FROM quote_items WHERE quote_id = ? ORDER BY id
+            """, (quote_id,))
+            
+            items = [dict(row) for row in cursor.fetchall()]
+            quote_data['items'] = items
+            
+            # Obtener historial de cambios
+            cursor.execute("""
+                SELECT qh.*, u.full_name as editor_name
+                FROM quote_history qh
+                JOIN users u ON qh.edited_by = u.id
+                WHERE qh.quote_id = %s
+                ORDER BY qh.edited_at DESC
+                LIMIT 50
+            """ if is_postgres else """
+                SELECT qh.*, u.full_name as editor_name
+                FROM quote_history qh
+                JOIN users u ON qh.edited_by = u.id
+                WHERE qh.quote_id = ?
+                ORDER BY qh.edited_at DESC
+                LIMIT 50
+            """, (quote_id,))
+            
+            history = [dict(row) for row in cursor.fetchall()]
+            quote_data['history'] = history
+            
+            cursor.close()
+            conn.close()
+            
+            return quote_data
+            
+        except Exception as e:
+            print(f"❌ Error al obtener detalles completos de cotización: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+    
+    @staticmethod
+    def update_quote(quote_id: int, quote_data: Dict[str, Any], edited_by: int) -> bool:
+        """
+        Actualiza los datos principales de una cotización y registra el cambio en el historial.
+        
+        Args:
+            quote_id: ID de la cotización a actualizar
+            quote_data: Diccionario con los nuevos datos
+            edited_by: ID del usuario que realiza la edición
+            
+        Returns:
+            True si se actualizó exitosamente, False en caso de error
+        """
+        try:
+            conn = DBManager.get_connection()
+            cursor = conn.cursor()
+            is_postgres = DBManager.USE_POSTGRES
+            
+            # Obtener datos antiguos para el historial
+            cursor.execute("""
+                SELECT * FROM quotes WHERE id = %s
+            """ if is_postgres else """
+                SELECT * FROM quotes WHERE id = ?
+            """, (quote_id,))
+            
+            old_quote = dict(cursor.fetchone())
+            
+            # Actualizar cotización
+            cursor.execute("""
+                UPDATE quotes SET
+                    client_name = %s,
+                    client_phone = %s,
+                    client_email = %s,
+                    client_cedula = %s,
+                    client_address = %s,
+                    client_vehicle = %s,
+                    client_year = %s,
+                    client_vin = %s,
+                    total_amount = %s,
+                    sub_total = %s,
+                    iva_total = %s,
+                    abona_ya = %s,
+                    en_entrega = %s,
+                    terms_conditions = %s,
+                    pdf_path = %s,
+                    jpeg_path = %s
+                WHERE id = %s
+            """ if is_postgres else """
+                UPDATE quotes SET
+                    client_name = ?,
+                    client_phone = ?,
+                    client_email = ?,
+                    client_cedula = ?,
+                    client_address = ?,
+                    client_vehicle = ?,
+                    client_year = ?,
+                    client_vin = ?,
+                    total_amount = ?,
+                    sub_total = ?,
+                    iva_total = ?,
+                    abona_ya = ?,
+                    en_entrega = ?,
+                    terms_conditions = ?,
+                    pdf_path = ?,
+                    jpeg_path = ?
+                WHERE id = ?
+            """, (
+                quote_data.get('client_name'),
+                quote_data.get('client_phone'),
+                quote_data.get('client_email'),
+                quote_data.get('client_cedula'),
+                quote_data.get('client_address'),
+                quote_data.get('client_vehicle'),
+                quote_data.get('client_year'),
+                quote_data.get('client_vin'),
+                quote_data.get('total_amount'),
+                quote_data.get('sub_total'),
+                quote_data.get('iva_total'),
+                quote_data.get('abona_ya'),
+                quote_data.get('en_entrega'),
+                quote_data.get('terms_conditions'),
+                quote_data.get('pdf_path'),
+                quote_data.get('jpeg_path'),
+                quote_id
+            ))
+            
+            # Registrar cambios en el historial
+            changes = []
+            if old_quote['client_name'] != quote_data.get('client_name'):
+                changes.append(f"Nombre: {old_quote['client_name']} → {quote_data.get('client_name')}")
+            if old_quote['client_phone'] != quote_data.get('client_phone'):
+                changes.append(f"Teléfono: {old_quote['client_phone']} → {quote_data.get('client_phone')}")
+            if old_quote['total_amount'] != quote_data.get('total_amount'):
+                changes.append(f"Total: ${old_quote['total_amount']:.2f} → ${quote_data.get('total_amount'):.2f}")
+            
+            if changes:
+                change_summary = "Editó datos de la cotización: " + ", ".join(changes)
+                DBManager.log_quote_change(
+                    quote_id,
+                    edited_by,
+                    'quote_data',
+                    str(old_quote),
+                    str(quote_data),
+                    change_summary
+                )
+            
+            conn.commit()
+            cursor.close()
+            conn.close()
+            
+            print(f"✅ Cotización {quote_id} actualizada exitosamente")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Error al actualizar cotización: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+    
+    @staticmethod
+    def update_quote_items(quote_id: int, items: List[Dict[str, Any]], edited_by: int) -> bool:
+        """
+        Actualiza los ítems de una cotización (elimina los antiguos e inserta los nuevos).
+        
+        Args:
+            quote_id: ID de la cotización
+            items: Lista de diccionarios con los nuevos ítems
+            edited_by: ID del usuario que realiza la edición
+            
+        Returns:
+            True si se actualizaron exitosamente, False en caso de error
+        """
+        try:
+            conn = DBManager.get_connection()
+            cursor = conn.cursor()
+            is_postgres = DBManager.USE_POSTGRES
+            
+            # Obtener ítems antiguos para el historial
+            cursor.execute("""
+                SELECT COUNT(*) as count FROM quote_items WHERE quote_id = %s
+            """ if is_postgres else """
+                SELECT COUNT(*) as count FROM quote_items WHERE quote_id = ?
+            """, (quote_id,))
+            
+            old_count = cursor.fetchone()
+            old_count = old_count['count'] if is_postgres else old_count[0]
+            
+            # Eliminar ítems antiguos
+            cursor.execute("""
+                DELETE FROM quote_items WHERE quote_id = %s
+            """ if is_postgres else """
+                DELETE FROM quote_items WHERE quote_id = ?
+            """, (quote_id,))
+            
+            # Insertar nuevos ítems
+            for item in items:
+                cursor.execute("""
+                    INSERT INTO quote_items (
+                        quote_id, description, part_number, marca, garantia,
+                        quantity, unit_cost, total_cost, envio_tipo, origen,
+                        fabricacion, tiempo_entrega, page_url
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """ if is_postgres else """
+                    INSERT INTO quote_items (
+                        quote_id, description, part_number, marca, garantia,
+                        quantity, unit_cost, total_cost, envio_tipo, origen,
+                        fabricacion, tiempo_entrega, page_url
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    quote_id,
+                    item.get('descripcion') or item.get('description', ''),
+                    item.get('parte') or item.get('part_number', ''),
+                    item.get('marca', ''),
+                    item.get('garantia', ''),
+                    item.get('cantidad') or item.get('quantity', 1),
+                    item.get('unit') or item.get('unit_cost', 0),
+                    item.get('total') or item.get('total_cost', 0),
+                    item.get('envio_tipo', ''),
+                    item.get('origen', ''),
+                    item.get('fabricacion', ''),
+                    item.get('tiempo_entrega', ''),
+                    item.get('page_url', '')
+                ))
+            
+            # Registrar cambio en el historial
+            change_summary = f"Modificó ítems de la cotización ({old_count} → {len(items)} ítems)"
+            DBManager.log_quote_change(
+                quote_id,
+                edited_by,
+                'items',
+                f"{old_count} ítems",
+                f"{len(items)} ítems",
+                change_summary
+            )
+            
+            conn.commit()
+            cursor.close()
+            conn.close()
+            
+            print(f"✅ Ítems de cotización {quote_id} actualizados exitosamente")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Error al actualizar ítems de cotización: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+    
+    @staticmethod
+    def log_quote_change(quote_id: int, edited_by: int, field_changed: str, 
+                        old_value: str, new_value: str, change_summary: str) -> bool:
+        """
+        Registra un cambio en el historial de una cotización.
+        
+        Args:
+            quote_id: ID de la cotización
+            edited_by: ID del usuario que realizó el cambio
+            field_changed: Campo que cambió
+            old_value: Valor anterior
+            new_value: Valor nuevo
+            change_summary: Resumen del cambio
+            
+        Returns:
+            True si se registró exitosamente, False en caso de error
+        """
+        try:
+            conn = DBManager.get_connection()
+            cursor = conn.cursor()
+            is_postgres = DBManager.USE_POSTGRES
+            
+            cursor.execute("""
+                INSERT INTO quote_history (
+                    quote_id, edited_by, field_changed, old_value, new_value, change_summary
+                ) VALUES (%s, %s, %s, %s, %s, %s)
+            """ if is_postgres else """
+                INSERT INTO quote_history (
+                    quote_id, edited_by, field_changed, old_value, new_value, change_summary
+                ) VALUES (?, ?, ?, ?, ?, ?)
+            """, (quote_id, edited_by, field_changed, old_value, new_value, change_summary))
+            
+            conn.commit()
+            cursor.close()
+            conn.close()
+            
+            return True
+            
+        except Exception as e:
+            print(f"❌ Error al registrar cambio en historial: {e}")
+            return False
+    
+    @staticmethod
+    def get_quote_history(quote_id: int, limit: int = 50) -> List[Dict[str, Any]]:
+        """
+        Obtiene el historial de cambios de una cotización.
+        
+        Args:
+            quote_id: ID de la cotización
+            limit: Número máximo de registros a retornar
+            
+        Returns:
+            Lista de diccionarios con el historial de cambios
+        """
+        try:
+            conn = DBManager.get_connection()
+            cursor = conn.cursor()
+            is_postgres = DBManager.USE_POSTGRES
+            
+            cursor.execute("""
+                SELECT qh.*, u.full_name as editor_name
+                FROM quote_history qh
+                JOIN users u ON qh.edited_by = u.id
+                WHERE qh.quote_id = %s
+                ORDER BY qh.edited_at DESC
+                LIMIT %s
+            """ if is_postgres else """
+                SELECT qh.*, u.full_name as editor_name
+                FROM quote_history qh
+                JOIN users u ON qh.edited_by = u.id
+                WHERE qh.quote_id = ?
+                ORDER BY qh.edited_at DESC
+                LIMIT ?
+            """, (quote_id, limit))
+            
+            history = [dict(row) for row in cursor.fetchall()]
+            cursor.close()
+            conn.close()
+            
+            return history
+            
+        except Exception as e:
+            print(f"❌ Error al obtener historial de cotización: {e}")
+            return []
+    
+    # ==================== FUNCIONES DE CAMBIO DE ESTADO ====================
+    
+    @staticmethod
+    def update_quote_status(quote_id: int, new_status: str, changed_by: int) -> bool:
+        """
+        Actualiza el estado de una cotización y registra el cambio.
+        
+        Args:
+            quote_id: ID de la cotización
+            new_status: Nuevo estado (draft/sent/approved/rejected)
+            changed_by: ID del usuario que realiza el cambio
+            
+        Returns:
+            True si se actualizó exitosamente, False en caso de error
+        """
+        try:
+            conn = DBManager.get_connection()
+            cursor = conn.cursor()
+            is_postgres = DBManager.USE_POSTGRES
+            
+            # Obtener estado anterior
+            cursor.execute("""
+                SELECT status, quote_number FROM quotes WHERE id = %s
+            """ if is_postgres else """
+                SELECT status, quote_number FROM quotes WHERE id = ?
+            """, (quote_id,))
+            
+            result = cursor.fetchone()
+            old_status = result['status'] if is_postgres else result[0]
+            quote_number = result['quote_number'] if is_postgres else result[1]
+            
+            # Actualizar estado
+            cursor.execute("""
+                UPDATE quotes SET status = %s WHERE id = %s
+            """ if is_postgres else """
+                UPDATE quotes SET status = ? WHERE id = ?
+            """, (new_status, quote_id))
+            
+            # Mapeo de estados para mensajes
+            status_names = {
+                'draft': 'Borrador',
+                'sent': 'Enviada',
+                'approved': 'Aprobada',
+                'rejected': 'Rechazada'
+            }
+            
+            # Registrar cambio en historial
+            change_summary = f"Cambió estado: {status_names.get(old_status, old_status)} → {status_names.get(new_status, new_status)}"
+            DBManager.log_quote_change(
+                quote_id,
+                changed_by,
+                'status',
+                old_status,
+                new_status,
+                change_summary
+            )
+            
+            # Crear notificación
+            notification_message = f"Cotización #{quote_number} cambió de estado a '{status_names.get(new_status, new_status)}'"
+            DBManager.create_notification(
+                quote_id,
+                'status_change',
+                notification_message,
+                changed_by
+            )
+            
+            conn.commit()
+            cursor.close()
+            conn.close()
+            
+            print(f"✅ Estado de cotización {quote_id} actualizado: {old_status} → {new_status}")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Error al actualizar estado de cotización: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+    
+    # ==================== FUNCIONES DE NOTIFICACIONES ====================
+    
+    @staticmethod
+    def create_notification(quote_id: int, notification_type: str, message: str, created_by: int) -> Optional[int]:
+        """
+        Crea una notificación para una cotización.
+        
+        Args:
+            quote_id: ID de la cotización
+            notification_type: Tipo de notificación (status_change/edit/comment)
+            message: Mensaje de la notificación
+            created_by: ID del usuario que crea la notificación
+            
+        Returns:
+            ID de la notificación creada o None si hay error
+        """
+        try:
+            conn = DBManager.get_connection()
+            cursor = conn.cursor()
+            is_postgres = DBManager.USE_POSTGRES
+            
+            cursor.execute("""
+                INSERT INTO quote_notifications (
+                    quote_id, notification_type, message, created_by
+                ) VALUES (%s, %s, %s, %s)
+                RETURNING id
+            """ if is_postgres else """
+                INSERT INTO quote_notifications (
+                    quote_id, notification_type, message, created_by
+                ) VALUES (?, ?, ?, ?)
+            """, (quote_id, notification_type, message, created_by))
+            
+            if is_postgres:
+                notification_id = cursor.fetchone()['id']
+            else:
+                notification_id = cursor.lastrowid
+            
+            conn.commit()
+            cursor.close()
+            conn.close()
+            
+            return notification_id
+            
+        except Exception as e:
+            print(f"❌ Error al crear notificación: {e}")
+            return None
+    
+    @staticmethod
+    def get_pending_notifications(user_id: Optional[int] = None, limit: int = 50) -> List[Dict[str, Any]]:
+        """
+        Obtiene notificaciones pendientes.
+        
+        Args:
+            user_id: ID del usuario (None para todas las notificaciones)
+            limit: Número máximo de notificaciones a retornar
+            
+        Returns:
+            Lista de diccionarios con las notificaciones
+        """
+        try:
+            conn = DBManager.get_connection()
+            cursor = conn.cursor()
+            is_postgres = DBManager.USE_POSTGRES
+            
+            if user_id:
+                # Notificaciones de cotizaciones del usuario
+                cursor.execute("""
+                    SELECT n.*, q.quote_number, u.full_name as creator_name
+                    FROM quote_notifications n
+                    JOIN quotes q ON n.quote_id = q.id
+                    JOIN users u ON n.created_by = u.id
+                    WHERE q.analyst_id = %s AND n.read_by_user = 0
+                    ORDER BY n.created_at DESC
+                    LIMIT %s
+                """ if is_postgres else """
+                    SELECT n.*, q.quote_number, u.full_name as creator_name
+                    FROM quote_notifications n
+                    JOIN quotes q ON n.quote_id = q.id
+                    JOIN users u ON n.created_by = u.id
+                    WHERE q.analyst_id = ? AND n.read_by_user = 0
+                    ORDER BY n.created_at DESC
+                    LIMIT ?
+                """, (user_id, limit))
+            else:
+                # Todas las notificaciones (para admin)
+                cursor.execute("""
+                    SELECT n.*, q.quote_number, u.full_name as creator_name
+                    FROM quote_notifications n
+                    JOIN quotes q ON n.quote_id = q.id
+                    JOIN users u ON n.created_by = u.id
+                    WHERE n.read_by_user = 0
+                    ORDER BY n.created_at DESC
+                    LIMIT %s
+                """ if is_postgres else """
+                    SELECT n.*, q.quote_number, u.full_name as creator_name
+                    FROM quote_notifications n
+                    JOIN quotes q ON n.quote_id = q.id
+                    JOIN users u ON n.created_by = u.id
+                    WHERE n.read_by_user = 0
+                    ORDER BY n.created_at DESC
+                    LIMIT ?
+                """, (limit,))
+            
+            notifications = [dict(row) for row in cursor.fetchall()]
+            cursor.close()
+            conn.close()
+            
+            return notifications
+            
+        except Exception as e:
+            print(f"❌ Error al obtener notificaciones: {e}")
+            return []
+    
+    @staticmethod
+    def mark_notification_as_read(notification_id: int) -> bool:
+        """
+        Marca una notificación como leída.
+        
+        Args:
+            notification_id: ID de la notificación
+            
+        Returns:
+            True si se marcó exitosamente, False en caso de error
+        """
+        try:
+            conn = DBManager.get_connection()
+            cursor = conn.cursor()
+            is_postgres = DBManager.USE_POSTGRES
+            
+            cursor.execute("""
+                UPDATE quote_notifications 
+                SET read_by_user = 1, read_at = CURRENT_TIMESTAMP
+                WHERE id = %s
+            """ if is_postgres else """
+                UPDATE quote_notifications 
+                SET read_by_user = 1, read_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            """, (notification_id,))
+            
+            conn.commit()
+            cursor.close()
+            conn.close()
+            
+            return True
+            
+        except Exception as e:
+            print(f"❌ Error al marcar notificación como leída: {e}")
+            return False
+
+    # ==================== FUNCIONES DE ESTADÍSTICAS ====================
+    
+    @staticmethod
+    def get_analyst_statistics(analyst_id: int, period: str = 'all') -> Dict[str, Any]:
+        """
+        Calcula estadísticas del analista.
+        
+        Args:
+            analyst_id: ID del analista
+            period: 'month', 'quarter', 'year', 'all'
+            
+        Returns:
+            Diccionario con estadísticas del analista
+        """
+        try:
+            conn = DBManager.get_connection()
+            cursor = conn.cursor()
+            is_postgres = DBManager.USE_POSTGRES
+            
+            # Determinar filtro de fecha
+            date_filter = ""
+            if period == 'month':
+                date_filter = "AND created_at >= CURRENT_DATE - INTERVAL '30 days'" if is_postgres else "AND created_at >= date('now', '-30 days')"
+            elif period == 'quarter':
+                date_filter = "AND created_at >= CURRENT_DATE - INTERVAL '90 days'" if is_postgres else "AND created_at >= date('now', '-90 days')"
+            elif period == 'year':
+                date_filter = "AND created_at >= CURRENT_DATE - INTERVAL '365 days'" if is_postgres else "AND created_at >= date('now', '-365 days')"
+            
+            # Total de cotizaciones
+            cursor.execute(f"""
+                SELECT COUNT(*) as total FROM quotes 
+                WHERE analyst_id = {'%s' if is_postgres else '?'} {date_filter}
+            """, (analyst_id,))
+            total_quotes = cursor.fetchone()
+            total_quotes = total_quotes['total'] if is_postgres else total_quotes[0]
+            
+            # Monto total cotizado
+            cursor.execute(f"""
+                SELECT COALESCE(SUM(total_amount), 0) as total FROM quotes 
+                WHERE analyst_id = {'%s' if is_postgres else '?'} {date_filter}
+            """, (analyst_id,))
+            total_amount = cursor.fetchone()
+            total_amount = total_amount['total'] if is_postgres else total_amount[0]
+            
+            # Distribución por estado
+            cursor.execute(f"""
+                SELECT status, COUNT(*) as count FROM quotes 
+                WHERE analyst_id = {'%s' if is_postgres else '?'} {date_filter}
+                GROUP BY status
+            """, (analyst_id,))
+            quotes_by_status = {}
+            for row in cursor.fetchall():
+                status = row['status'] if is_postgres else row[0]
+                count = row['count'] if is_postgres else row[1]
+                quotes_by_status[status] = count
+            
+            # Calcular tasa de aprobación
+            approved = quotes_by_status.get('approved', 0)
+            sent = quotes_by_status.get('sent', 0)
+            rejected = quotes_by_status.get('rejected', 0)
+            total_evaluated = approved + rejected + sent
+            approval_rate = (approved / total_evaluated * 100) if total_evaluated > 0 else 0
+            
+            cursor.close()
+            conn.close()
+            
+            return {
+                'total_quotes': total_quotes,
+                'total_amount': float(total_amount),
+                'approval_rate': round(approval_rate, 2),
+                'quotes_by_status': quotes_by_status
+            }
+            
+        except Exception as e:
+            print(f"❌ Error al obtener estadísticas del analista: {e}")
+            import traceback
+            traceback.print_exc()
+            return {
+                'total_quotes': 0,
+                'total_amount': 0.0,
+                'approval_rate': 0.0,
+                'quotes_by_status': {}
+            }
+    
+    @staticmethod
+    def get_analyst_monthly_evolution(analyst_id: int, months: int = 6) -> List[Dict[str, Any]]:
+        """
+        Obtiene evolución mensual de cotizaciones del analista.
+        
+        Args:
+            analyst_id: ID del analista
+            months: Número de meses hacia atrás
+            
+        Returns:
+            Lista de diccionarios con evolución mensual
+        """
+        try:
+            conn = DBManager.get_connection()
+            cursor = conn.cursor()
+            is_postgres = DBManager.USE_POSTGRES
+            
+            if is_postgres:
+                cursor.execute("""
+                    SELECT 
+                        TO_CHAR(created_at, 'Mon YYYY') as month,
+                        COUNT(*) as quote_count,
+                        COALESCE(SUM(total_amount), 0) as total_amount
+                    FROM quotes
+                    WHERE analyst_id = %s 
+                    AND created_at >= CURRENT_DATE - INTERVAL '%s months'
+                    GROUP BY TO_CHAR(created_at, 'Mon YYYY'), DATE_TRUNC('month', created_at)
+                    ORDER BY DATE_TRUNC('month', created_at)
+                """, (analyst_id, months))
+            else:
+                cursor.execute("""
+                    SELECT 
+                        strftime('%m/%Y', created_at) as month,
+                        COUNT(*) as quote_count,
+                        COALESCE(SUM(total_amount), 0) as total_amount
+                    FROM quotes
+                    WHERE analyst_id = ? 
+                    AND created_at >= date('now', '-' || ? || ' months')
+                    GROUP BY strftime('%m/%Y', created_at)
+                    ORDER BY created_at
+                """, (analyst_id, months))
+            
+            evolution = []
+            for row in cursor.fetchall():
+                evolution.append({
+                    'month': row['month'] if is_postgres else row[0],
+                    'quote_count': row['quote_count'] if is_postgres else row[1],
+                    'total_amount': float(row['total_amount'] if is_postgres else row[2])
+                })
+            
+            cursor.close()
+            conn.close()
+            
+            return evolution
+            
+        except Exception as e:
+            print(f"❌ Error al obtener evolución mensual: {e}")
+            return []
+    
+    @staticmethod
+    def get_global_statistics(period: str = 'all') -> Dict[str, Any]:
+        """
+        Calcula estadísticas globales de todos los analistas.
+        
+        Args:
+            period: 'month', 'quarter', 'year', 'all'
+            
+        Returns:
+            Diccionario con estadísticas globales
+        """
+        try:
+            conn = DBManager.get_connection()
+            cursor = conn.cursor()
+            is_postgres = DBManager.USE_POSTGRES
+            
+            # Determinar filtro de fecha
+            date_filter = ""
+            if period == 'month':
+                date_filter = "WHERE created_at >= CURRENT_DATE - INTERVAL '30 days'" if is_postgres else "WHERE created_at >= date('now', '-30 days')"
+            elif period == 'quarter':
+                date_filter = "WHERE created_at >= CURRENT_DATE - INTERVAL '90 days'" if is_postgres else "WHERE created_at >= date('now', '-90 days')"
+            elif period == 'year':
+                date_filter = "WHERE created_at >= CURRENT_DATE - INTERVAL '365 days'" if is_postgres else "WHERE created_at >= date('now', '-365 days')"
+            
+            # Total de cotizaciones
+            cursor.execute(f"SELECT COUNT(*) as total FROM quotes {date_filter}")
+            total_quotes = cursor.fetchone()
+            total_quotes = total_quotes['total'] if is_postgres else total_quotes[0]
+            
+            # Monto total cotizado
+            cursor.execute(f"SELECT COALESCE(SUM(total_amount), 0) as total FROM quotes {date_filter}")
+            total_amount = cursor.fetchone()
+            total_amount = total_amount['total'] if is_postgres else total_amount[0]
+            
+            # Distribución por estado
+            cursor.execute(f"SELECT status, COUNT(*) as count FROM quotes {date_filter} GROUP BY status")
+            quotes_by_status = {}
+            for row in cursor.fetchall():
+                status = row['status'] if is_postgres else row[0]
+                count = row['count'] if is_postgres else row[1]
+                quotes_by_status[status] = count
+            
+            # Calcular tasa de aprobación
+            approved = quotes_by_status.get('approved', 0)
+            sent = quotes_by_status.get('sent', 0)
+            rejected = quotes_by_status.get('rejected', 0)
+            total_evaluated = approved + rejected + sent
+            approval_rate = (approved / total_evaluated * 100) if total_evaluated > 0 else 0
+            
+            # Contar analistas activos (con al menos una cotización)
+            cursor.execute(f"SELECT COUNT(DISTINCT analyst_id) as count FROM quotes {date_filter}")
+            active_analysts = cursor.fetchone()
+            active_analysts = active_analysts['count'] if is_postgres else active_analysts[0]
+            
+            cursor.close()
+            conn.close()
+            
+            return {
+                'total_quotes': total_quotes,
+                'total_amount': float(total_amount),
+                'approval_rate': round(approval_rate, 2),
+                'quotes_by_status': quotes_by_status,
+                'active_analysts': active_analysts
+            }
+            
+        except Exception as e:
+            print(f"❌ Error al obtener estadísticas globales: {e}")
+            return {
+                'total_quotes': 0,
+                'total_amount': 0.0,
+                'approval_rate': 0.0,
+                'quotes_by_status': {},
+                'active_analysts': 0
+            }
+    
+    @staticmethod
+    def get_analyst_ranking(metric: str = 'quote_count', period: str = 'all', limit: int = 10) -> List[Dict[str, Any]]:
+        """
+        Obtiene ranking de analistas.
+        
+        Args:
+            metric: 'quote_count', 'total_amount', 'approval_rate'
+            period: 'month', 'quarter', 'year', 'all'
+            limit: Número máximo de analistas a retornar
+            
+        Returns:
+            Lista ordenada de diccionarios con ranking
+        """
+        try:
+            conn = DBManager.get_connection()
+            cursor = conn.cursor()
+            is_postgres = DBManager.USE_POSTGRES
+            
+            # Determinar filtro de fecha
+            date_filter = ""
+            if period == 'month':
+                date_filter = "AND q.created_at >= CURRENT_DATE - INTERVAL '30 days'" if is_postgres else "AND q.created_at >= date('now', '-30 days')"
+            elif period == 'quarter':
+                date_filter = "AND q.created_at >= CURRENT_DATE - INTERVAL '90 days'" if is_postgres else "AND q.created_at >= date('now', '-90 days')"
+            elif period == 'year':
+                date_filter = "AND q.created_at >= CURRENT_DATE - INTERVAL '365 days'" if is_postgres else "AND q.created_at >= date('now', '-365 days')"
+            
+            if metric == 'quote_count':
+                cursor.execute(f"""
+                    SELECT 
+                        u.id as analyst_id,
+                        u.full_name as analyst_name,
+                        COUNT(q.id) as metric_value
+                    FROM users u
+                    LEFT JOIN quotes q ON u.id = q.analyst_id {date_filter.replace('AND', 'WHERE') if date_filter else ''}
+                    WHERE u.role = 'analyst'
+                    GROUP BY u.id, u.full_name
+                    ORDER BY metric_value DESC
+                    LIMIT {'%s' if is_postgres else '?'}
+                """, (limit,))
+            elif metric == 'total_amount':
+                cursor.execute(f"""
+                    SELECT 
+                        u.id as analyst_id,
+                        u.full_name as analyst_name,
+                        COALESCE(SUM(q.total_amount), 0) as metric_value
+                    FROM users u
+                    LEFT JOIN quotes q ON u.id = q.analyst_id {date_filter.replace('AND', 'WHERE') if date_filter else ''}
+                    WHERE u.role = 'analyst'
+                    GROUP BY u.id, u.full_name
+                    ORDER BY metric_value DESC
+                    LIMIT {'%s' if is_postgres else '?'}
+                """, (limit,))
+            elif metric == 'approval_rate':
+                # Calcular tasa de aprobación por analista
+                cursor.execute(f"""
+                    SELECT 
+                        u.id as analyst_id,
+                        u.full_name as analyst_name,
+                        CASE 
+                            WHEN COUNT(CASE WHEN q.status IN ('approved', 'rejected', 'sent') THEN 1 END) > 0
+                            THEN (COUNT(CASE WHEN q.status = 'approved' THEN 1 END) * 100.0 / 
+                                  COUNT(CASE WHEN q.status IN ('approved', 'rejected', 'sent') THEN 1 END))
+                            ELSE 0
+                        END as metric_value
+                    FROM users u
+                    LEFT JOIN quotes q ON u.id = q.analyst_id {date_filter.replace('AND', 'WHERE') if date_filter else ''}
+                    WHERE u.role = 'analyst'
+                    GROUP BY u.id, u.full_name
+                    ORDER BY metric_value DESC
+                    LIMIT {'%s' if is_postgres else '?'}
+                """, (limit,))
+            
+            ranking = []
+            for row in cursor.fetchall():
+                ranking.append({
+                    'analyst_id': row['analyst_id'] if is_postgres else row[0],
+                    'analyst_name': row['analyst_name'] if is_postgres else row[1],
+                    'metric_value': float(row['metric_value'] if is_postgres else row[2])
+                })
+            
+            cursor.close()
+            conn.close()
+            
+            return ranking
+            
+        except Exception as e:
+            print(f"❌ Error al obtener ranking de analistas: {e}")
             return []
