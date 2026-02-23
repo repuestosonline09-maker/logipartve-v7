@@ -402,6 +402,83 @@ def render_analyst_panel():
     st.markdown("---")
     
     # ==========================================
+    # SECCIÓN 2.5: ÍTEMS EXISTENTES (MODO EDICIÓN)
+    # ==========================================
+    if editing_mode and isinstance(st.session_state.cotizacion_items, list) and len(st.session_state.cotizacion_items) > 0:
+        st.markdown("### 📋 ÍTEMS EXISTENTES")
+        st.info("📝 Puede editar cualquier ítem haciendo clic en '✏️ EDITAR' o eliminar con '🗑️ ELIMINAR'")
+        
+        for i, item in enumerate(st.session_state.cotizacion_items):
+            with st.expander(f"📦 Ítem #{i+1}: {item.get('descripcion', 'Sin descripción')}", expanded=False):
+                # Mostrar TODOS los datos del ítem
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    st.markdown("**📝 Datos Básicos:**")
+                    st.write(f"• **Descripción:** {item.get('descripcion', 'N/A')}")
+                    st.write(f"• **N° Parte:** {item.get('parte', 'N/A')}")
+                    st.write(f"• **Marca:** {item.get('marca', 'N/A')}")
+                    st.write(f"• **Garantía:** {item.get('garantia', 'N/A')}")
+                    st.write(f"• **Cantidad:** {item.get('cantidad', 0)}")
+                
+                with col2:
+                    st.markdown("**🌍 Logística:**")
+                    st.write(f"• **Origen:** {item.get('origen', 'N/A')}")
+                    st.write(f"• **Envío:** {item.get('envio_tipo', 'N/A')}")
+                    st.write(f"• **Tiempo:** {item.get('tiempo_entrega', 'N/A')}")
+                    st.write(f"• **Fabricación:** {item.get('fabricacion', 'N/A')}")
+                    link = item.get('link', item.get('page_url', ''))
+                    if link:
+                        st.write(f"• **Link:** [{link[:30]}...]({link})")
+                    else:
+                        st.write(f"• **Link:** No disponible")
+                
+                with col3:
+                    st.markdown("**💰 Costos Internos:**")
+                    st.write(f"• **FOB:** ${item.get('costo_fob', 0):.2f}")
+                    st.write(f"• **Handling:** ${item.get('costo_handling', 0):.2f}")
+                    st.write(f"• **Manejo:** ${item.get('costo_manejo', 0):.2f}")
+                    st.write(f"• **Envío:** ${item.get('costo_envio', 0):.2f}")
+                    st.write(f"• **Impuesto:** {item.get('impuesto_porcentaje', 0)}%")
+                    st.write(f"• **Factor Util.:** {item.get('factor_utilidad', 0)}")
+                
+                # Mostrar precios finales
+                st.markdown("---")
+                precio_col1, precio_col2 = st.columns(2)
+                with precio_col1:
+                    precio_usd = item.get('costo_unitario', item.get('precio_usd', 0))
+                    try:
+                        precio_usd = float(precio_usd) if precio_usd else 0.0
+                    except:
+                        precio_usd = 0.0
+                    st.metric("💵 Precio Unitario USD", f"${precio_usd:.2f}")
+                
+                with precio_col2:
+                    total_usd = item.get('costo_total', 0)
+                    try:
+                        total_usd = float(total_usd) if total_usd else 0.0
+                    except:
+                        total_usd = 0.0
+                    st.metric("📊 Total USD", f"${total_usd:.2f}")
+                
+                # Botones de acción
+                btn_col1, btn_col2, btn_col3 = st.columns(3)
+                with btn_col1:
+                    if st.button(f"✏️ EDITAR", key=f"edit_item_{i}", use_container_width=True):
+                        # Cargar ítem en el formulario
+                        st.session_state.editing_item_index = i
+                        st.session_state.editing_item_data = item
+                        st.rerun()
+                
+                with btn_col2:
+                    if st.button(f"🗑️ ELIMINAR", key=f"delete_item_{i}", use_container_width=True, type="secondary"):
+                        st.session_state.cotizacion_items.pop(i)
+                        st.success(f"✅ Ítem #{i+1} eliminado")
+                        st.rerun()
+        
+        st.markdown("---")
+    
+    # ==========================================
     # SECCIÓN 3: FORMULARIO DE ÍTEM
     # ==========================================
     try:
@@ -410,7 +487,16 @@ def render_analyst_panel():
         num_items = 0
         st.session_state.cotizacion_items = []
     
-    st.markdown(f"### 📦 Ítem #{num_items + 1}")
+    # Detectar si se está editando un ítem específico
+    editing_item = st.session_state.get('editing_item_index', None) is not None
+    editing_item_index = st.session_state.get('editing_item_index', None)
+    editing_item_data = st.session_state.get('editing_item_data', {})
+    
+    if editing_item:
+        st.markdown(f"### ✏️ Editando Ítem #{editing_item_index + 1}")
+        st.warning("📝 Modifique los campos que desee y haga clic en '💾 ACTUALIZAR ÍTEM'")
+    else:
+        st.markdown(f"### 📦 Ítem #{num_items + 1}")
     
     # Mostrar mensaje de éxito/error si existe
     if 'item_agregado_msg' in st.session_state:
@@ -435,37 +521,81 @@ def render_analyst_panel():
     # Usar el contador para generar keys únicas
     reset_key = st.session_state.item_reset_counter
     
+    # Obtener valores por defecto si se está editando un ítem
+    if editing_item:
+        default_descripcion = editing_item_data.get('descripcion', '')
+        default_parte = editing_item_data.get('parte', '')
+        default_marca = editing_item_data.get('marca', '')
+        default_link = editing_item_data.get('link', editing_item_data.get('page_url', ''))
+        default_garantia = editing_item_data.get('garantia', config["garantias"][0])
+        default_cantidad = editing_item_data.get('cantidad', 1)
+        default_origen = editing_item_data.get('origen', config["paises_origen"][0])
+        default_envio_tipo = editing_item_data.get('envio_tipo', config["tipos_envio"][0])
+        default_tiempo = editing_item_data.get('tiempo_entrega', config["tiempos_entrega"][0])
+        default_fabricacion = editing_item_data.get('fabricacion', config["paises_origen"][0])
+        default_fob = float(editing_item_data.get('costo_fob', 0))
+        default_handling = float(editing_item_data.get('costo_handling', 0))
+        default_envio = float(editing_item_data.get('costo_envio', 0))
+        default_manejo = editing_item_data.get('costo_manejo', config["manejo_options"][0])
+        default_impuesto_pct = editing_item_data.get('impuesto_porcentaje', config["impuesto_options"][0])
+        default_utilidad = editing_item_data.get('factor_utilidad', config["utilidad_factors"][0])
+    else:
+        default_descripcion = ''
+        default_parte = ''
+        default_marca = ''
+        default_link = ''
+        default_garantia = None
+        default_cantidad = None
+        default_origen = None
+        default_envio_tipo = None
+        default_tiempo = None
+        default_fabricacion = None
+        default_fob = None
+        default_handling = None
+        default_envio = None
+        default_manejo = None
+        default_impuesto_pct = None
+        default_utilidad = None
+    
     # Fila 1: Descripción y N° Parte
     item_col1, item_col2 = st.columns(2)
     with item_col1:
-        item_descripcion = st.text_input("Descripción del Repuesto", key=f"item_descripcion_{reset_key}", placeholder="Ej: Bomba de gasolina")
+        item_descripcion = st.text_input("Descripción del Repuesto", value=default_descripcion, key=f"item_descripcion_{reset_key}", placeholder="Ej: Bomba de gasolina")
     with item_col2:
-        item_parte = st.text_input("N° de Parte", key=f"item_parte_{reset_key}", placeholder="Ej: 12345-ABC")
+        item_parte = st.text_input("N° de Parte", value=default_parte, key=f"item_parte_{reset_key}", placeholder="Ej: 12345-ABC")
     
     # Fila 2: Marca (texto libre), Garantía (desde BD), Cantidad (1-1000)
     item_col3, item_col4, item_col5 = st.columns(3)
     with item_col3:
-        item_marca = st.text_input("Marca", placeholder="Ej: TOYOTA, BOSCH, DENSO...", key=f"item_marca_{reset_key}")
+        item_marca = st.text_input("Marca", value=default_marca, placeholder="Ej: TOYOTA, BOSCH, DENSO...", key=f"item_marca_{reset_key}")
     with item_col4:
-        item_garantia = st.selectbox("Garantía", config["garantias"], key=f"item_garantia_{reset_key}")
+        # Encontrar índice de garantía por defecto
+        garantia_index = config["garantias"].index(default_garantia) if default_garantia and default_garantia in config["garantias"] else 0
+        item_garantia = st.selectbox("Garantía", config["garantias"], index=garantia_index if editing_item else 0, key=f"item_garantia_{reset_key}")
     with item_col5:
-        item_cantidad = st.selectbox("Cantidad", CANTIDADES, key=f"item_cantidad_{reset_key}")
+        # Encontrar índice de cantidad por defecto
+        cantidad_index = CANTIDADES.index(default_cantidad) if default_cantidad and default_cantidad in CANTIDADES else 0
+        item_cantidad = st.selectbox("Cantidad", CANTIDADES, index=cantidad_index if editing_item else 0, key=f"item_cantidad_{reset_key}")
     
     # Fila 3: Origen (desde BD), Envío (desde BD), Tiempo de Entrega (desde BD)
     item_col6, item_col7, item_col8 = st.columns(3)
     with item_col6:
-        item_origen = st.selectbox("País de Localización", config["paises_origen"], key=f"item_origen_{reset_key}")
+        origen_index = config["paises_origen"].index(default_origen) if default_origen and default_origen in config["paises_origen"] else 0
+        item_origen = st.selectbox("País de Localización", config["paises_origen"], index=origen_index if editing_item else 0, key=f"item_origen_{reset_key}")
     with item_col7:
-        item_envio_tipo = st.selectbox("Tipo de Envío", config["tipos_envio"], key=f"item_envio_tipo_{reset_key}")
+        envio_index = config["tipos_envio"].index(default_envio_tipo) if default_envio_tipo and default_envio_tipo in config["tipos_envio"] else 0
+        item_envio_tipo = st.selectbox("Tipo de Envío", config["tipos_envio"], index=envio_index if editing_item else 0, key=f"item_envio_tipo_{reset_key}")
     with item_col8:
-        item_tiempo = st.selectbox("Tiempo de Entrega", config["tiempos_entrega"], key=f"item_tiempo_{reset_key}")
+        tiempo_index = config["tiempos_entrega"].index(default_tiempo) if default_tiempo and default_tiempo in config["tiempos_entrega"] else 0
+        item_tiempo = st.selectbox("Tiempo de Entrega", config["tiempos_entrega"], index=tiempo_index if editing_item else 0, key=f"item_tiempo_{reset_key}")
     
     # Fila 4: País de Fabricación (desde BD) y Link
     item_col9, item_col10 = st.columns(2)
     with item_col9:
-        item_fabricacion = st.selectbox("País de Fabricación", config["paises_origen"], key=f"item_fabricacion_{reset_key}")
+        fabricacion_index = config["paises_origen"].index(default_fabricacion) if default_fabricacion and default_fabricacion in config["paises_origen"] else 0
+        item_fabricacion = st.selectbox("País de Fabricación", config["paises_origen"], index=fabricacion_index if editing_item else 0, key=f"item_fabricacion_{reset_key}")
     with item_col10:
-        item_link = st.text_input("Link del Producto (opcional)", placeholder="https://...", key=f"item_link_{reset_key}")
+        item_link = st.text_input("Link del Producto (opcional)", value=default_link, placeholder="https://...", key=f"item_link_{reset_key}")
     
     st.markdown("---")
     
@@ -485,12 +615,14 @@ def render_analyst_panel():
     
     cost_col1, cost_col2, cost_col3 = st.columns(3)
     with cost_col1:
-        costo_fob = st.number_input("Costo FOB ($)", min_value=0.0, value=None, step=1.0, placeholder="Ej: $50", key=f"costo_fob_{reset_key}") or 0.0
+        costo_fob = st.number_input("Costo FOB ($)", min_value=0.0, value=default_fob, step=1.0, placeholder="Ej: $50", key=f"costo_fob_{reset_key}") or 0.0
     with cost_col2:
-        costo_handling = st.number_input("Handling ($)", min_value=0.0, value=None, step=1.0, placeholder="Ej: $25", key=f"costo_handling_{reset_key}") or 0.0
+        costo_handling = st.number_input("Handling ($)", min_value=0.0, value=default_handling, step=1.0, placeholder="Ej: $25", key=f"costo_handling_{reset_key}") or 0.0
     with cost_col3:
         # MANEJO - Selectbox desde Admin
+        manejo_idx_default = config["manejo_options"].index(default_manejo) if default_manejo and default_manejo in config["manejo_options"] else 0
         manejo_idx = st.selectbox("Manejo ($)", range(len(manejo_options_display)), 
+                                  index=manejo_idx_default if editing_item else 0,
                                   format_func=lambda x: manejo_options_display[x], 
                                   key=f"costo_manejo_select_{reset_key}")
         costo_manejo = config["manejo_options"][manejo_idx]
@@ -498,18 +630,22 @@ def render_analyst_panel():
     cost_col4, cost_col5, cost_col6 = st.columns(3)
     with cost_col4:
         # IMPUESTO INTERNACIONAL - Selectbox desde Admin
+        impuesto_idx_default = config["impuesto_options"].index(default_impuesto_pct) if default_impuesto_pct and default_impuesto_pct in config["impuesto_options"] else 0
         impuesto_idx = st.selectbox("Impuesto Internacional (%)", range(len(impuesto_options_display)),
+                                    index=impuesto_idx_default if editing_item else 0,
                                     format_func=lambda x: impuesto_options_display[x],
                                     key=f"impuesto_select_{reset_key}")
         impuesto_porcentaje = config["impuesto_options"][impuesto_idx]
     with cost_col5:
         # FACTOR DE UTILIDAD - Selectbox desde Admin
+        utilidad_idx_default = config["utilidad_factors"].index(default_utilidad) if default_utilidad and default_utilidad in config["utilidad_factors"] else 0
         utilidad_idx = st.selectbox("Factor de Utilidad", range(len(utilidad_options_display)),
+                                    index=utilidad_idx_default if editing_item else 0,
                                     format_func=lambda x: utilidad_options_display[x],
                                     key=f"utilidad_select_{reset_key}")
         factor_utilidad = config["utilidad_factors"][utilidad_idx]
     with cost_col6:
-        costo_envio = st.number_input("Envío ($)", min_value=0.0, value=None, step=1.0, placeholder="Ej: $100", key=f"costo_envio_{reset_key}") or 0.0
+        costo_envio = st.number_input("Envío ($)", min_value=0.0, value=default_envio, step=1.0, placeholder="Ej: $100", key=f"costo_envio_{reset_key}") or 0.0
     
     # TAX - Valor fijo desde Admin (NO seleccionable)
     tax_porcentaje = config["tax_percentage"]
@@ -650,7 +786,15 @@ def render_analyst_panel():
     btn_action_col1, btn_action_col2, btn_action_col3 = st.columns(3)
     
     with btn_action_col1:
-        if st.button("➕ AGREGAR OTRO ÍTEM", use_container_width=True, type="secondary", key="btn_agregar_item"):
+        # Cambiar texto del botón según si se está editando un ítem
+        if editing_item:
+            button_text = "💾 ACTUALIZAR ÍTEM"
+            button_key = "btn_actualizar_item"
+        else:
+            button_text = "➥ AGREGAR OTRO ÍTEM"
+            button_key = "btn_agregar_item"
+        
+        if st.button(button_text, use_container_width=True, type="secondary", key=button_key):
             # Validar campos mínimos
             if not item_descripcion:
                 st.error("⚠️ Ingrese la descripción del repuesto")
@@ -691,27 +835,46 @@ def render_analyst_panel():
                     "costo_total_bs": costo_total_bs,
                     "fob_total": fob_total
                 }
-                # Protección adicional antes de append
+                # Protección adicional antes de append o actualizar
                 try:
                     if not isinstance(st.session_state.cotizacion_items, list):
                         st.session_state.cotizacion_items = []
-                    # Verificar que cotizacion_items tiene el método append
-                    if not hasattr(st.session_state.cotizacion_items, 'append'):
-                        st.session_state.cotizacion_items = []
-                    st.session_state.cotizacion_items.append(nuevo_item)
-                    # Guardar mensaje de éxito en session_state para mostrarlo después del rerun
-                    st.session_state.item_agregado_msg = f"✅ Ítem #{len(st.session_state.cotizacion_items)} agregado. Puede agregar otro."
+                    
+                    if editing_item:
+                        # ACTUALIZAR ítem existente
+                        st.session_state.cotizacion_items[editing_item_index] = nuevo_item
+                        st.session_state.item_agregado_msg = f"✅ Ítem #{editing_item_index + 1} actualizado correctamente."
+                        # Limpiar estado de edición
+                        if 'editing_item_index' in st.session_state:
+                            del st.session_state.editing_item_index
+                        if 'editing_item_data' in st.session_state:
+                            del st.session_state.editing_item_data
+                    else:
+                        # AGREGAR nuevo ítem
+                        if not hasattr(st.session_state.cotizacion_items, 'append'):
+                            st.session_state.cotizacion_items = []
+                        st.session_state.cotizacion_items.append(nuevo_item)
+                        st.session_state.item_agregado_msg = f"✅ Ítem #{len(st.session_state.cotizacion_items)} agregado. Puede agregar otro."
+                    
                     # Limpiar campos del ítem para el siguiente (mantener datos del cliente)
                     st.session_state.limpiar_campos_item = True
                 except (AttributeError, TypeError) as e:
                     # Guardar mensaje de error en session_state
-                    st.session_state.item_agregado_msg = f"⚠️ Error al agregar ítem: {str(e)}. Reiniciando lista..."
+                    st.session_state.item_agregado_msg = f"⚠️ Error: {str(e)}. Reiniciando lista..."
                     st.session_state.cotizacion_items = [nuevo_item]
                     st.session_state.limpiar_campos_item = True
                 st.rerun()
     
     with btn_action_col2:
-        if st.button("📄 GENERAR COTIZACIÓN", use_container_width=True, type="primary", key="btn_generar_cotizacion"):
+        # Cambiar texto del botón según si se está editando la cotización completa
+        if editing_mode:
+            final_button_text = "💾 GUARDAR CAMBIOS"
+            final_button_key = "btn_guardar_cambios"
+        else:
+            final_button_text = "📄 GENERAR COTIZACIÓN"
+            final_button_key = "btn_generar_cotizacion"
+        
+        if st.button(final_button_text, use_container_width=True, type="primary", key=final_button_key):
             # Validar datos del cliente
             if not cliente_nombre:
                 st.error("⚠️ Ingrese el nombre del cliente")
@@ -770,8 +933,36 @@ def render_analyst_panel():
                     "ci_rif": cliente_ci_rif
                 }
                 
-                st.session_state.mostrar_cotizacion = True
-                st.rerun()
+                # Si estamos en modo edición, actualizar en BD
+                if editing_mode:
+                    editing_quote_id = st.session_state.get('editing_quote_id')
+                    if editing_quote_id:
+                        # Actualizar cotización completa en BD
+                        success = db.update_quote_complete(
+                            quote_id=editing_quote_id,
+                            cliente_datos=st.session_state.cliente_datos,
+                            items=st.session_state.cotizacion_items,
+                            username=st.session_state.username
+                        )
+                        
+                        if success:
+                            st.success("✅ Cotización actualizada correctamente en la base de datos")
+                            # Limpiar estado de edición
+                            if 'editing_quote_id' in st.session_state:
+                                del st.session_state.editing_quote_id
+                            if 'editing_quote_number' in st.session_state:
+                                del st.session_state.editing_quote_number
+                            # Esperar 2 segundos y redirigir a Mis Cotizaciones
+                            import time
+                            time.sleep(2)
+                            st.session_state.selected_panel = "Mis Cotizaciones"
+                            st.rerun()
+                        else:
+                            st.error("❌ Error al actualizar la cotización en la base de datos")
+                else:
+                    # Modo creación normal
+                    st.session_state.mostrar_cotizacion = True
+                    st.rerun()
     
     with btn_action_col3:
         if st.button("🗑️ LIMPIAR TODO", use_container_width=True, key="btn_limpiar_todo"):

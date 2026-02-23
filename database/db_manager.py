@@ -1337,29 +1337,45 @@ class DBManager:
                 if unit_cost == 0.0 and total_cost > 0 and quantity > 0:
                     unit_cost = total_cost / quantity
                 
+                # Obtener costos internos
+                costo_fob = item.get('costo_fob', 0.0)
+                costo_handling = item.get('costo_handling', 0.0)
+                costo_manejo = item.get('costo_manejo', 0.0)
+                costo_envio = item.get('costo_envio', 0.0)
+                impuesto_porcentaje = item.get('impuesto_porcentaje', 0.0)
+                factor_utilidad = item.get('factor_utilidad', 1.0)
+                
                 if is_postgres:
                     cursor.execute("""
                         INSERT INTO quote_items (
                             quote_id, description, part_number, marca, garantia,
                             quantity, unit_cost, total_cost, envio_tipo, origen,
-                            fabricacion, tiempo_entrega, page_url
-                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                            fabricacion, tiempo_entrega, page_url,
+                            international_handling, national_handling, shipping_cost,
+                            tax_percentage, profit_factor
+                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """, (
                         quote_id, description, part_number, marca, garantia,
                         quantity, unit_cost, total_cost, envio_tipo, origen,
-                        fabricacion, tiempo_entrega, page_url
+                        fabricacion, tiempo_entrega, page_url,
+                        costo_handling, costo_manejo, costo_envio,
+                        impuesto_porcentaje, factor_utilidad
                     ))
                 else:
                     cursor.execute("""
                         INSERT INTO quote_items (
                             quote_id, description, part_number, marca, garantia,
                             quantity, unit_cost, total_cost, envio_tipo, origen,
-                            fabricacion, tiempo_entrega, page_url
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            fabricacion, tiempo_entrega, page_url,
+                            international_handling, national_handling, shipping_cost,
+                            tax_percentage, profit_factor
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
                         quote_id, description, part_number, marca, garantia,
                         quantity, unit_cost, total_cost, envio_tipo, origen,
-                        fabricacion, tiempo_entrega, page_url
+                        fabricacion, tiempo_entrega, page_url,
+                        costo_handling, costo_manejo, costo_envio,
+                        impuesto_porcentaje, factor_utilidad
                     ))
             
             conn.commit()
@@ -1845,18 +1861,30 @@ class DBManager:
             
             # Insertar nuevos ítems
             for item in items:
+                # Obtener costos internos
+                costo_fob = item.get('costo_fob', 0.0)
+                costo_handling = item.get('costo_handling', 0.0)
+                costo_manejo = item.get('costo_manejo', 0.0)
+                costo_envio = item.get('costo_envio', 0.0)
+                impuesto_porcentaje = item.get('impuesto_porcentaje', 0.0)
+                factor_utilidad = item.get('factor_utilidad', 1.0)
+                
                 cursor.execute("""
                     INSERT INTO quote_items (
                         quote_id, description, part_number, marca, garantia,
                         quantity, unit_cost, total_cost, envio_tipo, origen,
-                        fabricacion, tiempo_entrega, page_url
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        fabricacion, tiempo_entrega, page_url,
+                        international_handling, national_handling, shipping_cost,
+                        tax_percentage, profit_factor
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """ if is_postgres else """
                     INSERT INTO quote_items (
                         quote_id, description, part_number, marca, garantia,
                         quantity, unit_cost, total_cost, envio_tipo, origen,
-                        fabricacion, tiempo_entrega, page_url
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        fabricacion, tiempo_entrega, page_url,
+                        international_handling, national_handling, shipping_cost,
+                        tax_percentage, profit_factor
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     quote_id,
                     item.get('descripcion') or item.get('description', ''),
@@ -1870,7 +1898,12 @@ class DBManager:
                     item.get('origen', ''),
                     item.get('fabricacion', ''),
                     item.get('tiempo_entrega', ''),
-                    item.get('page_url', '')
+                    item.get('link') or item.get('page_url', ''),
+                    costo_handling,
+                    costo_manejo,
+                    costo_envio,
+                    impuesto_porcentaje,
+                    factor_utilidad
                 ))
             
             # Registrar cambio en el historial
@@ -2518,3 +2551,75 @@ class DBManager:
         except Exception as e:
             print(f"❌ Error al obtener ranking de analistas: {e}")
             return []
+
+    @staticmethod
+    def update_quote_complete(quote_id: int, cliente_datos: Dict[str, Any], items: List[Dict[str, Any]], username: str) -> bool:
+        """
+        Actualiza una cotización completa (datos del cliente + ítems).
+        Función wrapper que llama a update_quote() y update_quote_items().
+        
+        Args:
+            quote_id: ID de la cotización a actualizar
+            cliente_datos: Diccionario con los datos del cliente
+            items: Lista de diccionarios con los ítems
+            username: Nombre de usuario que realiza la edición
+            
+        Returns:
+            True si se actualizó exitosamente, False en caso de error
+        """
+        try:
+            # Obtener user_id desde username
+            conn = DBManager.get_connection()
+            cursor = conn.cursor()
+            is_postgres = DBManager.USE_POSTGRES
+            
+            cursor.execute("""
+                SELECT id FROM users WHERE username = %s
+            """ if is_postgres else """
+                SELECT id FROM users WHERE username = ?
+            """, (username,))
+            
+            user_result = cursor.fetchone()
+            if not user_result:
+                print(f"❌ Usuario {username} no encontrado")
+                cursor.close()
+                conn.close()
+                return False
+            
+            user_id = user_result['id'] if is_postgres else user_result[0]
+            cursor.close()
+            conn.close()
+            
+            # Preparar datos para update_quote
+            quote_data = {
+                'client_name': cliente_datos.get('nombre', ''),
+                'client_phone': cliente_datos.get('telefono', ''),
+                'client_email': cliente_datos.get('email', ''),
+                'client_cedula': cliente_datos.get('ci_rif', ''),
+                'client_address': cliente_datos.get('direccion', ''),
+                'client_vehicle': cliente_datos.get('vehiculo', ''),
+                'client_year': cliente_datos.get('ano', ''),
+                'client_vin': cliente_datos.get('vin', ''),
+            }
+            
+            # Actualizar datos del cliente
+            success_cliente = DBManager.update_quote(quote_id, quote_data, user_id)
+            if not success_cliente:
+                print(f"❌ Error al actualizar datos del cliente")
+                return False
+            
+            # Actualizar ítems
+            success_items = DBManager.update_quote_items(quote_id, items, user_id)
+            if not success_items:
+                print(f"❌ Error al actualizar ítems")
+                return False
+            
+            print(f"✅ Cotización {quote_id} actualizada completamente")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Error al actualizar cotización completa: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
