@@ -7,19 +7,22 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
 from database.db_manager import DBManager
+from services.auth_manager import AuthManager
 import os
 
 def render_my_quotes_panel():
     """Renderiza el panel de Mis Cotizaciones."""
     
-    # Verificar autenticación
-    if 'authenticated' not in st.session_state or not st.session_state.authenticated:
+    # Verificar autenticación usando AuthManager
+    if not AuthManager.is_logged_in():
         st.warning("⚠️ Debe iniciar sesión para acceder a esta sección")
         st.stop()
     
-    user_id = st.session_state.user_id
-    username = st.session_state.username
-    role = st.session_state.role
+    # Obtener datos del usuario actual
+    user = AuthManager.get_current_user()
+    user_id = user['user_id']
+    username = user['username']
+    role = user['role']
     
     st.title("📋 MIS COTIZACIONES")
     st.markdown("---")

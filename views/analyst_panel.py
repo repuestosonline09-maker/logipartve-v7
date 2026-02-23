@@ -169,9 +169,13 @@ def render_analyst_panel():
         st.info("🇪🇺 Convierte precios de repuestos europeos de EUR a USD")
         
         # Obtener factor de conversión desde configuración
-        config_list = DBManager.get_all_config()
-        config_eur = {item['key']: item for item in config_list}
-        eur_usd_factor = float(config_eur.get('eur_usd_factor', {}).get('value', 1.23))
+        try:
+            config_list = DBManager.get_all_config()
+            config_eur = {item['key']: item for item in config_list}
+            eur_usd_factor = float(config_eur.get('eur_usd_factor', {}).get('value', 1.23))
+        except Exception as e:
+            st.warning(f"⚠️ Error al cargar configuración de moneda: {e}")
+            eur_usd_factor = 1.23  # Valor por defecto
         
         # Inicializar contador de reset para el convertidor si no existe
         if 'converter_reset_counter' not in st.session_state:
