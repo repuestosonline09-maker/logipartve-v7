@@ -5,7 +5,8 @@ Campos configurables desde Panel Admin
 """
 
 import streamlit as st
-from datetime import datetime, timedelta
+import datetime
+from datetime import timedelta
 from database.db_manager import DBManager
 from database.config_helpers import ConfigHelpers
 from services.auth_manager import AuthManager
@@ -759,7 +760,7 @@ def render_analyst_panel():
         with quote_info_col2:
             st.info(f"👤 **Analista:** {full_name}")
         with quote_info_col3:
-            fecha_actual = datetime.now().strftime("%d/%m/%Y")
+            fecha_actual = datetime.datetime.now().strftime("%d/%m/%Y")
             st.info(f"📅 **Fecha:** {fecha_actual}")
         
         st.markdown("---")
@@ -1003,11 +1004,8 @@ def render_analyst_panel():
                         }
                         
                         # Generar PDF en carpeta permanente
-                        from datetime import datetime
-                        from database.db_manager import DBManager
-                        
                         # Crear estructura de carpetas: /home/ubuntu/cotizaciones_guardadas/YYYY/MM/
-                        now = datetime.now()
+                        now = datetime.datetime.now()
                         year = now.strftime("%Y")
                         month = now.strftime("%m")
                         
@@ -1092,11 +1090,8 @@ def render_analyst_panel():
                         }
                         
                         # Generar PNG en carpeta permanente
-                        from datetime import datetime
-                        from database.db_manager import DBManager
-                        
                         # Crear estructura de carpetas: /home/ubuntu/cotizaciones_guardadas/YYYY/MM/
-                        now = datetime.now()
+                        now = datetime.datetime.now()
                         year = now.strftime("%Y")
                         month = now.strftime("%m")
                         
