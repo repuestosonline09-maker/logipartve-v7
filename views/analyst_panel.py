@@ -170,11 +170,10 @@ def render_analyst_panel():
         
         # Obtener factor de conversión desde configuración
         try:
-            config_list = DBManager.get_all_config()
-            config_eur = {item['key']: item for item in config_list}
-            eur_usd_factor = float(config_eur.get('eur_usd_factor', {}).get('value', 1.23))
+            eur_usd_config = DBManager.get_config('eur_usd_factor')
+            eur_usd_factor = float(eur_usd_config) if eur_usd_config else 1.23
         except Exception as e:
-            st.warning(f"⚠️ Error al cargar configuración de moneda: {e}")
+            st.warning(f"⚠️ Error al cargar configuración de moneda: {str(e)}")
             eur_usd_factor = 1.23  # Valor por defecto
         
         # Inicializar contador de reset para el convertidor si no existe
