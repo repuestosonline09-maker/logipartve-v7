@@ -1074,17 +1074,6 @@ def show_reports_and_stats():
     
     st.markdown("---")
     
-    # Productividad por analista
-    st.markdown("#### Productividad por Analista")
-    
-    if stats['by_analyst']:
-        for analyst_name, count in stats['by_analyst'].items():
-            st.markdown(f"**{analyst_name}**: {count} cotizaciones")
-    else:
-        st.info("No hay datos de productividad disponibles")
-    
-    st.markdown("---")
-    
     # Actividad reciente
     st.markdown("#### Actividad Reciente del Sistema")
     
