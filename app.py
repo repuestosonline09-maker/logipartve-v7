@@ -349,20 +349,8 @@ def show_create_quote():
 
 def show_my_quotes():
     """Muestra el módulo de gestión de cotizaciones (Fase 3)."""
-    
-    st.markdown("## 📊 Mis Cotizaciones")
-    
-    st.info("""
-        🚧 **Módulo en Desarrollo - Fase 3**
-        
-        Este módulo estará disponible en la próxima fase e incluirá:
-        - Lista de todas tus cotizaciones
-        - Filtros por fecha, cliente, estado
-        - Búsqueda rápida
-        - Edición de cotizaciones
-        - Generación de PDF/JPEG
-        - Envío por email
-    """)
+    from views.my_quotes_panel import render_my_quotes_panel
+    render_my_quotes_panel()
 
 
 if __name__ == "__main__":

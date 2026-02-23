@@ -906,12 +906,66 @@ def render_analyst_panel():
                 final_quote_number = QuoteNumberingService.generate_quote_number(user_id, username)
                 
                 if final_quote_number:
-                    # Aquí se guardaría en la base de datos
-                    # Por ahora solo mostramos confirmación
-                    st.session_state.saved_quote_number = final_quote_number
-                    st.session_state.cotizacion_guardada = True  # Marcar que la cotización fue guardada
-                    st.session_state.show_save_success = True  # Flag para mostrar mensaje
-                    st.rerun()
+                    try:
+                        from database.db_manager import DBManager
+                        
+                        # Preparar datos del cliente
+                        cliente = st.session_state.get('cliente_datos', {})
+                        
+                        # Preparar datos de la cotización para guardar
+                        quote_data = {
+                            'quote_number': final_quote_number,
+                            'analyst_id': user_id,
+                            'client_name': cliente.get('nombre', ''),
+                            'client_phone': cliente.get('telefono', ''),
+                            'client_email': cliente.get('email', ''),
+                            'client_cedula': cliente.get('ci_rif', ''),
+                            'client_address': cliente.get('direccion', ''),
+                            'client_vehicle': f"{cliente.get('vehiculo', '')} {cliente.get('cilindrada', '')}".strip(),
+                            'client_year': cliente.get('ano', ''),
+                            'client_vin': cliente.get('vin', ''),
+                            'total_amount': total_cotizacion_bs,
+                            'sub_total': sub_total,
+                            'iva_total': iva_total,
+                            'abona_ya': abona_ya,
+                            'en_entrega': y_en_entrega,
+                            'terms_conditions': config.get('terms_conditions', ''),
+                            'status': 'draft',
+                            'pdf_path': '',  # Se actualizará cuando se genere el PDF
+                            'jpeg_path': ''  # Se actualizará cuando se genere el PNG
+                        }
+                        
+                        # Guardar cotización en base de datos
+                        quote_id = DBManager.save_quote(quote_data)
+                        
+                        if quote_id:
+                            # Guardar ítems de la cotización
+                            items_guardados = DBManager.save_quote_items(quote_id, items)
+                            
+                            if items_guardados:
+                                # Guardar en session_state
+                                st.session_state.saved_quote_number = final_quote_number
+                                st.session_state.saved_quote_id = quote_id
+                                st.session_state.cotizacion_guardada = True
+                                st.session_state.show_save_success = True
+                                
+                                # Registrar actividad
+                                DBManager.log_activity(
+                                    user_id,
+                                    'quote_created',
+                                    f'Cotización {final_quote_number} creada con {len(items)} ítems'
+                                )
+                                
+                                st.rerun()
+                            else:
+                                st.error("❌ Error al guardar ítems de la cotización")
+                        else:
+                            st.error("❌ Error al guardar cotización en base de datos")
+                    
+                    except Exception as e:
+                        st.error(f"❌ Error al guardar cotización: {str(e)}")
+                        import traceback
+                        traceback.print_exc()
                 else:
                     st.error("❌ Error al generar número de cotización")
         
@@ -949,24 +1003,54 @@ def render_analyst_panel():
                             'terminos_condiciones': config.get('terms_conditions', 'Términos y condiciones estándar.')
                         }
                         
-                        # Generar PDF
-                        output_dir = '/tmp/cotizaciones'
-                        os.makedirs(output_dir, exist_ok=True)
-                        output_path = f"{output_dir}/cotizacion_{st.session_state.saved_quote_number}.pdf"
+                        # Generar PDF en carpeta permanente
+                        from datetime import datetime
+                        from database.db_manager import DBManager
                         
-                        result = PDFQuoteGenerator.generate(quote_data, output_path)
+                        # Crear estructura de carpetas: /home/ubuntu/cotizaciones_guardadas/YYYY/MM/
+                        now = datetime.now()
+                        year = now.strftime("%Y")
+                        month = now.strftime("%m")
+                        
+                        output_dir = f'/home/ubuntu/cotizaciones_guardadas/{year}/{month}'
+                        os.makedirs(output_dir, exist_ok=True)
+                        
+                        # Ruta completa del archivo PDF
+                        pdf_filename = f"cotizacion_{st.session_state.saved_quote_number}.pdf"
+                        pdf_path = f"{output_dir}/{pdf_filename}"
+                        
+                        result = PDFQuoteGenerator.generate(quote_data, pdf_path)
                         
                         if result:
+                            # Actualizar ruta del PDF en la base de datos
+                            if st.session_state.get('saved_quote_id'):
+                                conn = DBManager.get_connection()
+                                cursor = conn.cursor()
+                                is_postgres = DBManager.USE_POSTGRES
+                                
+                                if is_postgres:
+                                    cursor.execute("""
+                                        UPDATE quotes SET pdf_path = %s WHERE id = %s
+                                    """, (pdf_path, st.session_state.saved_quote_id))
+                                else:
+                                    cursor.execute("""
+                                        UPDATE quotes SET pdf_path = ? WHERE id = ?
+                                    """, (pdf_path, st.session_state.saved_quote_id))
+                                
+                                conn.commit()
+                                cursor.close()
+                                conn.close()
+                            
                             # Ofrecer descarga
-                            with open(output_path, 'rb') as f:
+                            with open(pdf_path, 'rb') as f:
                                 st.download_button(
                                     label="📅 Descargar PDF",
                                     data=f,
-                                    file_name=f"cotizacion_{st.session_state.saved_quote_number}.pdf",
+                                    file_name=pdf_filename,
                                     mime="application/pdf",
                                     use_container_width=True
                                 )
-                            st.success("✅ PDF generado exitosamente")
+                            st.success(f"✅ PDF generado y guardado en: {pdf_path}")
                         else:
                             st.error("❌ Error al generar PDF")
                     except Exception as e:
@@ -1008,25 +1092,55 @@ def render_analyst_panel():
                             'terminos_condiciones': config.get('terms_conditions', 'Términos y condiciones estándar.')
                         }
                         
-                        # Generar PNG
-                        output_dir = '/tmp/cotizaciones'
+                        # Generar PNG en carpeta permanente
+                        from datetime import datetime
+                        from database.db_manager import DBManager
+                        
+                        # Crear estructura de carpetas: /home/ubuntu/cotizaciones_guardadas/YYYY/MM/
+                        now = datetime.now()
+                        year = now.strftime("%Y")
+                        month = now.strftime("%m")
+                        
+                        output_dir = f'/home/ubuntu/cotizaciones_guardadas/{year}/{month}'
                         os.makedirs(output_dir, exist_ok=True)
-                        output_path = f"{output_dir}/cotizacion_{st.session_state.saved_quote_number}.png"
+                        
+                        # Ruta completa del archivo PNG
+                        png_filename = f"cotizacion_{st.session_state.saved_quote_number}.png"
+                        png_path = f"{output_dir}/{png_filename}"
                         
                         png_gen = PNGQuoteGenerator()
-                        result = png_gen.generate_quote_png_from_data(quote_data, output_path)
+                        result = png_gen.generate_quote_png_from_data(quote_data, png_path)
                         
                         if result:
+                            # Actualizar ruta del PNG en la base de datos
+                            if st.session_state.get('saved_quote_id'):
+                                conn = DBManager.get_connection()
+                                cursor = conn.cursor()
+                                is_postgres = DBManager.USE_POSTGRES
+                                
+                                if is_postgres:
+                                    cursor.execute("""
+                                        UPDATE quotes SET jpeg_path = %s WHERE id = %s
+                                    """, (png_path, st.session_state.saved_quote_id))
+                                else:
+                                    cursor.execute("""
+                                        UPDATE quotes SET jpeg_path = ? WHERE id = ?
+                                    """, (png_path, st.session_state.saved_quote_id))
+                                
+                                conn.commit()
+                                cursor.close()
+                                conn.close()
+                            
                             # Ofrecer descarga
-                            with open(output_path, 'rb') as f:
+                            with open(png_path, 'rb') as f:
                                 st.download_button(
                                     label="🖼️ Descargar PNG",
                                     data=f,
-                                    file_name=f"cotizacion_{st.session_state.saved_quote_number}.png",
+                                    file_name=png_filename,
                                     mime="image/png",
                                     use_container_width=True
                                 )
-                            st.success("✅ PNG generado exitosamente")
+                            st.success(f"✅ PNG generado y guardado en: {png_path}")
                         else:
                             st.error("❌ Error al generar PNG")
                     except Exception as e:

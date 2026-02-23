@@ -214,6 +214,122 @@ class DBManager:
         except Exception as e:
             print(f"⚠️ Migración de columna 'email': {e}")
         
+        # Migración: Agregar columnas adicionales a tabla 'quotes'
+        try:
+            if is_postgres:
+                # Verificar y agregar columnas faltantes en quotes
+                cursor.execute("""
+                    SELECT column_name 
+                    FROM information_schema.columns 
+                    WHERE table_name='quotes' AND column_name IN ('client_cedula', 'client_address', 'client_vehicle', 'client_year', 'client_vin', 'sub_total', 'iva_total', 'abona_ya', 'en_entrega', 'terms_conditions')
+                """)
+                existing_cols = [row['column_name'] for row in cursor.fetchall()]
+                
+                if 'client_cedula' not in existing_cols:
+                    cursor.execute("ALTER TABLE quotes ADD COLUMN client_cedula TEXT")
+                if 'client_address' not in existing_cols:
+                    cursor.execute("ALTER TABLE quotes ADD COLUMN client_address TEXT")
+                if 'client_vehicle' not in existing_cols:
+                    cursor.execute("ALTER TABLE quotes ADD COLUMN client_vehicle TEXT")
+                if 'client_year' not in existing_cols:
+                    cursor.execute("ALTER TABLE quotes ADD COLUMN client_year TEXT")
+                if 'client_vin' not in existing_cols:
+                    cursor.execute("ALTER TABLE quotes ADD COLUMN client_vin TEXT")
+                if 'sub_total' not in existing_cols:
+                    cursor.execute("ALTER TABLE quotes ADD COLUMN sub_total REAL DEFAULT 0")
+                if 'iva_total' not in existing_cols:
+                    cursor.execute("ALTER TABLE quotes ADD COLUMN iva_total REAL DEFAULT 0")
+                if 'abona_ya' not in existing_cols:
+                    cursor.execute("ALTER TABLE quotes ADD COLUMN abona_ya REAL DEFAULT 0")
+                if 'en_entrega' not in existing_cols:
+                    cursor.execute("ALTER TABLE quotes ADD COLUMN en_entrega REAL DEFAULT 0")
+                if 'terms_conditions' not in existing_cols:
+                    cursor.execute("ALTER TABLE quotes ADD COLUMN terms_conditions TEXT")
+                
+                conn.commit()
+                print("✅ Migración: Columnas adicionales agregadas a tabla 'quotes'")
+            else:
+                # SQLite
+                cursor.execute("PRAGMA table_info(quotes)")
+                columns = [row[1] for row in cursor.fetchall()]
+                
+                if 'client_cedula' not in columns:
+                    cursor.execute("ALTER TABLE quotes ADD COLUMN client_cedula TEXT")
+                if 'client_address' not in columns:
+                    cursor.execute("ALTER TABLE quotes ADD COLUMN client_address TEXT")
+                if 'client_vehicle' not in columns:
+                    cursor.execute("ALTER TABLE quotes ADD COLUMN client_vehicle TEXT")
+                if 'client_year' not in columns:
+                    cursor.execute("ALTER TABLE quotes ADD COLUMN client_year TEXT")
+                if 'client_vin' not in columns:
+                    cursor.execute("ALTER TABLE quotes ADD COLUMN client_vin TEXT")
+                if 'sub_total' not in columns:
+                    cursor.execute("ALTER TABLE quotes ADD COLUMN sub_total REAL DEFAULT 0")
+                if 'iva_total' not in columns:
+                    cursor.execute("ALTER TABLE quotes ADD COLUMN iva_total REAL DEFAULT 0")
+                if 'abona_ya' not in columns:
+                    cursor.execute("ALTER TABLE quotes ADD COLUMN abona_ya REAL DEFAULT 0")
+                if 'en_entrega' not in columns:
+                    cursor.execute("ALTER TABLE quotes ADD COLUMN en_entrega REAL DEFAULT 0")
+                if 'terms_conditions' not in columns:
+                    cursor.execute("ALTER TABLE quotes ADD COLUMN terms_conditions TEXT")
+                
+                conn.commit()
+                print("✅ Migración: Columnas adicionales agregadas a tabla 'quotes'")
+        except Exception as e:
+            print(f"⚠️ Migración de columnas en 'quotes': {e}")
+        
+        # Migración: Agregar columnas adicionales a tabla 'quote_items'
+        try:
+            if is_postgres:
+                cursor.execute("""
+                    SELECT column_name 
+                    FROM information_schema.columns 
+                    WHERE table_name='quote_items' AND column_name IN ('marca', 'garantia', 'total_cost', 'envio_tipo', 'origen', 'fabricacion', 'tiempo_entrega')
+                """)
+                existing_cols = [row['column_name'] for row in cursor.fetchall()]
+                
+                if 'marca' not in existing_cols:
+                    cursor.execute("ALTER TABLE quote_items ADD COLUMN marca TEXT")
+                if 'garantia' not in existing_cols:
+                    cursor.execute("ALTER TABLE quote_items ADD COLUMN garantia TEXT")
+                if 'total_cost' not in existing_cols:
+                    cursor.execute("ALTER TABLE quote_items ADD COLUMN total_cost REAL DEFAULT 0")
+                if 'envio_tipo' not in existing_cols:
+                    cursor.execute("ALTER TABLE quote_items ADD COLUMN envio_tipo TEXT")
+                if 'origen' not in existing_cols:
+                    cursor.execute("ALTER TABLE quote_items ADD COLUMN origen TEXT")
+                if 'fabricacion' not in existing_cols:
+                    cursor.execute("ALTER TABLE quote_items ADD COLUMN fabricacion TEXT")
+                if 'tiempo_entrega' not in existing_cols:
+                    cursor.execute("ALTER TABLE quote_items ADD COLUMN tiempo_entrega TEXT")
+                
+                conn.commit()
+                print("✅ Migración: Columnas adicionales agregadas a tabla 'quote_items'")
+            else:
+                cursor.execute("PRAGMA table_info(quote_items)")
+                columns = [row[1] for row in cursor.fetchall()]
+                
+                if 'marca' not in columns:
+                    cursor.execute("ALTER TABLE quote_items ADD COLUMN marca TEXT")
+                if 'garantia' not in columns:
+                    cursor.execute("ALTER TABLE quote_items ADD COLUMN garantia TEXT")
+                if 'total_cost' not in columns:
+                    cursor.execute("ALTER TABLE quote_items ADD COLUMN total_cost REAL DEFAULT 0")
+                if 'envio_tipo' not in columns:
+                    cursor.execute("ALTER TABLE quote_items ADD COLUMN envio_tipo TEXT")
+                if 'origen' not in columns:
+                    cursor.execute("ALTER TABLE quote_items ADD COLUMN origen TEXT")
+                if 'fabricacion' not in columns:
+                    cursor.execute("ALTER TABLE quote_items ADD COLUMN fabricacion TEXT")
+                if 'tiempo_entrega' not in columns:
+                    cursor.execute("ALTER TABLE quote_items ADD COLUMN tiempo_entrega TEXT")
+                
+                conn.commit()
+                print("✅ Migración: Columnas adicionales agregadas a tabla 'quote_items'")
+        except Exception as e:
+            print(f"⚠️ Migración de columnas en 'quote_items': {e}")
+        
         # Crear usuario admin por defecto si no existe
         cursor.execute("SELECT COUNT(*) FROM users WHERE username = 'admin'")
         result = cursor.fetchone()
@@ -1031,3 +1147,432 @@ class DBManager:
     def use_reset_token(token: str) -> bool:
         """Marca un token como usado (alias de mark_token_as_used)."""
         return DBManager.mark_token_as_used(token)
+
+
+    # ==================== MÉTODOS DE GESTIÓN DE COTIZACIONES ====================
+    
+    @staticmethod
+    def save_quote(quote_data: Dict[str, Any]) -> Optional[int]:
+        """
+        Guarda una cotización completa en la base de datos.
+        
+        Args:
+            quote_data: Diccionario con los datos de la cotización:
+                - quote_number: Número de cotización (ej: 2026-30022-A)
+                - analyst_id: ID del analista
+                - client_name: Nombre del cliente
+                - client_phone: Teléfono del cliente
+                - client_email: Email del cliente
+                - client_cedula: Cédula o RIF del cliente
+                - client_address: Dirección del cliente
+                - client_vehicle: Vehículo del cliente
+                - client_year: Año del vehículo
+                - client_vin: VIN del vehículo
+                - total_amount: Monto total
+                - sub_total: Subtotal
+                - iva_total: IVA total
+                - abona_ya: Monto de abono
+                - en_entrega: Monto en entrega
+                - terms_conditions: Términos y condiciones
+                - status: Estado (draft/sent/approved/rejected)
+                - pdf_path: Ruta del archivo PDF
+                - jpeg_path: Ruta del archivo PNG/JPEG
+        
+        Returns:
+            ID de la cotización guardada o None si hay error
+        """
+        try:
+            conn = DBManager.get_connection()
+            cursor = conn.cursor()
+            is_postgres = DBManager.USE_POSTGRES
+            
+            # Preparar datos con valores por defecto
+            quote_number = quote_data.get('quote_number')
+            analyst_id = quote_data.get('analyst_id')
+            client_name = quote_data.get('client_name', '')
+            client_phone = quote_data.get('client_phone', '')
+            client_email = quote_data.get('client_email', '')
+            client_cedula = quote_data.get('client_cedula', '')
+            client_address = quote_data.get('client_address', '')
+            client_vehicle = quote_data.get('client_vehicle', '')
+            client_year = quote_data.get('client_year', '')
+            client_vin = quote_data.get('client_vin', '')
+            total_amount = quote_data.get('total_amount', 0.0)
+            sub_total = quote_data.get('sub_total', 0.0)
+            iva_total = quote_data.get('iva_total', 0.0)
+            abona_ya = quote_data.get('abona_ya', 0.0)
+            en_entrega = quote_data.get('en_entrega', 0.0)
+            terms_conditions = quote_data.get('terms_conditions', '')
+            status = quote_data.get('status', 'draft')
+            pdf_path = quote_data.get('pdf_path', '')
+            jpeg_path = quote_data.get('jpeg_path', '')
+            
+            # Validar campos obligatorios
+            if not quote_number or not analyst_id:
+                print("Error: quote_number y analyst_id son obligatorios")
+                return None
+            
+            # Insertar cotización
+            if is_postgres:
+                cursor.execute("""
+                    INSERT INTO quotes (
+                        quote_number, analyst_id, client_name, client_phone, client_email,
+                        client_cedula, client_address, client_vehicle, client_year, client_vin,
+                        total_amount, sub_total, iva_total, abona_ya, en_entrega,
+                        terms_conditions, status, pdf_path, jpeg_path
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id
+                """, (
+                    quote_number, analyst_id, client_name, client_phone, client_email,
+                    client_cedula, client_address, client_vehicle, client_year, client_vin,
+                    total_amount, sub_total, iva_total, abona_ya, en_entrega,
+                    terms_conditions, status, pdf_path, jpeg_path
+                ))
+                quote_id = cursor.fetchone()['id']
+            else:
+                cursor.execute("""
+                    INSERT INTO quotes (
+                        quote_number, analyst_id, client_name, client_phone, client_email,
+                        client_cedula, client_address, client_vehicle, client_year, client_vin,
+                        total_amount, sub_total, iva_total, abona_ya, en_entrega,
+                        terms_conditions, status, pdf_path, jpeg_path
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    quote_number, analyst_id, client_name, client_phone, client_email,
+                    client_cedula, client_address, client_vehicle, client_year, client_vin,
+                    total_amount, sub_total, iva_total, abona_ya, en_entrega,
+                    terms_conditions, status, pdf_path, jpeg_path
+                ))
+                quote_id = cursor.lastrowid
+            
+            conn.commit()
+            cursor.close()
+            conn.close()
+            
+            print(f"✅ Cotización guardada exitosamente: {quote_number} (ID: {quote_id})")
+            return quote_id
+            
+        except Exception as e:
+            print(f"❌ Error al guardar cotización: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+    
+    @staticmethod
+    def save_quote_items(quote_id: int, items: List[Dict[str, Any]]) -> bool:
+        """
+        Guarda los ítems de una cotización.
+        
+        Args:
+            quote_id: ID de la cotización
+            items: Lista de diccionarios con los datos de cada ítem:
+                - description: Descripción del repuesto
+                - part_number: Número de parte
+                - marca: Marca
+                - garantia: Garantía
+                - quantity: Cantidad
+                - unit_cost: Costo unitario
+                - total_cost: Costo total
+                - envio_tipo: Tipo de envío
+                - origen: Origen
+                - fabricacion: Fabricación
+                - tiempo_entrega: Tiempo de entrega
+                - page_url: URL de la página donde se cotizó
+        
+        Returns:
+            True si se guardaron exitosamente, False en caso de error
+        """
+        try:
+            conn = DBManager.get_connection()
+            cursor = conn.cursor()
+            is_postgres = DBManager.USE_POSTGRES
+            
+            for item in items:
+                description = item.get('descripcion', '') or item.get('description', '')
+                part_number = item.get('parte', '') or item.get('part_number', '')
+                marca = item.get('marca', '')
+                garantia = item.get('garantia', '')
+                quantity = item.get('cantidad', 1) or item.get('quantity', 1)
+                unit_cost = item.get('precio_unitario', 0.0) or item.get('unit_cost', 0.0)
+                total_cost = item.get('precio_bs', 0.0) or item.get('total_cost', 0.0)
+                envio_tipo = item.get('envio_tipo', '')
+                origen = item.get('origen', '')
+                fabricacion = item.get('fabricacion', '')
+                tiempo_entrega = item.get('tiempo_entrega', '')
+                page_url = item.get('page_url', '') or item.get('link', '')
+                
+                # Calcular unit_cost si no está presente
+                if unit_cost == 0.0 and total_cost > 0 and quantity > 0:
+                    unit_cost = total_cost / quantity
+                
+                if is_postgres:
+                    cursor.execute("""
+                        INSERT INTO quote_items (
+                            quote_id, description, part_number, marca, garantia,
+                            quantity, unit_cost, total_cost, envio_tipo, origen,
+                            fabricacion, tiempo_entrega, page_url
+                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """, (
+                        quote_id, description, part_number, marca, garantia,
+                        quantity, unit_cost, total_cost, envio_tipo, origen,
+                        fabricacion, tiempo_entrega, page_url
+                    ))
+                else:
+                    cursor.execute("""
+                        INSERT INTO quote_items (
+                            quote_id, description, part_number, marca, garantia,
+                            quantity, unit_cost, total_cost, envio_tipo, origen,
+                            fabricacion, tiempo_entrega, page_url
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        quote_id, description, part_number, marca, garantia,
+                        quantity, unit_cost, total_cost, envio_tipo, origen,
+                        fabricacion, tiempo_entrega, page_url
+                    ))
+            
+            conn.commit()
+            cursor.close()
+            conn.close()
+            
+            print(f"✅ {len(items)} ítems guardados para cotización ID: {quote_id}")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Error al guardar ítems de cotización: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+    
+    @staticmethod
+    def get_quotes_by_analyst(analyst_id: int, limit: int = 100) -> List[Dict[str, Any]]:
+        """
+        Obtiene todas las cotizaciones de un analista específico.
+        
+        Args:
+            analyst_id: ID del analista
+            limit: Número máximo de cotizaciones a retornar
+        
+        Returns:
+            Lista de diccionarios con las cotizaciones
+        """
+        try:
+            conn = DBManager.get_connection()
+            cursor = conn.cursor()
+            is_postgres = DBManager.USE_POSTGRES
+            
+            if is_postgres:
+                cursor.execute("""
+                    SELECT * FROM quotes
+                    WHERE analyst_id = %s
+                    ORDER BY created_at DESC
+                    LIMIT %s
+                """, (analyst_id, limit))
+            else:
+                cursor.execute("""
+                    SELECT * FROM quotes
+                    WHERE analyst_id = ?
+                    ORDER BY created_at DESC
+                    LIMIT ?
+                """, (analyst_id, limit))
+            
+            quotes = [dict(row) for row in cursor.fetchall()]
+            cursor.close()
+            conn.close()
+            
+            return quotes
+            
+        except Exception as e:
+            print(f"❌ Error al obtener cotizaciones del analista: {e}")
+            return []
+    
+    @staticmethod
+    def get_all_quotes(limit: int = 100) -> List[Dict[str, Any]]:
+        """
+        Obtiene todas las cotizaciones del sistema (para administrador).
+        
+        Args:
+            limit: Número máximo de cotizaciones a retornar
+        
+        Returns:
+            Lista de diccionarios con las cotizaciones
+        """
+        try:
+            conn = DBManager.get_connection()
+            cursor = conn.cursor()
+            is_postgres = DBManager.USE_POSTGRES
+            
+            if is_postgres:
+                cursor.execute("""
+                    SELECT q.*, u.full_name as analyst_name
+                    FROM quotes q
+                    JOIN users u ON q.analyst_id = u.id
+                    ORDER BY q.created_at DESC
+                    LIMIT %s
+                """, (limit,))
+            else:
+                cursor.execute("""
+                    SELECT q.*, u.full_name as analyst_name
+                    FROM quotes q
+                    JOIN users u ON q.analyst_id = u.id
+                    ORDER BY q.created_at DESC
+                    LIMIT ?
+                """, (limit,))
+            
+            quotes = [dict(row) for row in cursor.fetchall()]
+            cursor.close()
+            conn.close()
+            
+            return quotes
+            
+        except Exception as e:
+            print(f"❌ Error al obtener todas las cotizaciones: {e}")
+            return []
+    
+    @staticmethod
+    def get_quote_by_id(quote_id: int) -> Optional[Dict[str, Any]]:
+        """
+        Obtiene una cotización específica por su ID.
+        
+        Args:
+            quote_id: ID de la cotización
+        
+        Returns:
+            Diccionario con los datos de la cotización o None si no existe
+        """
+        try:
+            conn = DBManager.get_connection()
+            cursor = conn.cursor()
+            is_postgres = DBManager.USE_POSTGRES
+            
+            if is_postgres:
+                cursor.execute("""
+                    SELECT q.*, u.full_name as analyst_name
+                    FROM quotes q
+                    JOIN users u ON q.analyst_id = u.id
+                    WHERE q.id = %s
+                """, (quote_id,))
+            else:
+                cursor.execute("""
+                    SELECT q.*, u.full_name as analyst_name
+                    FROM quotes q
+                    JOIN users u ON q.analyst_id = u.id
+                    WHERE q.id = ?
+                """, (quote_id,))
+            
+            quote = cursor.fetchone()
+            cursor.close()
+            conn.close()
+            
+            return dict(quote) if quote else None
+            
+        except Exception as e:
+            print(f"❌ Error al obtener cotización por ID: {e}")
+            return None
+    
+    @staticmethod
+    def get_quote_items(quote_id: int) -> List[Dict[str, Any]]:
+        """
+        Obtiene todos los ítems de una cotización.
+        
+        Args:
+            quote_id: ID de la cotización
+        
+        Returns:
+            Lista de diccionarios con los ítems
+        """
+        try:
+            conn = DBManager.get_connection()
+            cursor = conn.cursor()
+            is_postgres = DBManager.USE_POSTGRES
+            
+            if is_postgres:
+                cursor.execute("""
+                    SELECT * FROM quote_items
+                    WHERE quote_id = %s
+                    ORDER BY id
+                """, (quote_id,))
+            else:
+                cursor.execute("""
+                    SELECT * FROM quote_items
+                    WHERE quote_id = ?
+                    ORDER BY id
+                """, (quote_id,))
+            
+            items = [dict(row) for row in cursor.fetchall()]
+            cursor.close()
+            conn.close()
+            
+            return items
+            
+        except Exception as e:
+            print(f"❌ Error al obtener ítems de cotización: {e}")
+            return []
+    
+    @staticmethod
+    def search_quotes(analyst_id: Optional[int], search_term: str, limit: int = 100) -> List[Dict[str, Any]]:
+        """
+        Busca cotizaciones por número, nombre de cliente o teléfono.
+        
+        Args:
+            analyst_id: ID del analista (None para buscar en todas)
+            search_term: Término de búsqueda
+            limit: Número máximo de resultados
+        
+        Returns:
+            Lista de diccionarios con las cotizaciones encontradas
+        """
+        try:
+            conn = DBManager.get_connection()
+            cursor = conn.cursor()
+            is_postgres = DBManager.USE_POSTGRES
+            
+            search_pattern = f"%{search_term}%"
+            
+            if analyst_id:
+                # Buscar solo cotizaciones del analista
+                if is_postgres:
+                    cursor.execute("""
+                        SELECT * FROM quotes
+                        WHERE analyst_id = %s
+                        AND (quote_number ILIKE %s OR client_name ILIKE %s OR client_phone ILIKE %s)
+                        ORDER BY created_at DESC
+                        LIMIT %s
+                    """, (analyst_id, search_pattern, search_pattern, search_pattern, limit))
+                else:
+                    cursor.execute("""
+                        SELECT * FROM quotes
+                        WHERE analyst_id = ?
+                        AND (quote_number LIKE ? OR client_name LIKE ? OR client_phone LIKE ?)
+                        ORDER BY created_at DESC
+                        LIMIT ?
+                    """, (analyst_id, search_pattern, search_pattern, search_pattern, limit))
+            else:
+                # Buscar en todas las cotizaciones (administrador)
+                if is_postgres:
+                    cursor.execute("""
+                        SELECT q.*, u.full_name as analyst_name
+                        FROM quotes q
+                        JOIN users u ON q.analyst_id = u.id
+                        WHERE quote_number ILIKE %s OR client_name ILIKE %s OR client_phone ILIKE %s
+                        ORDER BY q.created_at DESC
+                        LIMIT %s
+                    """, (search_pattern, search_pattern, search_pattern, limit))
+                else:
+                    cursor.execute("""
+                        SELECT q.*, u.full_name as analyst_name
+                        FROM quotes q
+                        JOIN users u ON q.analyst_id = u.id
+                        WHERE quote_number LIKE ? OR client_name LIKE ? OR client_phone LIKE ?
+                        ORDER BY q.created_at DESC
+                        LIMIT ?
+                    """, (search_pattern, search_pattern, search_pattern, limit))
+            
+            quotes = [dict(row) for row in cursor.fetchall()]
+            cursor.close()
+            conn.close()
+            
+            return quotes
+            
+        except Exception as e:
+            print(f"❌ Error al buscar cotizaciones: {e}")
+            return []
