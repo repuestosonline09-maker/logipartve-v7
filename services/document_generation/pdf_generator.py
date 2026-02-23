@@ -429,20 +429,20 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
     # TABLA DE ITEMS (SIN TÍTULO)
     # ==========================================
     
-    # Encabezados de tabla con nuevos nombres (usando style_header centrado)
+    # Encabezados de tabla con nuevos nombres (usando texto simple para evitar word wrap)
     items_data = [[
-        Paragraph("<b>ITEM</b>", style_header),
-        Paragraph("<b>DESCRIPCION</b>", style_header),
-        Paragraph("<b># PARTE</b>", style_header),
-        Paragraph("<b>MARCA</b>", style_header),
-        Paragraph("<b>GARANTIA</b>", style_header),
-        Paragraph("<b>QTY</b>", style_header),
-        Paragraph("<b>ENVIO</b>", style_header),
-        Paragraph("<b>ORIGEN</b>", style_header),
-        Paragraph("<b>FABRICACION</b>", style_header),
-        Paragraph("<b>ENTREGA</b>", style_header),
-        Paragraph("<b>UNIT</b>", style_header),
-        Paragraph("<b>TOTAL</b>", style_header),
+        "ITEM",
+        "DESCRIPCION",
+        "# PARTE",
+        "MARCA",
+        "GARANTIA",
+        "QTY",
+        "ENVIO",
+        "ORIGEN",
+        "FABRICACION",
+        "ENTREGA",
+        "UNIT",
+        "TOTAL",
     ]]
     
     # Agregar ítems
@@ -480,7 +480,7 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
         ('BACKGROUND', (0, 0), (-1, 0), COLOR_AZUL_AOP),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 7),
+        ('FONTSIZE', (0, 0), (-1, 0), 6),  # Reducido a 6pt para que quepan palabras completas
         ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
         ('VALIGN', (0, 0), (-1, 0), 'MIDDLE'),  # Centrar verticalmente encabezados
         
