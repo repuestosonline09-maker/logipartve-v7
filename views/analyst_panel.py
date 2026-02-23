@@ -789,17 +789,47 @@ def render_analyst_panel():
                     st.write(f"**Fabricación:** {item['fabricacion']}")
                     st.write(f"**Envío:** {item['envio_tipo']}")
                 with col3:
-                    st.write(f"**💵 Precio USD:** ${item.get('precio_usd', item['costo_unitario']):.2f}")
-                    st.write(f"**🇻🇪 Precio Bs:** ${item.get('precio_bs', item['costo_total']):.2f}")
-                    st.write(f"**Total USD:** ${item['costo_total']:.2f}")
+                    # Manejar valores None o strings en precios
+                    precio_usd = item.get('precio_usd', item.get('costo_unitario', 0))
+                    precio_bs = item.get('precio_bs', item.get('costo_total', 0))
+                    total_usd = item.get('costo_total', 0)
+                    
+                    # Convertir a float si es necesario
+                    try:
+                        precio_usd = float(precio_usd) if precio_usd else 0.0
+                    except (ValueError, TypeError):
+                        precio_usd = 0.0
+                    
+                    try:
+                        precio_bs = float(precio_bs) if precio_bs else 0.0
+                    except (ValueError, TypeError):
+                        precio_bs = 0.0
+                    
+                    try:
+                        total_usd = float(total_usd) if total_usd else 0.0
+                    except (ValueError, TypeError):
+                        total_usd = 0.0
+                    
+                    st.write(f"**💵 Precio USD:** ${precio_usd:.2f}")
+                    st.write(f"**🇻🇪 Precio Bs:** ${precio_bs:.2f}")
+                    st.write(f"**Total USD:** ${total_usd:.2f}")
                 
                 # Botón para eliminar ítem
                 if st.button(f"🗑️ Eliminar Ítem #{i+1}", key=f"del_item_{i}"):
                     st.session_state.cotizacion_items.pop(i)
                     st.rerun()
             
-            total_general_usd += item['costo_total']
-            total_general_bs += item.get('costo_total_bs', item['costo_total'])
+            # Manejar valores None o strings en totales
+            try:
+                total_general_usd += float(item.get('costo_total', 0)) if item.get('costo_total') else 0.0
+            except (ValueError, TypeError):
+                total_general_usd += 0.0
+            
+            try:
+                total_bs_item = item.get('costo_total_bs', item.get('costo_total', 0))
+                total_general_bs += float(total_bs_item) if total_bs_item else 0.0
+            except (ValueError, TypeError):
+                total_general_bs += 0.0
         
         st.markdown("---")
         st.success(f"**💵 TOTAL USD: ${total_general_usd:.2f}** | **🇻🇪 TOTAL Bs: ${total_general_bs:.2f}**")
