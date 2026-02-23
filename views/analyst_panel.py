@@ -907,8 +907,6 @@ def render_analyst_panel():
                 
                 if final_quote_number:
                     try:
-                        from database.db_manager import DBManager
-                        
                         # Preparar datos del cliente
                         cliente = st.session_state.get('cliente_datos', {})
                         
