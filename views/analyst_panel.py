@@ -200,7 +200,7 @@ def render_analyst_panel():
             'vin': editing_quote_data.get('client_vin', '')
         }
         
-        # Cargar ítems
+        # Cargar ítems con TODOS los campos
         items = editing_quote_data.get('items', [])
         st.session_state.cotizacion_items = []
         for item in items:
@@ -210,12 +210,21 @@ def render_analyst_panel():
                 'marca': item.get('marca', ''),
                 'garantia': item.get('garantia', ''),
                 'cantidad': item.get('quantity', 1),
-                'unit': item.get('unit_cost', 0),
-                'total': item.get('total_cost', 0),
-                'envio_tipo': item.get('envio_tipo', ''),
                 'origen': item.get('origen', ''),
+                'envio_tipo': item.get('envio_tipo', ''),
+                'tiempo_entrega': item.get('tiempo_entrega', ''),
                 'fabricacion': item.get('fabricacion', ''),
-                'tiempo_entrega': item.get('tiempo_entrega', '')
+                'link': item.get('page_url', ''),
+                'costo_fob': item.get('unit_cost', 0),
+                'costo_handling': item.get('international_handling', 0),
+                'costo_manejo': item.get('national_handling', 0),
+                'costo_envio': item.get('shipping_cost', 0),
+                'impuesto_porcentaje': item.get('tax_percentage', 0),
+                'factor_utilidad': item.get('profit_factor', 1.0),
+                'costo_unitario': item.get('unit_cost', 0),
+                'costo_total': item.get('total_cost', 0),
+                'precio_usd': item.get('unit_cost', 0),
+                'precio_bs': item.get('total_cost', 0)
             })
         
         # Marcar como cargado
@@ -487,17 +496,21 @@ def render_analyst_panel():
         num_items = 0
         st.session_state.cotizacion_items = []
     
-    # Detectar si se está editando un ítem específico
+    # Detectar modo edición de ítem
     editing_item = st.session_state.get('editing_item_index', None) is not None
     editing_item_index = st.session_state.get('editing_item_index', None)
     editing_item_data = st.session_state.get('editing_item_data', {})
+    
+    # DEBUG: Mostrar estado de variables de edición
+    # st.write(f"DEBUG - editing_item: {editing_item}")
+    # st.write(f"DEBUG - editing_item_index: {editing_item_index}")
+    # st.write(f"DEBUG - editing_item_data: {editing_item_data}")
     
     if editing_item:
         st.markdown(f"### ✏️ Editando Ítem #{editing_item_index + 1}")
         st.warning("📝 Modifique los campos que desee y haga clic en '💾 ACTUALIZAR ÍTEM'")
     else:
-        st.markdown(f"### 📦 Ítem #{num_items + 1}")
-    
+        st.markdown(f"### 📦 Ítem #{num_items + 1}")   
     # Mostrar mensaje de éxito/error si existe
     if 'item_agregado_msg' in st.session_state:
         if "✅" in st.session_state.item_agregado_msg:
