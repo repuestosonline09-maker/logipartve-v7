@@ -1548,6 +1548,16 @@ def render_analyst_panel():
                     if 'cotizacion_guardada' in st.session_state:
                         del st.session_state.cotizacion_guardada
                     
+                    # Limpiar variables de modo edición
+                    if 'editing_quote_id' in st.session_state:
+                        del st.session_state.editing_quote_id
+                    if 'editing_quote_number' in st.session_state:
+                        del st.session_state.editing_quote_number
+                    if 'editing_item_index' in st.session_state:
+                        del st.session_state.editing_item_index
+                    if 'editing_item_data' in st.session_state:
+                        del st.session_state.editing_item_data
+                    
                     # Incrementar contadores para limpiar todos los formularios (con verificación de seguridad)
                     if 'cliente_reset_counter' not in st.session_state:
                         st.session_state.cliente_reset_counter = 0
