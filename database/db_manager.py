@@ -1325,20 +1325,21 @@ class DBManager:
                 marca = item.get('marca', '')
                 garantia = item.get('garantia', '')
                 quantity = item.get('cantidad', 1) or item.get('quantity', 1)
-                unit_cost = item.get('precio_unitario', 0.0) or item.get('unit_cost', 0.0)
-                total_cost = item.get('precio_bs', 0.0) or item.get('total_cost', 0.0)
+                # unit_cost debe ser el FOB, no el precio final
+                costo_fob = item.get('costo_fob', 0.0)
+                unit_cost = costo_fob if costo_fob > 0 else (item.get('precio_unitario', 0.0) or item.get('unit_cost', 0.0))
+                
+                # total_cost es el precio final en USD
+                precio_usd = item.get('precio_usd', 0.0) or item.get('precio_unitario', 0.0)
+                total_cost = precio_usd if precio_usd > 0 else (item.get('precio_bs', 0.0) or item.get('total_cost', 0.0))
+                
                 envio_tipo = item.get('envio_tipo', '')
                 origen = item.get('origen', '')
                 fabricacion = item.get('fabricacion', '')
                 tiempo_entrega = item.get('tiempo_entrega', '')
                 page_url = item.get('page_url', '') or item.get('link', '')
                 
-                # Calcular unit_cost si no está presente
-                if unit_cost == 0.0 and total_cost > 0 and quantity > 0:
-                    unit_cost = total_cost / quantity
-                
                 # Obtener costos internos
-                costo_fob = item.get('costo_fob', 0.0)
                 costo_handling = item.get('costo_handling', 0.0)
                 costo_manejo = item.get('costo_manejo', 0.0)
                 costo_envio = item.get('costo_envio', 0.0)
@@ -1892,8 +1893,8 @@ class DBManager:
                     item.get('marca', ''),
                     item.get('garantia', ''),
                     item.get('cantidad') or item.get('quantity', 1),
-                    item.get('unit') or item.get('unit_cost', 0),
-                    item.get('total') or item.get('total_cost', 0),
+                    costo_fob if costo_fob > 0 else (item.get('unit') or item.get('unit_cost', 0)),
+                    item.get('precio_usd', 0) or (item.get('total') or item.get('total_cost', 0)),
                     item.get('envio_tipo', ''),
                     item.get('origen', ''),
                     item.get('fabricacion', ''),
