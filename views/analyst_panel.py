@@ -635,6 +635,10 @@ def render_analyst_panel():
     # ==========================================
     st.markdown("### 🔗 Links del Producto (opcional - uso interno)")
     
+    # Inicializar contador de links para forzar limpieza de campo
+    if 'link_counter' not in st.session_state:
+        st.session_state.link_counter = 0
+    
     # Inicializar lista de links en session_state si no existe
     if 'item_links' not in st.session_state:
         # Si estamos editando, cargar links existentes
@@ -678,12 +682,13 @@ def render_analyst_panel():
         new_link = st.text_input(
             "Nuevo link",
             placeholder="https://...",
-            key=f"new_link_input_{reset_key}"
+            key=f"new_link_input_{reset_key}_{st.session_state.link_counter}"
         )
     with new_link_col2:
-        if st.button("➕ Agregar", key=f"add_link_{reset_key}", help="Agregar link"):
+        if st.button("➞ Agregar", key=f"add_link_{reset_key}", help="Agregar link"):
             if new_link and new_link.strip():
                 st.session_state.item_links.append(new_link.strip())
+                st.session_state.link_counter += 1  # Incrementar contador para limpiar campo
                 st.rerun()
     
     st.markdown("---")
