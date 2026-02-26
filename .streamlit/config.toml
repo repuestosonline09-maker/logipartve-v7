@@ -13,32 +13,20 @@ address = "0.0.0.0"
 port = 8080
 maxMessageSize = 200
 enableWebsocketCompression = true
-# Configuración para evitar timeout de sesión
 maxUploadSize = 200
-# Deshabilitar timeout del servidor
 runOnSave = false
 
 [browser]
 gatherUsageStats = false
 serverPort = 8501
-# Evitar que el navegador desconecte por inactividad
 serverAddress = "0.0.0.0"
 
 [client]
 toolbarMode = "minimal"
 showErrorDetails = false
 
-# Configuración crítica para evitar cierre de sesión
 [runner]
 fastReruns = true
-# Aumentar significativamente el tiempo antes de considerar un mensaje como viejo
-# 300 segundos (5 min) es muy corto, aumentar a 3600 (1 hora)
-maxMessageAge = 3600
-# Evitar que se mate el script por inactividad
-magicEnabled = true
-installTracer = false
-fixMatplotlib = true
-postScriptGC = false
 
 [logger]
 level = "info"
