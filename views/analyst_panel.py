@@ -895,14 +895,16 @@ def render_analyst_panel():
             elif costo_fob <= 0:
                 st.error("⚠️ Ingrese el costo FOB")
             else:
-                # Obtener links de forma segura
+                # Obtener links de forma totalmente segura usando hasattr
+                item_links_to_save = []
                 try:
-                    if 'item_links' in st.session_state and st.session_state.item_links:
-                        item_links_json = json.dumps(st.session_state.item_links)
-                    else:
-                        item_links_json = json.dumps([])
+                    if hasattr(st.session_state, 'item_links') and st.session_state.item_links:
+                        item_links_to_save = st.session_state.item_links
                 except:
-                    item_links_json = json.dumps([])
+                    pass
+                
+                # Convertir a JSON
+                item_links_json = json.dumps(item_links_to_save)
                 
                 # Guardar ítem actual
                 nuevo_item = {
@@ -988,14 +990,16 @@ def render_analyst_panel():
             else:
                 # Si hay un ítem en el formulario actual, agregarlo
                 if item_descripcion and costo_fob > 0:
-                    # Obtener links de forma segura
+                    # Obtener links de forma totalmente segura usando hasattr
+                    item_links_to_save = []
                     try:
-                        if 'item_links' in st.session_state and st.session_state.item_links:
-                            item_links_json = json.dumps(st.session_state.item_links)
-                        else:
-                            item_links_json = json.dumps([])
+                        if hasattr(st.session_state, 'item_links') and st.session_state.item_links:
+                            item_links_to_save = st.session_state.item_links
                     except:
-                        item_links_json = json.dumps([])
+                        pass
+                    
+                    # Convertir a JSON
+                    item_links_json = json.dumps(item_links_to_save)
                     
                     nuevo_item = {
                         "descripcion": item_descripcion,
