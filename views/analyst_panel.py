@@ -5,6 +5,7 @@ Campos configurables desde Panel Admin
 """
 
 import streamlit as st
+import json
 import datetime
 from datetime import timedelta
 from database.db_manager import DBManager
@@ -436,9 +437,26 @@ def render_analyst_panel():
                     st.write(f"• **Envío:** {item.get('envio_tipo', 'N/A')}")
                     st.write(f"• **Tiempo:** {item.get('tiempo_entrega', 'N/A')}")
                     st.write(f"• **Fabricación:** {item.get('fabricacion', 'N/A')}")
+                    
+                    # Mostrar múltiples links si existen
                     link = item.get('link', item.get('page_url', ''))
                     if link:
-                        st.write(f"• **Link:** [{link[:30]}...]({link})")
+                        try:
+                            # Intentar parsear como JSON array
+                            if link.startswith('['):
+                                links_array = json.loads(link)
+                                if links_array:
+                                    st.write(f"• **Links ({len(links_array)}):**")
+                                    for idx, l in enumerate(links_array, 1):
+                                        st.write(f"  {idx}. [{l[:25]}...]({l})")
+                                else:
+                                    st.write(f"• **Link:** No disponible")
+                            else:
+                                # Link único (formato antiguo)
+                                st.write(f"• **Link:** [{link[:30]}...]({link})")
+                        except:
+                            # Si falla el parsing, mostrar como link único
+                            st.write(f"• **Link:** [{link[:30]}...]({link})")
                     else:
                         st.write(f"• **Link:** No disponible")
                 
@@ -528,6 +546,8 @@ def render_analyst_panel():
     if st.session_state.get('limpiar_campos_item', False):
         # Incrementar contador para forzar recreación de widgets
         st.session_state.item_reset_counter += 1
+        # Limpiar lista de links
+        st.session_state.item_links = []
         # Marcar como limpiado
         st.session_state.limpiar_campos_item = False
     
@@ -608,7 +628,63 @@ def render_analyst_panel():
         fabricacion_index = config["paises_origen"].index(default_fabricacion) if default_fabricacion and default_fabricacion in config["paises_origen"] else 0
         item_fabricacion = st.selectbox("País de Fabricación", config["paises_origen"], index=fabricacion_index if editing_item else 0, key=f"item_fabricacion_{reset_key}")
     with item_col10:
-        item_link = st.text_input("Link del Producto (opcional)", value=default_link, placeholder="https://...", key=f"item_link_{reset_key}")
+        st.write("")  # Espacio para alineación
+    
+    # ==========================================
+    # SECCIÓN 3.5: MÚLTIPLES LINKS DEL PRODUCTO
+    # ==========================================
+    st.markdown("### 🔗 Links del Producto (opcional - uso interno)")
+    
+    # Inicializar lista de links en session_state si no existe
+    if 'item_links' not in st.session_state:
+        # Si estamos editando, cargar links existentes
+        if editing_item and default_link:
+            # Si el link es un JSON array, parsearlo
+            import json
+            try:
+                if default_link.startswith('['):
+                    st.session_state.item_links = json.loads(default_link)
+                else:
+                    st.session_state.item_links = [default_link] if default_link else []
+            except:
+                st.session_state.item_links = [default_link] if default_link else []
+        else:
+            st.session_state.item_links = []
+    
+    # Mostrar links existentes
+    links_to_remove = []
+    if st.session_state.item_links:
+        for idx, link in enumerate(st.session_state.item_links):
+            col_link, col_delete = st.columns([5, 1])
+            with col_link:
+                st.text_input(
+                    f"Link #{idx + 1}",
+                    value=link,
+                    key=f"link_display_{idx}_{reset_key}",
+                    on_change=lambda i=idx: st.session_state.item_links.__setitem__(i, st.session_state[f"link_display_{i}_{reset_key}"])
+                )
+            with col_delete:
+                if st.button("❌", key=f"delete_link_{idx}_{reset_key}", help="Eliminar link"):
+                    links_to_remove.append(idx)
+    
+    # Eliminar links marcados
+    for idx in sorted(links_to_remove, reverse=True):
+        st.session_state.item_links.pop(idx)
+        st.rerun()
+    
+    # Campo para agregar nuevo link
+    new_link_col1, new_link_col2 = st.columns([5, 1])
+    with new_link_col1:
+        new_link = st.text_input(
+            "Nuevo link",
+            placeholder="https://...",
+            key=f"new_link_input_{reset_key}"
+        )
+    with new_link_col2:
+        if st.button("➕ Agregar", key=f"add_link_{reset_key}", help="Agregar link"):
+            if new_link and new_link.strip():
+                st.session_state.item_links.append(new_link.strip())
+                st.rerun()
     
     st.markdown("---")
     
@@ -825,7 +901,7 @@ def render_analyst_panel():
                     "envio_tipo": item_envio_tipo,
                     "tiempo_entrega": item_tiempo,
                     "fabricacion": item_fabricacion,
-                    "link": item_link,
+                    "link": json.dumps(st.session_state.get('item_links', [])),
                     "costo_fob": costo_fob,
                     "costo_handling": costo_handling,
                     "costo_manejo": costo_manejo,
@@ -908,7 +984,7 @@ def render_analyst_panel():
                         "envio_tipo": item_envio_tipo,
                         "tiempo_entrega": item_tiempo,
                         "fabricacion": item_fabricacion,
-                        "link": item_link,
+                        "link": json.dumps(st.session_state.get('item_links', [])),
                         "costo_fob": costo_fob,
                         "costo_handling": costo_handling,
                         "costo_manejo": costo_manejo,
