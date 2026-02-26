@@ -15,6 +15,7 @@ st.set_page_config(
 # Importar módulos
 from database.db_manager import DBManager
 from services.auth_manager import AuthManager
+from services.session_manager import SessionManager
 import os
 import sys
 from components.header import show_header
@@ -154,6 +155,9 @@ ensure_default_config()
 def main():
     """Función principal de la aplicación."""
     
+    # Inicializar gestor de sesión
+    SessionManager.init_session()
+    
     # Ejecutar migraciones automáticamente (solo una vez)
     if 'migrations_executed' not in st.session_state:
         try:
@@ -200,6 +204,9 @@ def main():
 
 def show_main_app():
     """Muestra la aplicación principal después del login."""
+    
+    # Mantener sesión activa
+    SessionManager.check_and_refresh_session()
     
     # Mostrar header
     show_header()
