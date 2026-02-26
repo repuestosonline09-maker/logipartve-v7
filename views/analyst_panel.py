@@ -895,6 +895,10 @@ def render_analyst_panel():
             elif costo_fob <= 0:
                 st.error("⚠️ Ingrese el costo FOB")
             else:
+                # Asegurar que item_links exista
+                if 'item_links' not in st.session_state:
+                    st.session_state.item_links = []
+                
                 # Guardar ítem actual
                 nuevo_item = {
                     "descripcion": item_descripcion,
@@ -906,7 +910,7 @@ def render_analyst_panel():
                     "envio_tipo": item_envio_tipo,
                     "tiempo_entrega": item_tiempo,
                     "fabricacion": item_fabricacion,
-                    "link": json.dumps(st.session_state.get('item_links', [])),
+                    "link": json.dumps(st.session_state.item_links if st.session_state.item_links else []),
                     "costo_fob": costo_fob,
                     "costo_handling": costo_handling,
                     "costo_manejo": costo_manejo,
@@ -979,6 +983,10 @@ def render_analyst_panel():
             else:
                 # Si hay un ítem en el formulario actual, agregarlo
                 if item_descripcion and costo_fob > 0:
+                    # Asegurar que item_links exista
+                    if 'item_links' not in st.session_state:
+                        st.session_state.item_links = []
+                    
                     nuevo_item = {
                         "descripcion": item_descripcion,
                         "parte": item_parte,
@@ -989,7 +997,7 @@ def render_analyst_panel():
                         "envio_tipo": item_envio_tipo,
                         "tiempo_entrega": item_tiempo,
                         "fabricacion": item_fabricacion,
-                        "link": json.dumps(st.session_state.get('item_links', [])),
+                        "link": json.dumps(st.session_state.item_links if st.session_state.item_links else []),
                         "costo_fob": costo_fob,
                         "costo_handling": costo_handling,
                         "costo_manejo": costo_manejo,
