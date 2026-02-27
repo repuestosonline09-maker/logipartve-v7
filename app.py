@@ -16,6 +16,7 @@ st.set_page_config(
 from database.db_manager import DBManager
 from services.auth_manager import AuthManager
 from services.session_manager import SessionManager
+from services.cookie_session import restore_session_from_cookie, save_session_cookie, delete_session_cookie
 import os
 import sys
 from components.header import show_header
@@ -185,6 +186,10 @@ def main():
             # Marcar como ejecutada incluso si falla para evitar reintentos constantes
             st.session_state.countries_migration_executed = True
             print(f"⚠️  Error al actualizar países (puede ser normal si ya existen): {e}")
+    
+    # Intentar restaurar sesión desde cookie (resuelve pérdida de sesión en Railway)
+    if not AuthManager.is_logged_in():
+        restore_session_from_cookie()
     
     # Verificar si el usuario está logueado
     if not AuthManager.is_logged_in():

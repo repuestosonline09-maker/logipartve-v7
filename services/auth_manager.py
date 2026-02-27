@@ -63,6 +63,13 @@ class AuthManager:
             st.session_state.role = user['role']
             st.session_state.full_name = user['full_name']
             
+            # Guardar sesión en cookie para persistencia entre reinicios de Railway
+            try:
+                from services.cookie_session import save_session_cookie
+                save_session_cookie(user['id'], user['username'], user['role'], user['full_name'])
+            except Exception:
+                pass  # Si falla, la sesión funciona normalmente
+            
             # Actualizar último login
             DBManager.update_last_login(user['id'])
             
@@ -92,6 +99,13 @@ class AuthManager:
                 DBManager.log_activity(st.session_state.user_id, "logout", f"Usuario {st.session_state.username} cerró sesión")
         except:
             pass  # Ignorar errores de logging
+        
+        # Eliminar cookie de sesión del navegador
+        try:
+            from services.cookie_session import delete_session_cookie
+            delete_session_cookie()
+        except Exception:
+            pass
         
         # Limpiar SOLO variables de autenticación (no usar clear() que borra todo)
         auth_keys = ['logged_in', 'user_id', 'username', 'role', 'full_name']
