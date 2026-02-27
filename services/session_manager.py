@@ -93,16 +93,18 @@ class SessionManager:
         # Inyectar JavaScript para mantener la conexión WebSocket activa
         st.markdown("""
             <script>
-            // Mantener conexión WebSocket activa
+            // Mantener conexión WebSocket activa con ping real
             if (window.streamlitKeepAlive === undefined) {
                 window.streamlitKeepAlive = setInterval(function() {
-                    // Enviar ping silencioso cada 30 segundos
-                    if (window.parent && window.parent.streamlitDocChanged) {
-                        // Forzar actualización mínima sin rerun
-                        console.log('[KeepAlive] Ping enviado');
-                    }
-                }, 30000); // 30 segundos
-                console.log('[KeepAlive] Sistema iniciado');
+                    // Hacer una petición real al servidor para mantener la conexión viva
+                    try {
+                        var xhr = new XMLHttpRequest();
+                        xhr.open('GET', window.location.href, true);
+                        xhr.timeout = 5000;
+                        xhr.send(null);
+                    } catch(e) {}
+                }, 45000); // Cada 45 segundos
+                console.log('[KeepAlive] Sistema de ping iniciado');
             }
             </script>
         """, unsafe_allow_html=True)
@@ -132,17 +134,15 @@ class SessionManager:
                         }, true);
                     });
                     
-                    // Mantener sesión activa
+                    // Mantener sesión activa con ping real al servidor
                     setInterval(function() {
-                        var lastActivity = sessionStorage.getItem('lastActivity');
-                        if (lastActivity) {
-                            var elapsed = Date.now() - parseInt(lastActivity);
-                            // Si hay actividad reciente (menos de 5 min), mantener activo
-                            if (elapsed < 300000) {
-                                console.log('[SessionManager] Sesión activa');
-                            }
-                        }
-                    }, 60000); // Cada minuto
+                        try {
+                            var xhr = new XMLHttpRequest();
+                            xhr.open('GET', window.location.href, true);
+                            xhr.timeout = 5000;
+                            xhr.send(null);
+                        } catch(e) {}
+                    }, 45000); // Cada 45 segundos
                 }
                 </script>
             """, unsafe_allow_html=True)

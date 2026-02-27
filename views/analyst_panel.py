@@ -674,7 +674,7 @@ def render_analyst_panel():
     # Eliminar links marcados
     for idx in sorted(links_to_remove, reverse=True):
         st.session_state.item_links.pop(idx)
-        st.rerun()
+        st.session_state.link_counter += 1  # Forzar re-renderizado sin rerun
     
     # Campo para agregar nuevo link
     new_link_col1, new_link_col2 = st.columns([5, 1])
@@ -688,8 +688,7 @@ def render_analyst_panel():
         if st.button("➞ Agregar", key=f"add_link_{reset_key}", help="Agregar link"):
             if new_link and new_link.strip():
                 st.session_state.item_links.append(new_link.strip())
-                st.session_state.link_counter += 1  # Incrementar contador para limpiar campo
-                st.rerun()
+                st.session_state.link_counter += 1  # Incrementar contador para limpiar campo (sin rerun)
     
     st.markdown("---")
     
