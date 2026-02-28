@@ -117,13 +117,19 @@ class ConfigHelpers:
     
     @staticmethod
     def get_diferencial() -> float:
-        """Obtiene el diferencial desde la configuración"""
+        """Obtiene el diferencial desde la configuración.
+        El panel de admin guarda con clave 'exchange_differential',
+        pero también se acepta la clave legacy 'diferencial'."""
         try:
+            # Primero intentar con la clave que usa el panel de administración
+            config_value = DBManager.get_config('exchange_differential')
+            if config_value:
+                return float(config_value)
+            # Fallback a la clave legacy
             config_value = DBManager.get_config('diferencial')
             if config_value:
                 return float(config_value)
-            else:
-                return 45.0
+            return 45.0
         except Exception as e:
             print(f"Error al obtener diferencial: {e}")
             return 45.0
