@@ -639,20 +639,27 @@ def render_analyst_panel():
     if 'link_counter' not in st.session_state:
         st.session_state.link_counter = 0
     
-    # Inicializar lista de links en session_state si no existe
-    if 'item_links' not in st.session_state:
-        # Si estamos editando, cargar links existentes
-        if editing_item and default_link:
-            # Si el link es un JSON array, parsearlo
+    # Inicializar lista de links en session_state
+    # IMPORTANTE: Si estamos editando un ítem, SIEMPRE cargar los links del ítem que se edita.
+    # No se puede depender de si 'item_links' ya existe porque podría tener links de otro ítem anterior.
+    if editing_item:
+        # Siempre recargar los links del ítem que se está editando
+        if default_link:
             try:
-                if default_link.startswith('['):
-                    st.session_state.item_links = json.loads(default_link)
+                if isinstance(default_link, list):
+                    st.session_state.item_links = list(default_link)
+                elif str(default_link).strip().startswith('['):
+                    parsed = json.loads(default_link)
+                    st.session_state.item_links = parsed if isinstance(parsed, list) else [default_link]
                 else:
-                    st.session_state.item_links = [default_link] if default_link else []
-            except:
+                    st.session_state.item_links = [default_link]
+            except Exception:
                 st.session_state.item_links = [default_link] if default_link else []
         else:
             st.session_state.item_links = []
+    elif 'item_links' not in st.session_state:
+        # Nuevo ítem: inicializar vacío solo si no existe
+        st.session_state.item_links = []
     
     # Mostrar links existentes
     links_to_remove = []
@@ -900,6 +907,11 @@ def render_analyst_panel():
                 _lnks = st.session_state.get('item_links', [])
                 if not isinstance(_lnks, list):
                     _lnks = []
+                # Auto-capturar link pendiente en el campo de texto (si el usuario no hizo clic en Agregar)
+                _pending_link_key = f"new_link_input_{reset_key}_{st.session_state.get('link_counter', 0)}"
+                _pending_link = st.session_state.get(_pending_link_key, '').strip()
+                if _pending_link and _pending_link not in _lnks and _pending_link != 'https://':
+                    _lnks = list(_lnks) + [_pending_link]
                 _lnks_json = json.dumps(_lnks)
                 
                 # Guardar ítem actual
@@ -990,6 +1002,11 @@ def render_analyst_panel():
                     _lnks2 = st.session_state.get('item_links', [])
                     if not isinstance(_lnks2, list):
                         _lnks2 = []
+                    # Auto-capturar link pendiente en el campo de texto
+                    _pending_link_key2 = f"new_link_input_{reset_key}_{st.session_state.get('link_counter', 0)}"
+                    _pending_link2 = st.session_state.get(_pending_link_key2, '').strip()
+                    if _pending_link2 and _pending_link2 not in _lnks2 and _pending_link2 != 'https://':
+                        _lnks2 = list(_lnks2) + [_pending_link2]
                     _lnks2_json = json.dumps(_lnks2)
                     
                     nuevo_item = {
