@@ -495,6 +495,25 @@ def render_analyst_panel():
                         # Cargar ítem en el formulario
                         st.session_state.editing_item_index = i
                         st.session_state.editing_item_data = item
+                        # Incrementar reset_key para que los widgets se recreen con los nuevos valores
+                        st.session_state.item_reset_counter = st.session_state.get('item_reset_counter', 0) + 1
+                        # Asegurar que limpiar_campos_item esté en False para no borrar los links
+                        st.session_state.limpiar_campos_item = False
+                        # Pre-cargar los links del ítem en session_state ANTES del rerun
+                        raw_link = item.get('link', item.get('page_url', ''))
+                        if raw_link:
+                            try:
+                                if isinstance(raw_link, list):
+                                    st.session_state.item_links = list(raw_link)
+                                elif str(raw_link).strip().startswith('['):
+                                    parsed = json.loads(raw_link)
+                                    st.session_state.item_links = parsed if isinstance(parsed, list) else [raw_link]
+                                else:
+                                    st.session_state.item_links = [raw_link]
+                            except Exception:
+                                st.session_state.item_links = [raw_link] if raw_link else []
+                        else:
+                            st.session_state.item_links = []
                         st.rerun()
                 
                 with btn_col2:
