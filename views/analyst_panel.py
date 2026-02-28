@@ -490,39 +490,39 @@ def render_analyst_panel():
                         total_usd = 0.0
                     st.metric("📊 Total USD", f"${total_usd:.2f}")
                 
-                # Botones de acción
-                btn_col1, btn_col2, btn_col3 = st.columns(3)
-                with btn_col1:
-                    if st.button(f"✏️ EDITAR", key=f"edit_item_{i}", use_container_width=True):
-                        # Cargar ítem en el formulario
-                        st.session_state.editing_item_index = i
-                        st.session_state.editing_item_data = item
-                        # Incrementar reset_key para que los widgets se recreen con los nuevos valores
-                        st.session_state.item_reset_counter = st.session_state.get('item_reset_counter', 0) + 1
-                        # Asegurar que limpiar_campos_item esté en False para no borrar los links
-                        st.session_state.limpiar_campos_item = False
-                        # Pre-cargar los links del ítem en session_state ANTES del rerun
-                        raw_link = item.get('link', item.get('page_url', ''))
-                        if raw_link:
-                            try:
-                                if isinstance(raw_link, list):
-                                    st.session_state.item_links = list(raw_link)
-                                elif str(raw_link).strip().startswith('['):
-                                    parsed = json.loads(raw_link)
-                                    st.session_state.item_links = parsed if isinstance(parsed, list) else [raw_link]
-                                else:
-                                    st.session_state.item_links = [raw_link]
-                            except Exception:
-                                st.session_state.item_links = [raw_link] if raw_link else []
-                        else:
-                            st.session_state.item_links = []
-                        st.rerun()
-                
-                with btn_col2:
-                    if st.button(f"🗑️ ELIMINAR", key=f"delete_item_{i}", use_container_width=True, type="secondary"):
-                        st.session_state.cotizacion_items.pop(i)
-                        st.success(f"✅ Ítem #{i+1} eliminado")
-                        st.rerun()
+            # Botones de acción FUERA del expander para que siempre sean visibles
+            btn_col1, btn_col2, btn_col3 = st.columns(3)
+            with btn_col1:
+                if st.button(f"✏️ EDITAR", key=f"edit_item_{i}", use_container_width=True):
+                    # Cargar ítem en el formulario
+                    st.session_state.editing_item_index = i
+                    st.session_state.editing_item_data = item
+                    # Incrementar reset_key para que los widgets se recreen con los nuevos valores
+                    st.session_state.item_reset_counter = st.session_state.get('item_reset_counter', 0) + 1
+                    # Asegurar que limpiar_campos_item esté en False para no borrar los links
+                    st.session_state.limpiar_campos_item = False
+                    # Pre-cargar los links del ítem en session_state ANTES del rerun
+                    raw_link = item.get('link', item.get('page_url', ''))
+                    if raw_link:
+                        try:
+                            if isinstance(raw_link, list):
+                                st.session_state.item_links = list(raw_link)
+                            elif str(raw_link).strip().startswith('['):
+                                parsed = json.loads(raw_link)
+                                st.session_state.item_links = parsed if isinstance(parsed, list) else [raw_link]
+                            else:
+                                st.session_state.item_links = [raw_link]
+                        except Exception:
+                            st.session_state.item_links = [raw_link] if raw_link else []
+                    else:
+                        st.session_state.item_links = []
+                    st.rerun()
+            
+            with btn_col2:
+                if st.button(f"🗑️ ELIMINAR", key=f"delete_item_{i}", use_container_width=True, type="secondary"):
+                    st.session_state.cotizacion_items.pop(i)
+                    st.success(f"✅ Ítem #{i+1} eliminado")
+                    st.rerun()
         
         st.markdown("---")
     
