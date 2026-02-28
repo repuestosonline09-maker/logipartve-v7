@@ -1708,32 +1708,30 @@ def render_analyst_panel():
             st.markdown("---")
             if st.button("🆕 NUEVA COTIZACIÓN", use_container_width=True, type="primary", key="btn_nueva_cotizacion"):
                 try:
-                    # Limpiar TODO: datos del cliente + ítems + vista previa
+                    # Limpiar COMPLETAMENTE todos los datos: cliente + ítems + links + vista previa + modo edición
+                    _keys_to_clear_nueva = [
+                        'cotizacion_items', 'cliente_datos',
+                        'mostrar_cotizacion', 'saved_quote_number', 'saved_quote_id',
+                        'cotizacion_guardada', 'show_save_success',
+                        'editing_mode', 'editing_quote_id', 'editing_quote_number',
+                        'editing_quote_data', 'editing_data_loaded',
+                        'editing_item_index', 'editing_item_data',
+                        'item_links', 'limpiar_campos_item',
+                    ]
+                    for _k in _keys_to_clear_nueva:
+                        if _k in st.session_state:
+                            del st.session_state[_k]
+
+                    # Resetear listas y dicts base
+                    st.session_state.item_links = []
                     st.session_state.cotizacion_items = []
                     st.session_state.cliente_datos = {}
-                    if 'mostrar_cotizacion' in st.session_state:
-                        del st.session_state.mostrar_cotizacion
-                    if 'saved_quote_number' in st.session_state:
-                        del st.session_state.saved_quote_number
-                    if 'cotizacion_guardada' in st.session_state:
-                        del st.session_state.cotizacion_guardada
-                    
-                    # Limpiar variables de modo edición
-                    if 'editing_quote_id' in st.session_state:
-                        del st.session_state.editing_quote_id
-                    if 'editing_quote_number' in st.session_state:
-                        del st.session_state.editing_quote_number
-                    if 'editing_item_index' in st.session_state:
-                        del st.session_state.editing_item_index
-                    if 'editing_item_data' in st.session_state:
-                        del st.session_state.editing_item_data
-                    
-                    # Incrementar contadores para limpiar todos los formularios (con verificación de seguridad)
+
+                    # Incrementar contadores para forzar el reset visual de todos los widgets
                     if 'cliente_reset_counter' not in st.session_state:
                         st.session_state.cliente_reset_counter = 0
                     if 'item_reset_counter' not in st.session_state:
                         st.session_state.item_reset_counter = 0
-                    
                     st.session_state.cliente_reset_counter += 1
                     st.session_state.item_reset_counter += 1
                     st.rerun()
