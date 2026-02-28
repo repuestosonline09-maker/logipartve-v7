@@ -419,7 +419,9 @@ def render_analyst_panel():
         st.info("📝 Puede editar cualquier ítem haciendo clic en '✏️ EDITAR' o eliminar con '🗑️ ELIMINAR'")
         
         for i, item in enumerate(st.session_state.cotizacion_items):
-            with st.expander(f"📦 Ítem #{i+1}: {item.get('descripcion', 'Sin descripción')}", expanded=False):
+            # Expandir automáticamente el ítem que se está editando
+            item_being_edited = st.session_state.get('editing_item_index', None) == i
+            with st.expander(f"📦 Ítem #{i+1}: {item.get('descripcion', 'Sin descripción')}", expanded=item_being_edited):
                 # Mostrar TODOS los datos del ítem
                 col1, col2, col3 = st.columns(3)
                 
@@ -537,11 +539,6 @@ def render_analyst_panel():
     editing_item = st.session_state.get('editing_item_index', None) is not None
     editing_item_index = st.session_state.get('editing_item_index', None)
     editing_item_data = st.session_state.get('editing_item_data', {})
-    
-    # DEBUG: Mostrar estado de variables de edición
-    st.write(f"DEBUG - editing_item: {editing_item}")
-    st.write(f"DEBUG - editing_item_index: {editing_item_index}")
-    st.write(f"DEBUG - item_links en session_state: {st.session_state.get('item_links', 'NO EXISTE')}")
     
     if editing_item:
         st.markdown(f"### ✏️ Editando Ítem #{editing_item_index + 1}")
