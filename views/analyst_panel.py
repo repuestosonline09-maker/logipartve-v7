@@ -540,6 +540,9 @@ def render_analyst_panel():
     editing_item_index = st.session_state.get('editing_item_index', None)
     editing_item_data = st.session_state.get('editing_item_data', {})
     
+    # DEBUG TEMPORAL
+    st.info(f"🔍 DEBUG: editing_item={editing_item} | editing_item_index={editing_item_index} | item_links_count={len(st.session_state.get('item_links', []))} | session_keys={[k for k in st.session_state.keys() if 'edit' in k.lower()]}")
+    
     if editing_item:
         st.markdown(f"### ✏️ Editando Ítem #{editing_item_index + 1}")
         st.warning("📝 Modifique los campos que desee y haga clic en '💾 ACTUALIZAR ÍTEM'")
