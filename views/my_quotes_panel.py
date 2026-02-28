@@ -9,6 +9,8 @@ from datetime import datetime, timedelta
 from database.db_manager import DBManager
 from services.auth_manager import AuthManager
 import os
+import tempfile
+import json
 
 def render_my_quotes_panel():
     """Renderiza el panel de Mis Cotizaciones."""
@@ -258,7 +260,7 @@ def render_my_quotes_panel():
         selected_quote_id = quote_options[selected_quote_display]
         
         # Botones de acción
-        action_col1, action_col2, action_col3, action_col4, action_col5 = st.columns(5)
+        action_col1, action_col2, action_col3, action_col4, action_col5, action_col6 = st.columns(6)
         
         with action_col1:
             if st.button("👁️ VER DETALLES", use_container_width=True, type="primary"):
@@ -319,6 +321,15 @@ def render_my_quotes_panel():
                     st.warning("⚠️ Esta cotización no tiene PNG generado")
         
         with action_col5:
+            if st.button("📊 CUADRO COSTOS", use_container_width=True, type="secondary",
+                         help="Genera el Cuadro de Costos interno para administración"):
+                st.session_state.cuadro_costos_quote_id = selected_quote_id
+                # Limpiar PNG anterior si existe
+                if 'cuadro_costos_png_path' in st.session_state:
+                    del st.session_state.cuadro_costos_png_path
+                st.rerun()
+        
+        with action_col6:
             if st.button("🕑️ ELIMINAR", use_container_width=True, type="secondary"):
                 st.session_state.delete_quote_id = selected_quote_id
                 st.rerun()
@@ -327,6 +338,11 @@ def render_my_quotes_panel():
     
     if st.session_state.get('view_quote_id'):
         show_quote_details(st.session_state.view_quote_id)
+    
+    # ==================== SECCIÓN: CUADRO DE COSTOS ====================
+    
+    if st.session_state.get('cuadro_costos_quote_id'):
+        show_cuadro_costos(st.session_state.cuadro_costos_quote_id)
     
     # ==================== MODAL: CONFIRMAR ELIMINACIÓN ====================
     
@@ -507,6 +523,153 @@ def show_quote_details(quote_id: int):
     if st.button("❌ CERRAR", use_container_width=True):
         del st.session_state.view_quote_id
         st.rerun()
+
+
+def show_cuadro_costos(quote_id: int):
+    """Genera y muestra el Cuadro de Costos interno de una cotización."""
+    
+    st.markdown("---")
+    
+    # Encabezado de la sección
+    cc_header_col1, cc_header_col2 = st.columns([5, 1])
+    with cc_header_col1:
+        st.subheader("📊 CUADRO DE COSTOS — USO ADMINISTRATIVO INTERNO")
+    with cc_header_col2:
+        if st.button("✖ CERRAR", use_container_width=True, key="btn_cerrar_cuadro"):
+            del st.session_state.cuadro_costos_quote_id
+            if 'cuadro_costos_png_path' in st.session_state:
+                del st.session_state.cuadro_costos_png_path
+            st.rerun()
+    
+    # Obtener datos de la cotización
+    quote = DBManager.get_quote_by_id(quote_id)
+    if not quote:
+        st.error("❌ Cotización no encontrada")
+        return
+    
+    # Obtener ítems con todos sus costos
+    items_raw = DBManager.get_quote_items(quote_id)
+    
+    if not items_raw:
+        st.warning("⚠️ Esta cotización no tiene ítems registrados")
+        return
+    
+    # Reconstruir los datos de costos de cada ítem desde la BD
+    # Los ítems en BD tienen: unit_cost (FOB), international_handling, national_handling,
+    # shipping_cost, tax_percentage, profit_factor, total_cost
+    # Los costos calculados (diferencial, utilidad, etc.) se recalculan aquí
+    items_para_cuadro = []
+    for item in items_raw:
+        cantidad     = int(item.get('quantity', 1) or 1)
+        costo_fob    = float(item.get('unit_cost', 0) or 0)
+        fob_total    = costo_fob * cantidad
+        handling     = float(item.get('international_handling', 0) or 0)
+        manejo       = float(item.get('national_handling', 0) or 0)
+        envio        = float(item.get('shipping_cost', 0) or 0)
+        imp_pct      = float(item.get('tax_percentage', 0) or 0)
+        factor_ut    = float(item.get('profit_factor', 1.0) or 1.0)
+        total_cost   = float(item.get('total_cost', 0) or 0)
+        
+        # Reconstruir costos calculados
+        imp_int      = fob_total * (imp_pct / 100)
+        utilidad     = (fob_total + handling + manejo + imp_int) * (factor_ut - 1)
+        base_tax     = fob_total + handling + manejo + imp_int + utilidad + envio
+        tax_pct      = 7.0   # valor fijo del sistema
+        costo_tax    = base_tax * (tax_pct / 100)
+        precio_usd   = base_tax + costo_tax
+        
+        # Diferencial: intentar obtener de la config actual
+        try:
+            from database.config_helpers import ConfigHelpers
+            dif_pct = ConfigHelpers.get_diferencial()
+        except Exception:
+            dif_pct = 45.0
+        dif_val = precio_usd * (dif_pct / 100)
+        precio_bs = precio_usd + dif_val
+        
+        # IVA Venezuela (16% si aplica — por defecto no aplica en cuadro de costos)
+        iva_pct = 16.0
+        iva_val = 0.0
+        aplicar_iva = False
+        
+        items_para_cuadro.append({
+            'descripcion':        item.get('description', f'Ítem'),
+            'parte':              item.get('part_number', ''),
+            'cantidad':           cantidad,
+            'costo_fob':          costo_fob,
+            'fob_total':          fob_total,
+            'costo_handling':     handling,
+            'costo_manejo':       manejo,
+            'costo_impuesto':     imp_int,
+            'impuesto_porcentaje': imp_pct,
+            'factor_utilidad':    factor_ut,
+            'utilidad_valor':     utilidad,
+            'costo_envio':        envio,
+            'costo_tax':          costo_tax,
+            'tax_porcentaje':     tax_pct,
+            'diferencial_valor':  dif_val,
+            'diferencial_porcentaje': dif_pct,
+            'precio_usd':         precio_usd,
+            'precio_bs':          precio_bs,
+            'iva_porcentaje':     iva_pct,
+            'iva_valor':          iva_val,
+            'aplicar_iva':        aplicar_iva,
+        })
+    
+    # Generar PNG si no existe ya en session_state
+    png_path = st.session_state.get('cuadro_costos_png_path')
+    
+    if not png_path or not os.path.exists(png_path):
+        with st.spinner("⏳ Generando Cuadro de Costos..."):
+            try:
+                from services.document_generation.cuadro_costos_generator import generar_cuadro_costos_png
+                
+                # Directorio temporal para el PNG
+                tmp_dir = tempfile.gettempdir()
+                quote_number = quote.get('quote_number', str(quote_id))
+                png_filename = f"cuadro_costos_{quote_number.replace('-', '_')}.png"
+                png_path = os.path.join(tmp_dir, png_filename)
+                
+                result = generar_cuadro_costos_png(
+                    quote_data=quote,
+                    items=items_para_cuadro,
+                    output_path=png_path
+                )
+                
+                if result:
+                    st.session_state.cuadro_costos_png_path = png_path
+                    st.success(f"✅ Cuadro de Costos generado — Cotización {quote.get('quote_number', 'N/A')}")
+                else:
+                    st.error("❌ Error al generar el Cuadro de Costos")
+                    return
+            except Exception as e:
+                st.error(f"❌ Error: {str(e)}")
+                return
+    
+    # Mostrar el PNG en pantalla
+    if png_path and os.path.exists(png_path):
+        st.markdown("### Vista Previa del Cuadro de Costos")
+        st.info("📌 Solo lectura — Para modificar valores, edite la cotización primero.")
+        st.image(png_path, use_container_width=True)
+        
+        st.markdown("---")
+        
+        # Botón de descarga
+        with open(png_path, 'rb') as f:
+            png_bytes = f.read()
+        
+        quote_number = quote.get('quote_number', str(quote_id))
+        dl_col1, dl_col2, dl_col3 = st.columns([1, 2, 1])
+        with dl_col2:
+            st.download_button(
+                label="⬇️ DESCARGAR CUADRO DE COSTOS (PNG)",
+                data=png_bytes,
+                file_name=f"CuadroCostos_{quote_number}.png",
+                mime="image/png",
+                use_container_width=True,
+                type="primary"
+            )
+        st.caption("💡 Descarga el PNG y envíalo al grupo de WhatsApp administrativo.")
 
 
 def show_delete_confirmation(quote_id: int):
