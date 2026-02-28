@@ -539,9 +539,9 @@ def render_analyst_panel():
     editing_item_data = st.session_state.get('editing_item_data', {})
     
     # DEBUG: Mostrar estado de variables de edición
-    # st.write(f"DEBUG - editing_item: {editing_item}")
-    # st.write(f"DEBUG - editing_item_index: {editing_item_index}")
-    # st.write(f"DEBUG - editing_item_data: {editing_item_data}")
+    st.write(f"DEBUG - editing_item: {editing_item}")
+    st.write(f"DEBUG - editing_item_index: {editing_item_index}")
+    st.write(f"DEBUG - item_links en session_state: {st.session_state.get('item_links', 'NO EXISTE')}")
     
     if editing_item:
         st.markdown(f"### ✏️ Editando Ítem #{editing_item_index + 1}")
