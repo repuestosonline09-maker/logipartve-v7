@@ -41,5 +41,18 @@ echo "🚀 Iniciando aplicación..."
 echo "================================================"
 echo ""
 
-# Iniciar Streamlit
-exec streamlit run app.py --server.port=$PORT --server.address=0.0.0.0
+# ============================================================
+# Inyectar meta tags SEO en el index.html de Streamlit
+# ============================================================
+STREAMLIT_INDEX=$(python3 -c "import streamlit, os; print(os.path.join(os.path.dirname(streamlit.__file__), 'static', 'index.html'))")
+
+if [ -f "$STREAMLIT_INDEX" ]; then
+    echo "Inyectando meta tags SEO en: $STREAMLIT_INDEX"
+    sed -i 's|<title>App</title>|<title>LogiPartVE - Cotizador Global de Repuestos</title>\n    <meta name="description" content="LogiPartVE es el sistema profesional de cotizacion y asesoria de autopartes importadas. Cotizaciones precisas en dolares con calculo de flete, impuestos y diferencial cambiario para Venezuela." />\n    <meta name="keywords" content="cotizador repuestos, autopartes Venezuela, importacion repuestos, cotizacion autopartes, LogiPartVE" />\n    <meta name="robots" content="index, follow" />\n    <meta property="og:title" content="LogiPartVE - Cotizador Global de Repuestos" />\n    <meta property="og:description" content="Sistema profesional de cotizacion de autopartes importadas para Venezuela." />\n    <meta property="og:url" content="https://www.logipartve.com" />\n    <meta property="og:type" content="website" />|g' "$STREAMLIT_INDEX"
+    echo "Meta tags SEO inyectados correctamente."
+else
+    echo "ADVERTENCIA: No se encontro el index.html de Streamlit"
+fi
+
+# Iniciar Streamlit con puerto correcto
+exec streamlit run app.py --server.port=${PORT:-8501} --server.address=0.0.0.0 --server.headless=true --browser.gatherUsageStats=false

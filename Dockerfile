@@ -19,5 +19,8 @@ COPY . .
 # Puerto de Streamlit
 EXPOSE 8501
 
-# Comando de inicio
-CMD streamlit run app.py --server.port=$PORT --server.address=0.0.0.0 --server.headless=true
+# Dar permisos de ejecución al script de inicio
+RUN chmod +x /app/start.sh
+
+# Comando de inicio - usa start.sh que inyecta SEO y lanza Streamlit
+CMD ["/app/start.sh"]
