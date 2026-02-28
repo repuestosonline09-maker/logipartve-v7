@@ -143,6 +143,52 @@ def render_analyst_panel():
             "mad": 8.0      # Madrid Aéreo $/kg
         }
     
+    # ==========================================
+    # FUNCIONES CALLBACK PARA BOTONES DE ÍTEMS
+    # Estas funciones se ejecutan ANTES del re-render cuando se presiona un botón
+    # ==========================================
+    def _callback_editar_item(idx):
+        """Callback para el botón EDITAR de un ítem"""
+        items = st.session_state.get('cotizacion_items', [])
+        if not isinstance(items, list) or idx >= len(items):
+            return
+        _item = items[idx]
+        st.session_state.editing_item_index = idx
+        st.session_state.editing_item_data = dict(_item)
+        # Incrementar reset_key para recrear widgets con nuevos valores
+        if 'item_reset_counter' not in st.session_state:
+            st.session_state.item_reset_counter = 0
+        st.session_state.item_reset_counter += 1
+        # No limpiar campos
+        st.session_state.limpiar_campos_item = False
+        # Pre-cargar los links del ítem
+        _raw_link = _item.get('link', _item.get('page_url', ''))
+        if _raw_link:
+            try:
+                if isinstance(_raw_link, list):
+                    st.session_state.item_links = list(_raw_link)
+                elif str(_raw_link).strip().startswith('['):
+                    _parsed = json.loads(_raw_link)
+                    st.session_state.item_links = _parsed if isinstance(_parsed, list) else [_raw_link]
+                else:
+                    st.session_state.item_links = [_raw_link]
+            except Exception:
+                st.session_state.item_links = [_raw_link] if _raw_link else []
+        else:
+            st.session_state.item_links = []
+    
+    def _callback_eliminar_item(idx):
+        """Callback para el botón ELIMINAR de un ítem"""
+        items = st.session_state.get('cotizacion_items', [])
+        if isinstance(items, list) and idx < len(items):
+            st.session_state.cotizacion_items.pop(idx)
+        # Si estábamos editando este ítem, cancelar edición
+        if st.session_state.get('editing_item_index') == idx:
+            if 'editing_item_index' in st.session_state:
+                del st.session_state['editing_item_index']
+            if 'editing_item_data' in st.session_state:
+                del st.session_state['editing_item_data']
+    
     # Obtener información del usuario actual
     current_user = AuthManager.get_current_user()
     user_id = current_user.get('user_id') if current_user else None
@@ -491,38 +537,26 @@ def render_analyst_panel():
                     st.metric("📊 Total USD", f"${total_usd:.2f}")
                 
             # Botones de acción FUERA del expander para que siempre sean visibles
+            # Usan callbacks para modificar session_state ANTES del re-render
             btn_col1, btn_col2, btn_col3 = st.columns(3)
             with btn_col1:
-                if st.button(f"✏️ EDITAR", key=f"edit_item_{i}", use_container_width=True):
-                    # Cargar ítem en el formulario
-                    st.session_state.editing_item_index = i
-                    st.session_state.editing_item_data = item
-                    # Incrementar reset_key para que los widgets se recreen con los nuevos valores
-                    st.session_state.item_reset_counter = st.session_state.get('item_reset_counter', 0) + 1
-                    # Asegurar que limpiar_campos_item esté en False para no borrar los links
-                    st.session_state.limpiar_campos_item = False
-                    # Pre-cargar los links del ítem en session_state ANTES del rerun
-                    raw_link = item.get('link', item.get('page_url', ''))
-                    if raw_link:
-                        try:
-                            if isinstance(raw_link, list):
-                                st.session_state.item_links = list(raw_link)
-                            elif str(raw_link).strip().startswith('['):
-                                parsed = json.loads(raw_link)
-                                st.session_state.item_links = parsed if isinstance(parsed, list) else [raw_link]
-                            else:
-                                st.session_state.item_links = [raw_link]
-                        except Exception:
-                            st.session_state.item_links = [raw_link] if raw_link else []
-                    else:
-                        st.session_state.item_links = []
-                    st.rerun()
+                st.button(
+                    f"✏️ EDITAR",
+                    key=f"edit_item_{i}",
+                    use_container_width=True,
+                    on_click=_callback_editar_item,
+                    args=(i,)
+                )
             
             with btn_col2:
-                if st.button(f"🗑️ ELIMINAR", key=f"delete_item_{i}", use_container_width=True, type="secondary"):
-                    st.session_state.cotizacion_items.pop(i)
-                    st.success(f"✅ Ítem #{i+1} eliminado")
-                    st.rerun()
+                st.button(
+                    f"🗑️ ELIMINAR",
+                    key=f"delete_item_{i}",
+                    use_container_width=True,
+                    type="secondary",
+                    on_click=_callback_eliminar_item,
+                    args=(i,)
+                )
         
         st.markdown("---")
     
@@ -659,25 +693,9 @@ def render_analyst_panel():
         st.session_state.link_counter = 0
     
     # Inicializar lista de links en session_state
-    # IMPORTANTE: Si estamos editando un ítem, SIEMPRE cargar los links del ítem que se edita.
-    # No se puede depender de si 'item_links' ya existe porque podría tener links de otro ítem anterior.
-    if editing_item:
-        # Siempre recargar los links del ítem que se está editando
-        if default_link:
-            try:
-                if isinstance(default_link, list):
-                    st.session_state.item_links = list(default_link)
-                elif str(default_link).strip().startswith('['):
-                    parsed = json.loads(default_link)
-                    st.session_state.item_links = parsed if isinstance(parsed, list) else [default_link]
-                else:
-                    st.session_state.item_links = [default_link]
-            except Exception:
-                st.session_state.item_links = [default_link] if default_link else []
-        else:
-            st.session_state.item_links = []
-    elif 'item_links' not in st.session_state:
-        # Nuevo ítem: inicializar vacío solo si no existe
+    # Los links ya fueron cargados por el callback _callback_editar_item
+    # Solo inicializar si no existe (para nuevo ítem)
+    if 'item_links' not in st.session_state:
         st.session_state.item_links = []
     
     # Mostrar links existentes
