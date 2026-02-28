@@ -644,7 +644,6 @@ def render_analyst_panel():
         # Si estamos editando, cargar links existentes
         if editing_item and default_link:
             # Si el link es un JSON array, parsearlo
-            import json
             try:
                 if default_link.startswith('['):
                     st.session_state.item_links = json.loads(default_link)
