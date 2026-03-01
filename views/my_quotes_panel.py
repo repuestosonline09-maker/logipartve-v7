@@ -3,7 +3,7 @@ Módulo: Mis Cotizaciones
 Flujo:
   1. Al entrar: solo se ven los filtros — pantalla limpia
   2. El analista escribe → aparece dropdown con coincidencias
-  3. Al seleccionar → aparece botón VER
+  3. Al seleccionar una cotización del dropdown → aparece botón VER
   4. Al hacer clic en VER → aparece vista de solo lectura + Acciones
   5. Botón CERRAR limpia TODO (incluyendo el buscador) y vuelve al estado inicial
 """
@@ -34,6 +34,9 @@ PERIOD_DAYS = {
     "Último año": 365,
 }
 
+# Opción vacía del dropdown
+_PLACEHOLDER = "— Selecciona una cotización —"
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # HELPERS DE SESSION STATE
@@ -41,11 +44,160 @@ PERIOD_DAYS = {
 def _limpiar_todo():
     """Limpia todos los estados de Mis Cotizaciones incluyendo el buscador."""
     for k in ['mq_ver_id', 'mq_delete_id',
-              'cuadro_costos_quote_id', 'cuadro_costos_png_path',
-              'mq_search_input']:
+              'cuadro_costos_quote_id', 'cuadro_costos_png_path']:
         st.session_state.pop(k, None)
-    # Forzar reset del widget de búsqueda incrementando su key counter
-    st.session_state['mq_reset_counter'] = st.session_state.get('mq_reset_counter', 0) + 1
+    # Incrementar el contador de reset para que todos los widgets se recreen
+    st.session_state['mq_reset_counter'] = (
+        st.session_state.get('mq_reset_counter', 0) + 1
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ADAPTADOR: BD → PDF/PNG generator
+# ─────────────────────────────────────────────────────────────────────────────
+def _adaptar_quote_para_generadores(qd: dict) -> dict:
+    """
+    Convierte el diccionario devuelto por get_quote_full_details()
+    (campos en inglés: description, part_number, quantity…)
+    al formato que espera PDFQuoteGenerator y PNGQuoteGenerator
+    (campos en español: descripcion, parte, cantidad…).
+
+    También recalcula los totales que el PDF necesita.
+    """
+    try:
+        from database.config_helpers import ConfigHelpers
+        dif_pct = ConfigHelpers.get_diferencial()
+    except Exception:
+        dif_pct = 45.0
+
+    items_adaptados = []
+    sub_total    = 0.0
+    iva_total    = 0.0
+    abona_ya     = 0.0
+    total_usd    = 0.0
+    total_bs     = 0.0
+
+    for item in qd.get('items', []):
+        cantidad   = int(item.get('quantity', 1) or 1)
+        costo_fob  = float(item.get('unit_cost', 0) or 0)
+        fob_total  = costo_fob * cantidad
+        handling   = float(item.get('international_handling', 0) or 0)
+        manejo     = float(item.get('national_handling', 0) or 0)
+        envio      = float(item.get('shipping_cost', 0) or 0)
+        imp_pct    = float(item.get('tax_percentage', 0) or 0)
+        factor_ut  = float(item.get('profit_factor', 1.0) or 1.0)
+
+        imp_int   = fob_total * (imp_pct / 100)
+        utilidad  = (fob_total + handling + manejo + imp_int) * (factor_ut - 1)
+        base_tax  = fob_total + handling + manejo + imp_int + utilidad + envio
+        tax_pct   = 7.0
+        costo_tax = base_tax * (tax_pct / 100)
+
+        # Precio USD final (lo que ya está guardado en total_cost)
+        precio_usd = float(item.get('total_cost', 0) or 0)
+        if precio_usd == 0:
+            precio_usd = base_tax + costo_tax
+
+        dif_val   = precio_usd * (dif_pct / 100)
+        precio_bs = precio_usd + dif_val
+
+        # Acumuladores para totales
+        sub_total += precio_bs
+        abona_ya  += precio_usd
+        total_usd += precio_usd
+        total_bs  += precio_bs
+
+        items_adaptados.append({
+            # Campos que usa el PDF generator
+            'descripcion':         item.get('description', 'N/A'),
+            'parte':               item.get('part_number', ''),
+            'marca':               item.get('marca', ''),
+            'garantia':            item.get('garantia', ''),
+            'cantidad':            cantidad,
+            'envio_tipo':          item.get('envio_tipo', ''),
+            'origen':              item.get('origen', ''),
+            'fabricacion':         item.get('fabricacion', ''),
+            'tiempo_entrega':      item.get('tiempo_entrega', ''),
+            'precio_bs':           precio_bs,
+            'precio_usd':          precio_usd,
+            # Campos internos para cálculos
+            'costo_fob':           costo_fob,
+            'fob_total':           fob_total,
+            'costo_handling':      handling,
+            'costo_manejo':        manejo,
+            'costo_impuesto':      imp_int,
+            'impuesto_porcentaje': imp_pct,
+            'factor_utilidad':     factor_ut,
+            'utilidad_valor':      utilidad,
+            'costo_envio':         envio,
+            'costo_tax':           costo_tax,
+            'tax_porcentaje':      tax_pct,
+            'diferencial_valor':   dif_val,
+            'diferencial_porcentaje': dif_pct,
+            'iva_porcentaje':      16.0,
+            'iva_valor':           0.0,
+            'aplicar_iva':         False,
+            'costo_unitario':      precio_usd,
+            'costo_total':         precio_usd,
+            'costo_total_bs':      precio_bs,
+        })
+
+    total_a_pagar = sub_total + iva_total
+    y_en_entrega  = total_a_pagar - abona_ya
+
+    # Fecha en formato que espera el PDF
+    try:
+        fecha_str = datetime.fromisoformat(
+            str(qd.get('created_at', ''))
+        ).strftime('%Y-%m-%d')
+    except Exception:
+        fecha_str = datetime.now().strftime('%Y-%m-%d')
+
+    # Términos y condiciones
+    terminos = (
+        qd.get('terms_conditions') or
+        qd.get('terminos_condiciones') or
+        'Términos y condiciones estándar.'
+    )
+
+    return {
+        'quote_number':        qd.get('quote_number', 'N/A'),
+        'numero_cotizacion':   qd.get('quote_number', 'N/A'),
+        'analyst_name':        qd.get('analyst_name', ''),
+        'asesor_ventas':       qd.get('analyst_name', ''),
+        'fecha':               fecha_str,
+        'client': {
+            'nombre':    qd.get('client_name', ''),
+            'telefono':  qd.get('client_phone', ''),
+            'email':     qd.get('client_email', ''),
+            'ci_rif':    qd.get('client_cedula', ''),
+            'direccion': qd.get('client_address', ''),
+            'vehiculo':  qd.get('client_vehicle', ''),
+            'año':       qd.get('client_year', ''),
+            'vin':       qd.get('client_vin', ''),
+            'motor':     '',
+        },
+        'cliente': {
+            'nombre':    qd.get('client_name', ''),
+            'telefono':  qd.get('client_phone', ''),
+            'email':     qd.get('client_email', ''),
+            'ci_rif':    qd.get('client_cedula', ''),
+            'direccion': qd.get('client_address', ''),
+            'vehiculo':  qd.get('client_vehicle', ''),
+            'año':       qd.get('client_year', ''),
+            'vin':       qd.get('client_vin', ''),
+            'motor':     '',
+        },
+        'items':               items_adaptados,
+        'sub_total':           sub_total,
+        'iva_total':           iva_total,
+        'total_a_pagar':       total_a_pagar,
+        'abona_ya':            abona_ya,
+        'y_en_entrega':        y_en_entrega,
+        'total_usd':           total_usd,
+        'total_bs':            total_bs,
+        'terminos_condiciones': terminos,
+    }
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -136,7 +288,7 @@ def render_my_quotes_panel():
         return f"{num}  —  {cli}  —  {tel}  {est}"
 
     quote_by_label = {_label(q): q for q in quotes}
-    opciones = ["— Selecciona una cotización —"] + list(quote_by_label.keys())
+    opciones       = [_PLACEHOLDER] + list(quote_by_label.keys())
 
     sel_col, btn_col = st.columns([5, 1])
 
@@ -144,41 +296,41 @@ def render_my_quotes_panel():
         selected_label = st.selectbox(
             f"Coincidencias encontradas: {len(quotes)}",
             options=opciones,
+            index=0,                          # siempre empieza en el placeholder
             key=f"mq_selected_{reset_key}"
         )
 
-    # Determinar si hay una cotización seleccionada
-    cotizacion_activa = (selected_label and
-                         selected_label != "— Selecciona una cotización —")
+    # ¿Hay una cotización real seleccionada?
+    cotizacion_activa = (selected_label and selected_label != _PLACEHOLDER)
     selected_quote    = quote_by_label.get(selected_label) if cotizacion_activa else None
     selected_id       = selected_quote.get('id') if selected_quote else None
+
+    # Si el usuario cambió la selección, limpiar la vista anterior
+    ver_id_actual = st.session_state.get('mq_ver_id')
+    if ver_id_actual and selected_id and ver_id_actual != selected_id:
+        for k in ['mq_ver_id', 'cuadro_costos_quote_id',
+                  'cuadro_costos_png_path', 'mq_delete_id']:
+            st.session_state.pop(k, None)
+        ver_id_actual = None
 
     with btn_col:
         st.markdown("<br>", unsafe_allow_html=True)
 
-        if st.session_state.get('mq_ver_id'):
+        if ver_id_actual:
             # Hay vista activa → mostrar CERRAR
             if st.button("✖ CERRAR", use_container_width=True,
                          key=f"mq_btn_cerrar_{reset_key}", type="secondary"):
                 _limpiar_todo()
                 st.rerun()
-        elif cotizacion_activa:
+        elif cotizacion_activa and selected_id:
             # Hay selección pero no vista → mostrar VER
             if st.button("🔍 VER", use_container_width=True,
                          key=f"mq_btn_ver_{reset_key}", type="primary"):
-                # Limpiar estados anteriores de otra cotización
-                for k in ['cuadro_costos_quote_id', 'cuadro_costos_png_path', 'mq_delete_id']:
+                for k in ['cuadro_costos_quote_id',
+                          'cuadro_costos_png_path', 'mq_delete_id']:
                     st.session_state.pop(k, None)
                 st.session_state.mq_ver_id = selected_id
                 st.rerun()
-
-    # Si el ID seleccionado cambió respecto al que está en vista, limpiar
-    if (st.session_state.get('mq_ver_id') and
-            selected_id and
-            st.session_state.get('mq_ver_id') != selected_id):
-        for k in ['mq_ver_id', 'cuadro_costos_quote_id',
-                  'cuadro_costos_png_path', 'mq_delete_id']:
-            st.session_state.pop(k, None)
 
     # ── BLOQUE 4: VISTA DE SOLO LECTURA + ACCIONES ────────────────────────
     if st.session_state.get('mq_ver_id'):
@@ -327,7 +479,6 @@ def _show_acciones(quote_id: int):
                     key=f"acc_pdf_{quote_id}"
                 )
         else:
-            # Intentar regenerar el PDF
             if st.button("📄 GENERAR PDF", use_container_width=True,
                          type="secondary", key=f"acc_gen_pdf_{quote_id}"):
                 _regenerar_pdf(quote_id)
@@ -346,7 +497,6 @@ def _show_acciones(quote_id: int):
                     key=f"acc_png_{quote_id}"
                 )
         else:
-            # Intentar regenerar el PNG
             if st.button("🖼️ GENERAR PNG", use_container_width=True,
                          type="secondary", key=f"acc_gen_png_{quote_id}"):
                 _regenerar_png(quote_id)
@@ -374,12 +524,14 @@ def _regenerar_pdf(quote_id: int):
     """Regenera el PDF de una cotización y actualiza la BD."""
     try:
         from services.document_generation.pdf_generator import PDFQuoteGenerator
-        from database.db_manager import DBManager
 
         qd = DBManager.get_quote_full_details(quote_id)
         if not qd:
             st.error("❌ No se pudo cargar la cotización")
             return
+
+        # Adaptar campos de la BD al formato del generador
+        datos = _adaptar_quote_para_generadores(qd)
 
         quote_number = qd.get('quote_number', str(quote_id))
         output_dir   = os.path.join(tempfile.gettempdir(), 'logipartve_docs')
@@ -387,10 +539,9 @@ def _regenerar_pdf(quote_id: int):
         pdf_path = os.path.join(output_dir, f"cotizacion_{quote_number}.pdf")
 
         with st.spinner("⏳ Generando PDF..."):
-            result = PDFQuoteGenerator.generate(qd, pdf_path)
+            result = PDFQuoteGenerator.generate(datos, pdf_path)
 
         if result and os.path.exists(pdf_path):
-            # Actualizar ruta en BD
             conn   = DBManager.get_connection()
             cursor = conn.cursor()
             if DBManager.USE_POSTGRES:
@@ -401,12 +552,15 @@ def _regenerar_pdf(quote_id: int):
                                (pdf_path, quote_id))
             conn.commit()
             cursor.close()
+            conn.close()
             st.success("✅ PDF generado. Haz clic en DESCARGAR PDF.")
             st.rerun()
         else:
             st.error("❌ Error al generar el PDF")
     except Exception as e:
+        import traceback
         st.error(f"❌ Error: {e}")
+        st.code(traceback.format_exc())
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -416,12 +570,14 @@ def _regenerar_png(quote_id: int):
     """Regenera el PNG de una cotización y actualiza la BD."""
     try:
         from services.document_generation.png_generator import PNGQuoteGenerator
-        from database.db_manager import DBManager
 
         qd = DBManager.get_quote_full_details(quote_id)
         if not qd:
             st.error("❌ No se pudo cargar la cotización")
             return
+
+        # Adaptar campos de la BD al formato del generador
+        datos = _adaptar_quote_para_generadores(qd)
 
         quote_number = qd.get('quote_number', str(quote_id))
         output_dir   = os.path.join(tempfile.gettempdir(), 'logipartve_docs')
@@ -429,10 +585,11 @@ def _regenerar_png(quote_id: int):
         png_path = os.path.join(output_dir, f"cotizacion_{quote_number}.png")
 
         with st.spinner("⏳ Generando PNG..."):
-            result = PNGQuoteGenerator.generate(qd, png_path)
+            # PNGQuoteGenerator se usa como INSTANCIA (no método estático)
+            gen    = PNGQuoteGenerator()
+            result = gen.generate_quote_png_from_data(datos, png_path)
 
         if result and os.path.exists(png_path):
-            # Actualizar ruta en BD
             conn   = DBManager.get_connection()
             cursor = conn.cursor()
             if DBManager.USE_POSTGRES:
@@ -443,12 +600,15 @@ def _regenerar_png(quote_id: int):
                                (png_path, quote_id))
             conn.commit()
             cursor.close()
+            conn.close()
             st.success("✅ PNG generado. Haz clic en DESCARGAR PNG.")
             st.rerun()
         else:
             st.error("❌ Error al generar el PNG")
     except Exception as e:
+        import traceback
         st.error(f"❌ Error: {e}")
+        st.code(traceback.format_exc())
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -501,7 +661,9 @@ def _show_cuadro_costos(quote_id: int):
         base_tax   = fob_total + handling + manejo + imp_int + utilidad + envio
         tax_pct    = 7.0
         costo_tax  = base_tax * (tax_pct / 100)
-        precio_usd = base_tax + costo_tax
+        precio_usd = float(item.get('total_cost', 0) or 0)
+        if precio_usd == 0:
+            precio_usd = base_tax + costo_tax
         dif_val    = precio_usd * (dif_pct / 100)
         precio_bs  = precio_usd + dif_val
 
