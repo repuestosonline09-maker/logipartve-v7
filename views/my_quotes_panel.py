@@ -260,12 +260,7 @@ def render_my_quotes_panel():
         selected_quote_id = quote_options[selected_quote_display]
         
         # Botones de acción
-        action_col1, action_col2, action_col3, action_col4, action_col5, action_col6 = st.columns(6)
-        
-        with action_col1:
-            if st.button("👁️ VER DETALLES", use_container_width=True, type="primary"):
-                st.session_state.view_quote_id = selected_quote_id
-                st.rerun()
+        action_col2, action_col3, action_col4, action_col5, action_col6 = st.columns(5)
         
         with action_col2:
             if st.button("✏️ EDITAR", use_container_width=True, type="secondary"):
@@ -333,11 +328,6 @@ def render_my_quotes_panel():
             if st.button("🕑️ ELIMINAR", use_container_width=True, type="secondary"):
                 st.session_state.delete_quote_id = selected_quote_id
                 st.rerun()
-    
-    # ==================== MODAL: VER DETALLES ====================
-    
-    if st.session_state.get('view_quote_id'):
-        show_quote_details(st.session_state.view_quote_id)
     
     # ==================== SECCIÓN: CUADRO DE COSTOS ====================
     
