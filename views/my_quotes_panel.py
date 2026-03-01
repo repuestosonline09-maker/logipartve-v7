@@ -88,7 +88,9 @@ def _adaptar_quote_para_generadores(qd: dict) -> dict:
         factor_ut  = float(item.get('profit_factor', 1.0) or 1.0)
 
         imp_int   = fob_total * (imp_pct / 100)
-        utilidad  = (fob_total + handling + manejo + imp_int) * (factor_ut - 1)
+        # FÓRMULA CORRECTA: Utilidad = (FOB_Total × Factor) − FOB_Total
+        # El factor se aplica solo sobre el costo FOB, igual que en analyst_panel
+        utilidad  = (fob_total * factor_ut) - fob_total
         base_tax  = fob_total + handling + manejo + imp_int + utilidad + envio
         tax_pct   = 7.0
         costo_tax = base_tax * (tax_pct / 100)
@@ -657,7 +659,9 @@ def _show_cuadro_costos(quote_id: int):
         factor_ut = float(item.get('profit_factor', 1.0) or 1.0)
 
         imp_int    = fob_total * (imp_pct / 100)
-        utilidad   = (fob_total + handling + manejo + imp_int) * (factor_ut - 1)
+        # FÓRMULA CORRECTA: Utilidad = (FOB_Total × Factor) − FOB_Total
+        # El factor se aplica solo sobre el costo FOB, igual que en analyst_panel
+        utilidad   = (fob_total * factor_ut) - fob_total
         base_tax   = fob_total + handling + manejo + imp_int + utilidad + envio
         tax_pct    = 7.0
         costo_tax  = base_tax * (tax_pct / 100)
