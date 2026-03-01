@@ -333,10 +333,16 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
     presupuesto = datos_cotizacion.get('numero_cotizacion') or datos_cotizacion.get('quote_number', 'N/A')
     fecha_raw = datos_cotizacion.get('fecha', 'N/A')
     
-    # Si no hay fecha, intentar obtener la fecha actual
+    # Si no hay fecha, intentar obtener la fecha actual en hora de Caracas (UTC-4)
     if fecha_raw == 'N/A':
-        from datetime import datetime
-        fecha_raw = datetime.now().strftime('%Y-%m-%d')
+        try:
+            import sys, os as _os
+            sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))))
+            from services.timezone_utils import now_caracas_naive
+            fecha_raw = now_caracas_naive().strftime('%Y-%m-%d')
+        except Exception:
+            from datetime import datetime, timezone, timedelta
+            fecha_raw = datetime.now(tz=timezone(timedelta(hours=-4))).strftime('%Y-%m-%d')
     
     # Convertir fecha a formato dd/mm/aa
     from datetime import datetime

@@ -12,6 +12,13 @@ from database.db_manager import DBManager
 from database.config_helpers import ConfigHelpers
 from services.auth_manager import AuthManager
 from services.quote_numbering import QuoteNumberingService
+try:
+    from services.timezone_utils import now_caracas_naive
+except ImportError:
+    from datetime import timezone
+    def now_caracas_naive():
+        from datetime import timedelta as _td
+        return datetime.datetime.now(tz=timezone(_td(hours=-4))).replace(tzinfo=None)
 
 # Lista de cantidades del 1 al 1000 (fija, no configurable)
 CANTIDADES = list(range(1, 1001))
@@ -1222,7 +1229,7 @@ def render_analyst_panel():
         with quote_info_col2:
             st.info(f"👤 **Analista:** {full_name}")
         with quote_info_col3:
-            fecha_actual = datetime.datetime.now().strftime("%d/%m/%Y")
+            fecha_actual = now_caracas_naive().strftime("%d/%m/%Y")
             st.info(f"📅 **Fecha:** {fecha_actual}")
         
         st.markdown("---")
@@ -1566,7 +1573,7 @@ def render_analyst_panel():
                         
                         # Generar PDF en carpeta permanente
                         # Crear estructura de carpetas: /home/ubuntu/cotizaciones_guardadas/YYYY/MM/
-                        now = datetime.datetime.now()
+                        now = now_caracas_naive()
                         year = now.strftime("%Y")
                         month = now.strftime("%m")
                         
@@ -1652,7 +1659,7 @@ def render_analyst_panel():
                         
                         # Generar PNG en carpeta permanente
                         # Crear estructura de carpetas: /home/ubuntu/cotizaciones_guardadas/YYYY/MM/
-                        now = datetime.datetime.now()
+                        now = now_caracas_naive()
                         year = now.strftime("%Y")
                         month = now.strftime("%m")
                         

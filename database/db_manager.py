@@ -7,6 +7,15 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 from datetime import datetime
 from pathlib import Path
+import sys
+import os as _os
+sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+try:
+    from services.timezone_utils import now_caracas_naive
+except ImportError:
+    from datetime import timezone, timedelta
+    def now_caracas_naive():
+        return datetime.now(tz=timezone(timedelta(hours=-4))).replace(tzinfo=None)
 from typing import Optional, List, Dict, Any
 import bcrypt
 
@@ -1244,21 +1253,22 @@ class DBManager:
                 print("Error: quote_number y analyst_id son obligatorios")
                 return None
             
-            # Insertar cotización
+            # Insertar cotización con hora de Caracas (UTC-4)
+            created_at_caracas = now_caracas_naive()
             if is_postgres:
                 cursor.execute("""
                     INSERT INTO quotes (
                         quote_number, analyst_id, client_name, client_phone, client_email,
                         client_cedula, client_address, client_vehicle, client_year, client_vin,
                         total_amount, sub_total, iva_total, abona_ya, en_entrega,
-                        terms_conditions, status, pdf_path, jpeg_path
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        terms_conditions, status, pdf_path, jpeg_path, created_at
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
                 """, (
                     quote_number, analyst_id, client_name, client_phone, client_email,
                     client_cedula, client_address, client_vehicle, client_year, client_vin,
                     total_amount, sub_total, iva_total, abona_ya, en_entrega,
-                    terms_conditions, status, pdf_path, jpeg_path
+                    terms_conditions, status, pdf_path, jpeg_path, created_at_caracas
                 ))
                 quote_id = cursor.fetchone()['id']
             else:
@@ -1267,13 +1277,13 @@ class DBManager:
                         quote_number, analyst_id, client_name, client_phone, client_email,
                         client_cedula, client_address, client_vehicle, client_year, client_vin,
                         total_amount, sub_total, iva_total, abona_ya, en_entrega,
-                        terms_conditions, status, pdf_path, jpeg_path
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        terms_conditions, status, pdf_path, jpeg_path, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     quote_number, analyst_id, client_name, client_phone, client_email,
                     client_cedula, client_address, client_vehicle, client_year, client_vin,
                     total_amount, sub_total, iva_total, abona_ya, en_entrega,
-                    terms_conditions, status, pdf_path, jpeg_path
+                    terms_conditions, status, pdf_path, jpeg_path, created_at_caracas
                 ))
                 quote_id = cursor.lastrowid
             

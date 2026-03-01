@@ -8,6 +8,14 @@ Genera un PNG de alta calidad para uso interno administrativo
 from PIL import Image, ImageDraw, ImageFont
 import os
 from datetime import datetime
+try:
+    import sys as _sys, os as _os2
+    _sys.path.insert(0, _os2.path.dirname(_os2.path.dirname(_os2.path.dirname(_os2.path.abspath(__file__)))))
+    from services.timezone_utils import now_caracas_naive as _now_ven
+except Exception:
+    from datetime import timezone, timedelta
+    def _now_ven():
+        return datetime.now(tz=timezone(timedelta(hours=-4))).replace(tzinfo=None)
 
 # ── Paleta de colores ─────────────────────────────────────────────────────────
 COLOR_AZUL        = (0,   61,  130)   # azul oscuro corporativo
@@ -135,7 +143,7 @@ def generar_cuadro_costos_png(quote_data: dict, items: list, output_path: str) -
         try:
             fecha_str = datetime.fromisoformat(str(created_at)).strftime("%d/%m/%Y")
         except Exception:
-            fecha_str = datetime.now().strftime("%d/%m/%Y")
+            fecha_str = _now_ven().strftime("%d/%m/%Y")
 
         n_items = len(items)
 
@@ -392,7 +400,7 @@ def generar_cuadro_costos_png(quote_data: dict, items: list, output_path: str) -
         draw.rectangle([(0, y_pie), (ANCHO, ALTO)], fill=COLOR_AZUL)
         pie_txt = (
             f"LogiPartVE Pro  •  Cuadro de Costos Interno  •  "
-            f"{datetime.now().strftime('%d/%m/%Y %H:%M')}  •  USO EXCLUSIVO ADMINISTRATIVO"
+            f"{_now_ven().strftime('%d/%m/%Y %H:%M')}  •  USO EXCLUSIVO ADMINISTRATIVO"
         )
         _draw_text_centered(draw, pie_txt, 0, y_pie, ANCHO, ALTO_PIE, f_pie, COLOR_BLANCO)
 
