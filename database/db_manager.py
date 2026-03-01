@@ -1808,8 +1808,10 @@ class DBManager:
                 changes.append(f"Nombre: {old_quote['client_name']} → {quote_data.get('client_name')}")
             if old_quote['client_phone'] != quote_data.get('client_phone'):
                 changes.append(f"Teléfono: {old_quote['client_phone']} → {quote_data.get('client_phone')}")
-            if old_quote['total_amount'] != quote_data.get('total_amount'):
-                changes.append(f"Total: ${old_quote['total_amount']:.2f} → ${quote_data.get('total_amount'):.2f}")
+            _old_total = old_quote.get('total_amount') or 0
+            _new_total = quote_data.get('total_amount') or 0
+            if _old_total != _new_total and quote_data.get('total_amount') is not None:
+                changes.append(f"Total: ${_old_total:.2f} → ${_new_total:.2f}")
             
             if changes:
                 change_summary = "Editó datos de la cotización: " + ", ".join(changes)
