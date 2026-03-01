@@ -288,6 +288,7 @@ def render_analyst_panel():
                 'factor_utilidad': item.get('profit_factor', 1.0),
                 'costo_unitario': item.get('unit_cost', 0),
                 'costo_total': item.get('total_cost', 0),
+                'costo_total_bs': item.get('total_cost', 0),  # Evita $0 en Dashboard al editar
                 'precio_usd': item.get('unit_cost', 0),
                 'precio_bs': item.get('total_cost', 0)
             })
@@ -1440,7 +1441,7 @@ def render_analyst_panel():
                                 'client_vehicle': f"{cliente.get('vehiculo', '')} {cliente.get('cilindrada', '')}".strip(),
                                 'client_year': cliente.get('ano', ''),
                                 'client_vin': cliente.get('vin', ''),
-                                'total_amount': total_cotizacion_bs,
+                                'total_amount': total_cotizacion_usd,  # USD real para el Dashboard
                                 'sub_total': sub_total,
                                 'iva_total': iva_total,
                                 'abona_ya': abona_ya,
@@ -1524,7 +1525,7 @@ def render_analyst_panel():
                                     'client_vehicle': f"{cliente.get('vehiculo', '')} {cliente.get('cilindrada', '')}".strip(),
                                     'client_year': cliente.get('ano', ''),
                                     'client_vin': cliente.get('vin', ''),
-                                    'total_amount': total_cotizacion_bs,
+                                    'total_amount': total_cotizacion_usd,  # USD real para el Dashboard
                                     'sub_total': sub_total,
                                     'iva_total': iva_total,
                                     'abona_ya': abona_ya,
