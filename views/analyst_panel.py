@@ -168,19 +168,27 @@ def render_analyst_panel():
         st.session_state.item_reset_counter += 1
         # No limpiar campos
         st.session_state.limpiar_campos_item = False
-        # Pre-cargar los links del ítem
+        # Pre-cargar los links del ítem (normalizar al formato {url, qty})
         _raw_link = _item.get('link', _item.get('page_url', ''))
+        def _normalizar_link(lnk):
+            """Convierte cualquier formato de link a {url, qty}"""
+            if isinstance(lnk, dict):
+                return {'url': lnk.get('url', ''), 'qty': int(lnk.get('qty', 1))}
+            return {'url': str(lnk), 'qty': 1}
         if _raw_link:
             try:
                 if isinstance(_raw_link, list):
-                    st.session_state.item_links = list(_raw_link)
+                    st.session_state.item_links = [_normalizar_link(l) for l in _raw_link]
                 elif str(_raw_link).strip().startswith('['):
                     _parsed = json.loads(_raw_link)
-                    st.session_state.item_links = _parsed if isinstance(_parsed, list) else [_raw_link]
+                    if isinstance(_parsed, list):
+                        st.session_state.item_links = [_normalizar_link(l) for l in _parsed]
+                    else:
+                        st.session_state.item_links = [_normalizar_link(_raw_link)]
                 else:
-                    st.session_state.item_links = [_raw_link]
+                    st.session_state.item_links = [_normalizar_link(_raw_link)]
             except Exception:
-                st.session_state.item_links = [_raw_link] if _raw_link else []
+                st.session_state.item_links = [_normalizar_link(_raw_link)] if _raw_link else []
         else:
             st.session_state.item_links = []
     
@@ -505,25 +513,29 @@ def render_analyst_panel():
                     st.write(f"• **Tiempo:** {item.get('tiempo_entrega', 'N/A')}")
                     st.write(f"• **Fabricación:** {item.get('fabricacion', 'N/A')}")
                     
-                    # Mostrar múltiples links si existen
+                    # Mostrar múltiples links si existen (retrocompatible: str o dict {url, qty})
                     link = item.get('link', item.get('page_url', ''))
                     if link:
                         try:
-                            # Intentar parsear como JSON array
-                            if link.startswith('['):
+                            if isinstance(link, str) and link.startswith('['):
                                 links_array = json.loads(link)
-                                if links_array:
-                                    st.write(f"• **Links ({len(links_array)}):**")
-                                    for idx, l in enumerate(links_array, 1):
-                                        st.write(f"  {idx}. [{l[:25]}...]({l})")
-                                else:
-                                    st.write(f"• **Link:** No disponible")
+                            elif isinstance(link, list):
+                                links_array = link
                             else:
-                                # Link único (formato antiguo)
-                                st.write(f"• **Link:** [{link[:30]}...]({link})")
+                                links_array = [link]  # formato antiguo: URL sola
+                            if links_array:
+                                st.write(f"• **Links ({len(links_array)}):**")
+                                for _li, _lobj in enumerate(links_array, 1):
+                                    if isinstance(_lobj, dict):
+                                        _url = _lobj.get('url', '')
+                                        _qty = _lobj.get('qty', 1)
+                                        st.write(f"  {_li}. Comprar **{_qty}** → [{_url[:30]}...]({_url})")
+                                    else:
+                                        st.write(f"  {_li}. [{str(_lobj)[:30]}...]({_lobj})")
+                            else:
+                                st.write(f"• **Link:** No disponible")
                         except:
-                            # Si falla el parsing, mostrar como link único
-                            st.write(f"• **Link:** [{link[:30]}...]({link})")
+                            st.write(f"• **Link:** [{str(link)[:30]}...]({link})")
                     else:
                         st.write(f"• **Link:** No disponible")
                 
@@ -715,31 +727,79 @@ def render_analyst_panel():
     if 'item_links' not in st.session_state:
         st.session_state.item_links = []
     
+    # ── Helpers para extraer url y qty de un link (retrocompatible) ──
+    def _link_url(lnk):
+        """Extrae la URL de un link (str o dict {url, qty})"""
+        if isinstance(lnk, dict):
+            return lnk.get('url', '')
+        return str(lnk)
+
+    def _link_qty(lnk):
+        """Extrae la cantidad de un link (str o dict {url, qty})"""
+        if isinstance(lnk, dict):
+            return int(lnk.get('qty', 1))
+        return 1
+
     # Mostrar links existentes
     links_to_remove = []
     if st.session_state.item_links:
         for idx, link in enumerate(st.session_state.item_links):
+            # Fila 1: etiqueta "Comprar" + selector de cantidad
+            lbl_col, qty_col, spacer_col = st.columns([1, 2, 3])
+            with lbl_col:
+                st.markdown("**Comprar:**")
+            with qty_col:
+                _current_qty = _link_qty(link)
+                _new_qty = st.selectbox(
+                    "Cantidad",
+                    options=list(range(1, 101)),
+                    index=_current_qty - 1,
+                    key=f"link_qty_{idx}_{reset_key}",
+                    label_visibility="collapsed"
+                )
+            # Fila 2: campo URL + botón eliminar
             col_link, col_delete = st.columns([5, 1])
             with col_link:
+                _current_url = _link_url(link)
                 st.text_input(
                     f"Link #{idx + 1}",
-                    value=link,
+                    value=_current_url,
                     key=f"link_display_{idx}_{reset_key}",
-                    on_change=lambda i=idx: st.session_state.item_links.__setitem__(i, st.session_state[f"link_display_{i}_{reset_key}"])
+                    on_change=lambda i=idx: st.session_state.item_links.__setitem__(
+                        i,
+                        {
+                            'url': st.session_state[f"link_display_{i}_{reset_key}"],
+                            'qty': st.session_state.get(f"link_qty_{i}_{reset_key}", 1)
+                        }
+                    )
                 )
             with col_delete:
                 if st.button("❌", key=f"delete_link_{idx}_{reset_key}", help="Eliminar link"):
                     links_to_remove.append(idx)
-    
+            # Actualizar qty en tiempo real (sin esperar on_change del text_input)
+            if isinstance(st.session_state.item_links[idx], dict):
+                st.session_state.item_links[idx]['qty'] = _new_qty
+            else:
+                st.session_state.item_links[idx] = {'url': _link_url(link), 'qty': _new_qty}
+
     # Eliminar links marcados
     if links_to_remove:
         for idx in sorted(links_to_remove, reverse=True):
             st.session_state.item_links.pop(idx)
         st.session_state.link_counter += 1
         st.rerun()
-    
-    # Campo para agregar nuevo link
-    new_link_col1, new_link_col2 = st.columns([5, 1])
+
+    # Campo para agregar nuevo link — con selector de cantidad
+    st.markdown("**Comprar:**")
+    new_qty_col, new_link_col1, new_link_col2 = st.columns([1, 4, 1])
+    with new_qty_col:
+        new_link_qty = st.selectbox(
+            "Cantidad nuevo link",
+            options=list(range(1, 101)),
+            index=0,
+            key=f"new_link_qty_{reset_key}_{st.session_state.link_counter}",
+            label_visibility="collapsed"
+        )
     with new_link_col1:
         new_link = st.text_input(
             "Nuevo link",
@@ -749,7 +809,7 @@ def render_analyst_panel():
     with new_link_col2:
         if st.button("➞ Agregar", key=f"add_link_{reset_key}", help="Agregar link"):
             if new_link and new_link.strip():
-                st.session_state.item_links.append(new_link.strip())
+                st.session_state.item_links.append({'url': new_link.strip(), 'qty': new_link_qty})
                 st.session_state.link_counter += 1
                 st.rerun()
     
@@ -964,10 +1024,15 @@ def render_analyst_panel():
                 # Auto-capturar link pendiente en el campo de texto (si el usuario no hizo clic en Agregar)
                 _pending_link_key = f"new_link_input_{reset_key}_{st.session_state.get('link_counter', 0)}"
                 _pending_link = st.session_state.get(_pending_link_key, '').strip()
-                if _pending_link and _pending_link not in _lnks and _pending_link != 'https://':
-                    _lnks = list(_lnks) + [_pending_link]
+                if _pending_link and _pending_link != 'https://':
+                    # Verificar que no esté ya (comparando por URL)
+                    _existing_urls = [_link_url(l) for l in _lnks]
+                    if _pending_link not in _existing_urls:
+                        _pending_qty_key = f"new_link_qty_{reset_key}_{st.session_state.get('link_counter', 0)}"
+                        _pending_qty = st.session_state.get(_pending_qty_key, 1)
+                        _lnks = list(_lnks) + [{'url': _pending_link, 'qty': _pending_qty}]
                 _lnks_json = json.dumps(_lnks)
-                
+
                 # Guardar ítem actual
                 nuevo_item = {
                     "descripcion": item_descripcion,
@@ -1066,8 +1131,12 @@ def render_analyst_panel():
                     # Auto-capturar link pendiente en el campo de texto
                     _pending_link_key2 = f"new_link_input_{reset_key}_{st.session_state.get('link_counter', 0)}"
                     _pending_link2 = st.session_state.get(_pending_link_key2, '').strip()
-                    if _pending_link2 and _pending_link2 not in _lnks2 and _pending_link2 != 'https://':
-                        _lnks2 = list(_lnks2) + [_pending_link2]
+                    if _pending_link2 and _pending_link2 != 'https://':
+                        _existing_urls2 = [_link_url(l) for l in _lnks2]
+                        if _pending_link2 not in _existing_urls2:
+                            _pending_qty_key2 = f"new_link_qty_{reset_key}_{st.session_state.get('link_counter', 0)}"
+                            _pending_qty2 = st.session_state.get(_pending_qty_key2, 1)
+                            _lnks2 = list(_lnks2) + [{'url': _pending_link2, 'qty': _pending_qty2}]
                     _lnks2_json = json.dumps(_lnks2)
                     
                     nuevo_item = {
