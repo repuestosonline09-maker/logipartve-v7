@@ -1115,11 +1115,12 @@ def render_analyst_panel():
                     editing_quote_id = st.session_state.get('editing_quote_id')
                     if editing_quote_id:
                         # Actualizar cotización completa en BD
-                        success = db.update_quote_complete(
+                        _username_save = username or st.session_state.get('username', 'admin')
+                        success = DBManager.update_quote_complete(
                             quote_id=editing_quote_id,
                             cliente_datos=st.session_state.cliente_datos,
                             items=st.session_state.cotizacion_items,
-                            username=st.session_state.username
+                            username=_username_save
                         )
                         
                         if success:
