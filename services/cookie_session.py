@@ -1,6 +1,7 @@
 # services/cookie_session.py
 # Persistencia de sesión usando cookies del navegador
-# Esto resuelve el problema de pérdida de sesión cuando Railway reinicia el servidor
+# Resuelve la pérdida de sesión cuando Railway reinicia el servidor o
+# el WebSocket se desconecta brevemente.
 
 import streamlit as st
 import hashlib
@@ -9,48 +10,57 @@ import json
 import os
 from datetime import datetime, timedelta
 
-# Clave secreta para firmar tokens de sesión
-SECRET_KEY = os.environ.get("SECRET_KEY", "logipartve_secret_2026_railway")
+# ── Configuración ────────────────────────────────────────────────────────────
+SECRET_KEY        = os.environ.get("SECRET_KEY", "logipartve_secret_2026_railway")
+SESSION_HOURS     = 12   # Duración total de la cookie (horas)
+RENEW_THRESHOLD   = 2    # Si quedan menos de estas horas, renovar el token automáticamente
+
+
+# ── Helpers de token ─────────────────────────────────────────────────────────
 
 def _generate_token(user_id: int, username: str) -> str:
-    """Genera un token de sesión firmado."""
+    """Genera un token de sesión firmado con timestamp."""
     timestamp = str(int(time.time()))
-    payload = f"{user_id}:{username}:{timestamp}"
+    payload   = f"{user_id}:{username}:{timestamp}"
     signature = hashlib.sha256(f"{payload}:{SECRET_KEY}".encode()).hexdigest()[:16]
     return f"{payload}:{signature}"
 
-def _verify_token(token: str, max_age_hours: int = 8) -> dict:
+
+def _verify_token(token: str, max_age_hours: int = SESSION_HOURS) -> dict:
     """
     Verifica un token de sesión.
-    Returns dict con {valid, user_id, username} o {valid: False}
+    Returns dict con {valid, user_id, username, elapsed_hours} o {valid: False}
     """
     try:
         parts = token.split(":")
         if len(parts) != 4:
             return {"valid": False}
-        
+
         user_id_str, username, timestamp_str, signature = parts
-        
+
         # Verificar firma
-        payload = f"{user_id_str}:{username}:{timestamp_str}"
+        payload      = f"{user_id_str}:{username}:{timestamp_str}"
         expected_sig = hashlib.sha256(f"{payload}:{SECRET_KEY}".encode()).hexdigest()[:16]
         if signature != expected_sig:
             return {"valid": False}
-        
+
         # Verificar expiración
-        token_time = int(timestamp_str)
+        token_time    = int(timestamp_str)
         elapsed_hours = (time.time() - token_time) / 3600
         if elapsed_hours > max_age_hours:
             return {"valid": False}
-        
+
         return {
-            "valid": True,
-            "user_id": int(user_id_str),
-            "username": username
+            "valid":         True,
+            "user_id":       int(user_id_str),
+            "username":      username,
+            "elapsed_hours": elapsed_hours
         }
     except Exception:
         return {"valid": False}
 
+
+# ── API pública ───────────────────────────────────────────────────────────────
 
 def save_session_cookie(user_id: int, username: str, role: str, full_name: str):
     """
@@ -60,77 +70,93 @@ def save_session_cookie(user_id: int, username: str, role: str, full_name: str):
     try:
         import extra_streamlit_components as stx
         cookie_manager = stx.CookieManager(key="logipartve_cookie_save")
-        
-        token = _generate_token(user_id, username)
+
+        token        = _generate_token(user_id, username)
         session_data = json.dumps({
-            "token": token,
-            "role": role,
+            "token":     token,
+            "role":      role,
             "full_name": full_name
         })
-        
-        # Guardar cookie con expiración de 8 horas
-        expires_at = datetime.now() + timedelta(hours=8)
+
+        expires_at = datetime.now() + timedelta(hours=SESSION_HOURS)
         cookie_manager.set(
             "logipartve_session",
             session_data,
             expires_at=expires_at,
             key="set_session_cookie"
         )
+        print(f"[CookieSession] Cookie guardada para: {username} (expira en {SESSION_HOURS}h)")
     except Exception as e:
-        # Si falla, continuar sin cookies (la sesión funcionará normalmente)
         print(f"[CookieSession] No se pudo guardar cookie: {e}")
 
 
 def restore_session_from_cookie() -> bool:
     """
     Intenta restaurar la sesión desde una cookie del navegador.
-    Se llama al inicio de la aplicación.
-    
+    Si el token está próximo a expirar, lo renueva automáticamente.
+    Se llama al inicio de cada rerun de Streamlit.
+
     Returns:
-        True si se restauró la sesión, False si no hay cookie válida
+        True si se restauró (o ya estaba activa) la sesión, False si no hay cookie válida.
     """
-    # Si ya hay sesión activa, no hacer nada
+    # Si ya hay sesión activa en memoria, no hacer nada
     if st.session_state.get("logged_in", False):
         return True
-    
+
     try:
         import extra_streamlit_components as stx
         from database.db_manager import DBManager
-        
+
         cookie_manager = stx.CookieManager(key="logipartve_cookie_restore")
-        
+
         # Obtener cookie
         session_cookie = cookie_manager.get("logipartve_session")
         if not session_cookie:
             return False
-        
-        # Parsear datos de la cookie
-        session_data = json.loads(session_cookie)
-        token = session_data.get("token", "")
-        
-        # Verificar token
-        token_info = _verify_token(token)
-        if not token_info["valid"]:
-            # Token inválido o expirado, limpiar cookie
+
+        # Parsear datos
+        try:
+            session_data = json.loads(session_cookie)
+        except Exception:
             delete_session_cookie()
             return False
-        
-        # Obtener datos actualizados del usuario desde la DB
+
+        token      = session_data.get("token", "")
+        token_info = _verify_token(token)
+
+        if not token_info["valid"]:
+            # Token inválido o expirado — limpiar y pedir nuevo login
+            delete_session_cookie()
+            return False
+
+        # Obtener datos actualizados del usuario desde la BD
         user = DBManager.get_user_by_username(token_info["username"])
         if not user:
             delete_session_cookie()
             return False
-        
-        # Restaurar sesión
-        st.session_state.logged_in = True
-        st.session_state.user_id = user["id"]
-        st.session_state.username = user["username"]
-        st.session_state.role = user["role"]
-        st.session_state.full_name = user["full_name"]
-        
-        print(f"[CookieSession] Sesión restaurada para: {user['username']}")
+
+        # Verificar que el usuario siga activo
+        if not user.get("is_active", True):
+            delete_session_cookie()
+            return False
+
+        # Restaurar sesión en memoria
+        st.session_state.logged_in  = True
+        st.session_state.user_id    = user["id"]
+        st.session_state.username   = user["username"]
+        st.session_state.role       = user["role"]
+        st.session_state.full_name  = user["full_name"]
+
+        # Renovar el token si está próximo a expirar (menos de RENEW_THRESHOLD horas)
+        hours_left = SESSION_HOURS - token_info["elapsed_hours"]
+        if hours_left < RENEW_THRESHOLD:
+            save_session_cookie(user["id"], user["username"], user["role"], user["full_name"])
+            print(f"[CookieSession] Token renovado para: {user['username']} (quedaban {hours_left:.1f}h)")
+        else:
+            print(f"[CookieSession] Sesión restaurada para: {user['username']} ({hours_left:.1f}h restantes)")
+
         return True
-        
+
     except Exception as e:
         print(f"[CookieSession] No se pudo restaurar sesión: {e}")
         return False

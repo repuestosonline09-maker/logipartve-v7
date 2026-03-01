@@ -15,6 +15,12 @@ maxMessageSize = 200
 enableWebsocketCompression = true
 maxUploadSize = 200
 runOnSave = false
+# Mantener la conexión WebSocket viva — ping cada 25 segundos
+# Esto previene que Railway/proxies corten la conexión por inactividad
+websocketPingInterval = 25
+# Tiempo (segundos) que el servidor espera antes de limpiar una sesión
+# cuyo WebSocket se desconectó. 3600 = 1 hora de gracia.
+disconnectedSessionTTL = 3600
 
 [browser]
 gatherUsageStats = false
