@@ -105,62 +105,20 @@ def render_my_quotes_panel():
         if cutoff_date:
             quotes = [q for q in quotes if datetime.fromisoformat(str(q.get('created_at'))) >= cutoff_date]
     
-    # ==================== MOSTRAR RESULTADOS ====================
-    
-    st.subheader(f"📊 Resultados ({len(quotes)} cotizaciones)")
+    # ==================== ACCIONES SOBRE COTIZACIONES ====================
     
     if not quotes:
         st.info("ℹ️ No se encontraron cotizaciones con los filtros seleccionados.")
         return
     
-    # Convertir a DataFrame para mejor visualización
+    # Construir lista compacta para el selector (sin mostrar tabla)
     df_data = []
     for quote in quotes:
-        # Mapear estado a español
-        status_map = {
-            "draft": "📝 Borrador",
-            "sent": "📤 Enviada",
-            "approved": "✅ Aprobada",
-            "rejected": "❌ Rechazada"
-        }
-        status_display = status_map.get(quote.get('status', 'draft'), '❓ Desconocido')
-        
-        # Formatear fecha
-        created_at = quote.get('created_at')
-        if created_at:
-            try:
-                date_obj = datetime.fromisoformat(str(created_at))
-                date_display = date_obj.strftime("%d/%m/%Y %H:%M")
-            except:
-                date_display = str(created_at)
-        else:
-            date_display = "N/A"
-        
-        # Formatear monto
-        total_amount = quote.get('total_amount', 0)
-        amount_display = f"${total_amount:,.2f}" if total_amount else "$0.00"
-        
         df_data.append({
             "ID": quote.get('id'),
             "Número": quote.get('quote_number', 'N/A'),
-            "Fecha": date_display,
-            "Cliente": quote.get('client_name', 'N/A'),
-            "Teléfono": quote.get('client_phone', 'N/A'),
-            "Total": amount_display,
-            "Estado": status_display,
-            "Analista": quote.get('analyst_name', username) if role == 'admin' else username
+            "Cliente": quote.get('client_name', 'Sin nombre'),
         })
-    
-    df = pd.DataFrame(df_data)
-    
-    # Mostrar tabla con selección
-    st.dataframe(
-        df.drop(columns=['ID']),  # Ocultar ID en la visualización
-        use_container_width=True,
-        hide_index=True
-    )
-    
-    # ==================== ACCIONES SOBRE COTIZACIONES ====================
     
     st.markdown("---")
     st.subheader("🔧 Acciones")
