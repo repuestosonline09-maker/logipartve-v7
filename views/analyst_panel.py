@@ -1050,7 +1050,14 @@ def render_analyst_panel():
                 st.error("⚠️ Agregue al menos un ítem")
             else:
                 # Si hay un ítem en el formulario actual, agregarlo
-                if item_descripcion and costo_fob > 0:
+                # ── Determinar si el formulario tiene un ítem pendiente ──────────────
+                # En modo edición de cotización (editing_mode), si el formulario
+                # tiene datos Y hay exactamente 1 ítem cargado que corresponde al
+                # ítem original, NO se agrega como nuevo — se reemplaza en su posición.
+                _formulario_tiene_item = bool(item_descripcion and costo_fob > 0)
+                _editing_item_idx_activo = st.session_state.get('editing_item_index', None)
+
+                if _formulario_tiene_item:
                     # Obtener links de forma segura - variable independiente
                     _lnks2 = st.session_state.get('item_links', [])
                     if not isinstance(_lnks2, list):
@@ -1095,8 +1102,39 @@ def render_analyst_panel():
                         "fob_total": fob_total,
                         "costo_total_bs": costo_total_bs
                     }
-                    st.session_state.cotizacion_items.append(nuevo_item)
-                
+                    # ── Inserción inteligente: actualizar o agregar según contexto ──
+                    if not isinstance(st.session_state.cotizacion_items, list):
+                        st.session_state.cotizacion_items = []
+
+                    if _editing_item_idx_activo is not None:
+                        # Estaba editando un ítem específico → reemplazarlo en su posición
+                        st.session_state.cotizacion_items[_editing_item_idx_activo] = nuevo_item
+                        if 'editing_item_index' in st.session_state:
+                            del st.session_state['editing_item_index']
+                        if 'editing_item_data' in st.session_state:
+                            del st.session_state['editing_item_data']
+                    elif editing_mode:
+                        # Modo edición de cotización completa (no de ítem individual):
+                        # El formulario tiene el ítem original cargado.
+                        # Si la descripción del formulario coincide con alguno ya en la
+                        # lista, reemplazarlo. Si no coincide, es un ítem genuinamente nuevo.
+                        _idx_coincide = None
+                        for _ci, _existing in enumerate(st.session_state.cotizacion_items):
+                            _desc_existing = _existing.get('descripcion', '') or _existing.get('description', '')
+                            _parte_existing = _existing.get('parte', '') or _existing.get('part_number', '')
+                            if _desc_existing == item_descripcion and _parte_existing == item_parte:
+                                _idx_coincide = _ci
+                                break
+                        if _idx_coincide is not None:
+                            # Reemplazar el ítem coincidente con los datos actualizados
+                            st.session_state.cotizacion_items[_idx_coincide] = nuevo_item
+                        else:
+                            # Es un ítem genuinamente nuevo — agregarlo
+                            st.session_state.cotizacion_items.append(nuevo_item)
+                    else:
+                        # Modo creación normal → siempre agregar
+                        st.session_state.cotizacion_items.append(nuevo_item)
+
                 # Guardar datos del cliente (solo campos con datos)
                 st.session_state.cliente_datos = {
                     "nombre": cliente_nombre,
