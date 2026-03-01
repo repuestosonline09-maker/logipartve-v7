@@ -101,60 +101,73 @@ def render_my_quotes_panel():
             quotes = [q for q in quotes if datetime.fromisoformat(str(q.get('created_at'))) >= cutoff_date]
     
     # ==================== ACCIONES SOBRE COTIZACIONES ====================
-    
+
     if not quotes:
         st.info("ℹ️ No se encontraron cotizaciones con los filtros seleccionados.")
         return
-    
-    # Construir lista compacta para el selector (sin mostrar tabla)
+
+    # Construir lista compacta para el selector
     df_data = []
     for quote in quotes:
         df_data.append({
-            "ID": quote.get('id'),
-            "Número": quote.get('quote_number', 'N/A'),
+            "ID":      quote.get('id'),
+            "Número":  quote.get('quote_number', 'N/A'),
             "Cliente": quote.get('client_name', 'Sin nombre'),
         })
-    
+
     st.markdown("---")
-    st.subheader("🔧 Acciones")
-    
-    # Selector de cotización
+    st.subheader("🔧 Seleccionar Cotización")
+
     quote_options = {f"{q['Número']} - {q['Cliente']}": q['ID'] for q in df_data}
-    
+
     if quote_options:
-        selected_quote_display = st.selectbox(
-            "Seleccionar cotización",
-            options=list(quote_options.keys()),
-            key="selected_quote"
-        )
-        
+        sel_col, btn_col = st.columns([4, 1])
+
+        with sel_col:
+            selected_quote_display = st.selectbox(
+                "Cotización",
+                options=list(quote_options.keys()),
+                key="selected_quote",
+                label_visibility="collapsed"
+            )
+
         selected_quote_id = quote_options[selected_quote_display]
-        
-        # Botones de acción
-        action_col2, action_col3, action_col4, action_col5, action_col6 = st.columns(5)
-        
-        with action_col2:
-            if st.button("✏️ EDITAR", use_container_width=True, type="secondary"):
-                # Cargar cotización para edición
-                quote_details = DBManager.get_quote_full_details(selected_quote_id)
-                if quote_details:
-                    # Activar modo edición
-                    st.session_state.editing_mode = True
-                    st.session_state.editing_quote_id = selected_quote_id
-                    st.session_state.editing_quote_number = quote_details['quote_number']
-                    st.session_state.editing_quote_data = quote_details
-                    st.success(f"✅ Cotización #{quote_details['quote_number']} cargada para edición")
-                    st.info("👉 Vaya a la pestaña 'Panel de Analista' para editar")
-                else:
-                    st.error("❌ Error al cargar cotización")
-        
-        with action_col3:
-            if st.button("📄 DESCARGAR PDF", use_container_width=True):
-                quote = DBManager.get_quote_by_id(selected_quote_id)
-                if quote and quote.get('pdf_path'):
-                    pdf_path = quote['pdf_path']
-                    if os.path.exists(pdf_path):
-                        with open(pdf_path, 'rb') as f:
+
+        with btn_col:
+            if st.button("🔍 VER", use_container_width=True, type="primary"):
+                st.session_state.ver_quote_id = selected_quote_id
+                # Limpiar vistas anteriores al cambiar de cotización
+                for k in ['cuadro_costos_quote_id', 'cuadro_costos_png_path', 'delete_quote_id']:
+                    st.session_state.pop(k, None)
+                st.rerun()
+
+        # Si se presionó VER y la cotización seleccionada coincide, mostrar vista + botones
+        if st.session_state.get('ver_quote_id') == selected_quote_id:
+            show_quote_readonly(selected_quote_id)
+
+            st.markdown("---")
+            st.subheader("🔧 Acciones")
+
+            action_col1, action_col2, action_col3, action_col4, action_col5 = st.columns(5)
+
+            with action_col1:
+                if st.button("✏️ EDITAR", use_container_width=True, type="secondary", key="btn_editar"):
+                    quote_details = DBManager.get_quote_full_details(selected_quote_id)
+                    if quote_details:
+                        st.session_state.editing_mode         = True
+                        st.session_state.editing_quote_id     = selected_quote_id
+                        st.session_state.editing_quote_number = quote_details['quote_number']
+                        st.session_state.editing_quote_data   = quote_details
+                        st.success(f"✅ Cotización #{quote_details['quote_number']} cargada para edición")
+                        st.info("👉 Vaya a la pestaña 'Panel de Analista' para editar")
+                    else:
+                        st.error("❌ Error al cargar cotización")
+
+            with action_col2:
+                if st.button("📄 DESCARGAR PDF", use_container_width=True, key="btn_pdf"):
+                    quote = DBManager.get_quote_by_id(selected_quote_id)
+                    if quote and quote.get('pdf_path') and os.path.exists(quote['pdf_path']):
+                        with open(quote['pdf_path'], 'rb') as f:
                             st.download_button(
                                 label="📄 Descargar PDF",
                                 data=f,
@@ -163,17 +176,13 @@ def render_my_quotes_panel():
                                 use_container_width=True
                             )
                     else:
-                        st.error("❌ Archivo PDF no encontrado")
-                else:
-                    st.warning("⚠️ Esta cotización no tiene PDF generado")
-        
-        with action_col4:
-            if st.button("🖼️ DESCARGAR PNG", use_container_width=True):
-                quote = DBManager.get_quote_by_id(selected_quote_id)
-                if quote and quote.get('jpeg_path'):
-                    png_path = quote['jpeg_path']
-                    if os.path.exists(png_path):
-                        with open(png_path, 'rb') as f:
+                        st.warning("⚠️ Esta cotización no tiene PDF generado")
+
+            with action_col3:
+                if st.button("🖼️ DESCARGAR PNG", use_container_width=True, key="btn_png"):
+                    quote = DBManager.get_quote_by_id(selected_quote_id)
+                    if quote and quote.get('jpeg_path') and os.path.exists(quote['jpeg_path']):
+                        with open(quote['jpeg_path'], 'rb') as f:
                             st.download_button(
                                 label="🖼️ Descargar PNG",
                                 data=f,
@@ -182,25 +191,22 @@ def render_my_quotes_panel():
                                 use_container_width=True
                             )
                     else:
-                        st.error("❌ Archivo PNG no encontrado")
-                else:
-                    st.warning("⚠️ Esta cotización no tiene PNG generado")
-        
-        with action_col5:
-            if st.button("📊 CUADRO COSTOS", use_container_width=True, type="secondary",
-                         help="Genera el Cuadro de Costos interno para administración"):
-                st.session_state.cuadro_costos_quote_id = selected_quote_id
-                # Limpiar PNG anterior si existe
-                if 'cuadro_costos_png_path' in st.session_state:
-                    del st.session_state.cuadro_costos_png_path
-                st.rerun()
-        
-        with action_col6:
-            if st.button("🕑️ ELIMINAR", use_container_width=True, type="secondary"):
-                st.session_state.delete_quote_id = selected_quote_id
-                st.rerun()
-    
-    # ==================== SECCIÓN: CUADRO DE COSTOS ====================
+                        st.warning("⚠️ Esta cotización no tiene PNG generado")
+
+            with action_col4:
+                if st.button("📊 CUADRO COSTOS", use_container_width=True, type="secondary",
+                             key="btn_cuadro",
+                             help="Genera el Cuadro de Costos interno para administración"):
+                    st.session_state.cuadro_costos_quote_id = selected_quote_id
+                    st.session_state.pop('cuadro_costos_png_path', None)
+                    st.rerun()
+
+            with action_col5:
+                if st.button("🗑️ ELIMINAR", use_container_width=True, type="secondary", key="btn_eliminar"):
+                    st.session_state.delete_quote_id = selected_quote_id
+                    st.rerun()
+
+        # ==================== SECCIÓN: CUADRO DE COSTOS ====================
     
     if st.session_state.get('cuadro_costos_quote_id'):
         show_cuadro_costos(st.session_state.cuadro_costos_quote_id)
@@ -209,6 +215,87 @@ def render_my_quotes_panel():
     
     if st.session_state.get('delete_quote_id'):
         show_delete_confirmation(st.session_state.delete_quote_id)
+
+
+def show_quote_readonly(quote_id: int):
+    """Vista de solo lectura de una cotización: datos del cliente e ítems."""
+
+    st.markdown("---")
+
+    quote = DBManager.get_quote_by_id(quote_id)
+    if not quote:
+        st.error("❌ Cotización no encontrada")
+        return
+
+    items = DBManager.get_quote_items(quote_id)
+
+    # --- Encabezado con número y fecha ---
+    created_at = quote.get('created_at')
+    try:
+        date_display = datetime.fromisoformat(str(created_at)).strftime("%d/%m/%Y %H:%M")
+    except Exception:
+        date_display = str(created_at) if created_at else "N/A"
+
+    h_col1, h_col2, h_col3 = st.columns(3)
+    with h_col1:
+        st.markdown(f"📋 **Cotización:** `{quote.get('quote_number', 'N/A')}`")
+    with h_col2:
+        st.markdown(f"📅 **Fecha:** {date_display}")
+    with h_col3:
+        estado_map = {'draft': '📝 Borrador', 'sent': '📤 Enviada',
+                      'approved': '✅ Aprobada', 'rejected': '❌ Rechazada'}
+        st.markdown(f"**Estado:** {estado_map.get(quote.get('status','draft'), 'Desconocido')}")
+
+    # --- Datos del cliente ---
+    st.markdown("👤 **Datos del Cliente**")
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.text_input("Nombre", value=quote.get('client_name', ''), disabled=True, key=f"ro_nombre_{quote_id}")
+    with c2:
+        st.text_input("Teléfono", value=quote.get('client_phone', ''), disabled=True, key=f"ro_tel_{quote_id}")
+    with c3:
+        st.text_input("Vehículo", value=quote.get('client_vehicle', ''), disabled=True, key=f"ro_veh_{quote_id}")
+
+    # --- Ítems ---
+    st.markdown(f"🔧 **Ítems ({len(items)} repuesto{'s' if len(items) != 1 else ''})**")
+
+    if items:
+        rows = []
+        for idx, item in enumerate(items, 1):
+            created_item = item.get('created_at') or quote.get('created_at')
+            try:
+                fecha_item = datetime.fromisoformat(str(created_item)).strftime("%d/%m/%Y %H:%M")
+            except Exception:
+                fecha_item = date_display
+
+            cantidad   = int(item.get('quantity', 1) or 1)
+            fob_total  = float(item.get('unit_cost', 0) or 0) * cantidad
+            precio_usd = float(item.get('total_cost', 0) or 0)
+
+            # Precio Bs: recalcular con diferencial actual
+            try:
+                from database.config_helpers import ConfigHelpers
+                dif_pct = ConfigHelpers.get_diferencial()
+            except Exception:
+                dif_pct = 45.0
+            precio_bs = precio_usd * (1 + dif_pct / 100)
+
+            rows.append({
+                "#":              idx,
+                "Fecha/Hora":     fecha_item,
+                "Descripción":    item.get('description', 'N/A'),
+                "N° Parte":       item.get('part_number', 'N/A'),
+                "Cantidad":        cantidad,
+                "FOB Total ($)":   f"${fob_total:,.2f}",
+                "🇻🇪 Precio Bs":  f"Bs {precio_bs:,.2f}",
+                "Precio USD ($)":  f"${precio_usd:,.2f}",
+            })
+
+        import pandas as pd
+        df_items = pd.DataFrame(rows)
+        st.dataframe(df_items, use_container_width=True, hide_index=True)
+    else:
+        st.info("ℹ️ Esta cotización no tiene ítems registrados")
 
 
 def show_quote_details(quote_id: int):
