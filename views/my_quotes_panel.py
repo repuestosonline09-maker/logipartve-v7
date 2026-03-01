@@ -1,21 +1,56 @@
 """
 Módulo: Mis Cotizaciones
 Flujo:
-  1. Al entrar: solo se ven los filtros (texto, estado, período)
+  1. Al entrar: solo se ven los filtros — pantalla limpia
   2. El analista escribe → aparece dropdown con coincidencias
-  3. Al seleccionar una opción → aparece automáticamente la vista de solo lectura + acciones
-  4. Botón CERRAR limpia todo y vuelve al estado inicial
+  3. Al seleccionar → aparece botón VER
+  4. Al hacer clic en VER → aparece vista de solo lectura + Acciones
+  5. Botón CERRAR limpia TODO (incluyendo el buscador) y vuelve al estado inicial
 """
 
 import streamlit as st
 import pandas as pd
+import os
+import tempfile
 from datetime import datetime, timedelta
 from database.db_manager import DBManager
 from services.auth_manager import AuthManager
-import os
-import tempfile
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# CONSTANTES
+# ─────────────────────────────────────────────────────────────────────────────
+ESTADO_MAP = {
+    'draft':    '📝 Borrador',
+    'sent':     '📤 Enviada',
+    'approved': '✅ Aprobada',
+    'rejected': '❌ Rechazada',
+}
+
+PERIOD_DAYS = {
+    "Últimos 7 días": 7,
+    "Últimos 30 días": 30,
+    "Últimos 3 meses": 90,
+    "Último año": 365,
+}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# HELPERS DE SESSION STATE
+# ─────────────────────────────────────────────────────────────────────────────
+def _limpiar_todo():
+    """Limpia todos los estados de Mis Cotizaciones incluyendo el buscador."""
+    for k in ['mq_ver_id', 'mq_delete_id',
+              'cuadro_costos_quote_id', 'cuadro_costos_png_path',
+              'mq_search_input']:
+        st.session_state.pop(k, None)
+    # Forzar reset del widget de búsqueda incrementando su key counter
+    st.session_state['mq_reset_counter'] = st.session_state.get('mq_reset_counter', 0) + 1
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FUNCIÓN PRINCIPAL
+# ─────────────────────────────────────────────────────────────────────────────
 def render_my_quotes_panel():
     """Renderiza el panel de Mis Cotizaciones."""
 
@@ -30,40 +65,45 @@ def render_my_quotes_panel():
     st.title("📋 MIS COTIZACIONES")
     st.markdown("---")
 
-    # ── BLOQUE 1: FILTROS ──────────────────────────────────────────────────
+    # ── BLOQUE 1: FILTROS ─────────────────────────────────────────────────
     st.subheader("🔍 Filtros y Búsqueda")
+
+    reset_key = st.session_state.get('mq_reset_counter', 0)
 
     col1, col2, col3 = st.columns(3)
     with col1:
         search_term = st.text_input(
             "Buscar por número, cliente o teléfono",
             placeholder="Ej: 2026-30022-A, José, 0424...",
-            key="mq_search"
+            key=f"mq_search_{reset_key}"
         )
     with col2:
         status_filter = st.selectbox(
             "Estado",
             options=["Todas", "Aprobadas", "No Aprobadas"],
-            key="mq_status"
+            key=f"mq_status_{reset_key}"
         )
     with col3:
         period_filter = st.selectbox(
             "Período",
             options=["Últimos 7 días", "Últimos 30 días",
                      "Últimos 3 meses", "Último año", "Todos"],
-            key="mq_period"
+            key=f"mq_period_{reset_key}"
         )
 
-    # Si no hay texto, no mostramos nada más
+    # Sin texto → pantalla limpia
     if not search_term or not search_term.strip():
         st.info("💡 Escribe el número de orden, nombre del cliente o teléfono para buscar.")
         return
 
     st.markdown("---")
 
-    # ── BLOQUE 2: OBTENER Y FILTRAR COTIZACIONES ───────────────────────────
-    quotes = (DBManager.search_quotes(None if role == 'admin' else user_id,
-                                      search_term.strip(), limit=100))
+    # ── BLOQUE 2: OBTENER Y FILTRAR COTIZACIONES ──────────────────────────
+    quotes = DBManager.search_quotes(
+        None if role == 'admin' else user_id,
+        search_term.strip(),
+        limit=100
+    )
 
     # Filtro de estado
     if status_filter == "Aprobadas":
@@ -72,16 +112,12 @@ def render_my_quotes_panel():
         quotes = [q for q in quotes if q.get('status') != 'approved']
 
     # Filtro de período
-    period_days = {
-        "Últimos 7 días": 7, "Últimos 30 días": 30,
-        "Últimos 3 meses": 90, "Último año": 365
-    }
-    if period_filter in period_days:
-        cutoff   = datetime.now() - timedelta(days=period_days[period_filter])
+    if period_filter in PERIOD_DAYS:
+        cutoff   = datetime.now() - timedelta(days=PERIOD_DAYS[period_filter])
         filtered = []
         for q in quotes:
             try:
-                if datetime.fromisoformat(str(q.get('created_at'))) >= cutoff:
+                if datetime.fromisoformat(str(q.get('created_at', ''))) >= cutoff:
                     filtered.append(q)
             except Exception:
                 filtered.append(q)
@@ -91,136 +127,79 @@ def render_my_quotes_panel():
         st.warning("⚠️ No se encontraron cotizaciones con los criterios indicados.")
         return
 
-    # ── BLOQUE 3: DROPDOWN DE COINCIDENCIAS ───────────────────────────────
-    estado_map = {
-        'draft':    '📝 Borrador',
-        'sent':     '📤 Enviada',
-        'approved': '✅ Aprobada',
-        'rejected': '❌ Rechazada',
-    }
-
+    # ── BLOQUE 3: DROPDOWN DE COINCIDENCIAS ──────────────────────────────
     def _label(q):
         num = q.get('quote_number', 'N/A')
         cli = q.get('client_name', 'Sin nombre')
         tel = q.get('client_phone', '')
-        est = estado_map.get(q.get('status', 'draft'), '')
+        est = ESTADO_MAP.get(q.get('status', 'draft'), '')
         return f"{num}  —  {cli}  —  {tel}  {est}"
 
-    # Opción vacía como primer elemento para que el analista elija conscientemente
-    opciones = ["— Selecciona una cotización —"] + [_label(q) for q in quotes]
-    quote_map = {_label(q): q.get('id') for q in quotes}
+    quote_by_label = {_label(q): q for q in quotes}
+    opciones = ["— Selecciona una cotización —"] + list(quote_by_label.keys())
 
-    sel_col, cerrar_col = st.columns([5, 1])
+    sel_col, btn_col = st.columns([5, 1])
 
     with sel_col:
         selected_label = st.selectbox(
             f"Coincidencias encontradas: {len(quotes)}",
             options=opciones,
-            key="mq_selected"
+            key=f"mq_selected_{reset_key}"
         )
 
-    # Botón CERRAR solo cuando hay una vista activa
-    with cerrar_col:
-        st.markdown("<br>", unsafe_allow_html=True)
-        if st.session_state.get('mq_ver_id'):
-            if st.button("✖ CERRAR", use_container_width=True, key="mq_btn_cerrar"):
-                for k in ['mq_ver_id', 'cuadro_costos_quote_id',
-                          'cuadro_costos_png_path', 'mq_delete_id']:
-                    st.session_state.pop(k, None)
-                st.rerun()
+    # Determinar si hay una cotización seleccionada
+    cotizacion_activa = (selected_label and
+                         selected_label != "— Selecciona una cotización —")
+    selected_quote    = quote_by_label.get(selected_label) if cotizacion_activa else None
+    selected_id       = selected_quote.get('id') if selected_quote else None
 
-    # Si el analista seleccionó una cotización real, mostrar vista + acciones
-    if selected_label and selected_label != "— Selecciona una cotización —":
-        selected_id = quote_map.get(selected_label)
-        if selected_id:
-            # Actualizar el ID en session_state si cambió la selección
-            if st.session_state.get('mq_ver_id') != selected_id:
-                st.session_state.mq_ver_id = selected_id
+    with btn_col:
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        if st.session_state.get('mq_ver_id'):
+            # Hay vista activa → mostrar CERRAR
+            if st.button("✖ CERRAR", use_container_width=True,
+                         key=f"mq_btn_cerrar_{reset_key}", type="secondary"):
+                _limpiar_todo()
+                st.rerun()
+        elif cotizacion_activa:
+            # Hay selección pero no vista → mostrar VER
+            if st.button("🔍 VER", use_container_width=True,
+                         key=f"mq_btn_ver_{reset_key}", type="primary"):
+                # Limpiar estados anteriores de otra cotización
                 for k in ['cuadro_costos_quote_id', 'cuadro_costos_png_path', 'mq_delete_id']:
                     st.session_state.pop(k, None)
+                st.session_state.mq_ver_id = selected_id
+                st.rerun()
 
-            # ── BLOQUE 4: VISTA DE SOLO LECTURA ───────────────────────────
-            show_quote_readonly(selected_id)
+    # Si el ID seleccionado cambió respecto al que está en vista, limpiar
+    if (st.session_state.get('mq_ver_id') and
+            selected_id and
+            st.session_state.get('mq_ver_id') != selected_id):
+        for k in ['mq_ver_id', 'cuadro_costos_quote_id',
+                  'cuadro_costos_png_path', 'mq_delete_id']:
+            st.session_state.pop(k, None)
 
-            # ── BLOQUE 5: ACCIONES ─────────────────────────────────────────
-            st.markdown("---")
-            st.subheader("🔧 Acciones")
+    # ── BLOQUE 4: VISTA DE SOLO LECTURA + ACCIONES ────────────────────────
+    if st.session_state.get('mq_ver_id'):
+        ver_id = st.session_state['mq_ver_id']
+        _show_quote_readonly(ver_id)
+        st.markdown("---")
+        _show_acciones(ver_id)
 
-            a1, a2, a3, a4, a5 = st.columns(5)
-
-            with a1:
-                if st.button("✏️ EDITAR", use_container_width=True,
-                             type="secondary", key="mq_btn_editar"):
-                    qd = DBManager.get_quote_full_details(selected_id)
-                    if qd:
-                        st.session_state.editing_mode         = True
-                        st.session_state.editing_quote_id     = selected_id
-                        st.session_state.editing_quote_number = qd['quote_number']
-                        st.session_state.editing_quote_data   = qd
-                        st.success(f"✅ Cotización #{qd['quote_number']} cargada para edición")
-                        st.info("👉 Vaya a la pestaña 'Panel de Analista' para editar")
-                    else:
-                        st.error("❌ Error al cargar cotización")
-
-            with a2:
-                q = DBManager.get_quote_by_id(selected_id)
-                if q and q.get('pdf_path') and os.path.exists(str(q['pdf_path'])):
-                    with open(q['pdf_path'], 'rb') as f:
-                        st.download_button(
-                            label="📄 DESCARGAR PDF",
-                            data=f,
-                            file_name=f"cotizacion_{q['quote_number']}.pdf",
-                            mime="application/pdf",
-                            use_container_width=True,
-                            key="mq_dl_pdf"
-                        )
-                else:
-                    st.button("📄 SIN PDF", disabled=True,
-                              use_container_width=True, key="mq_no_pdf")
-
-            with a3:
-                q = q if 'q' in dir() else DBManager.get_quote_by_id(selected_id)
-                if q and q.get('jpeg_path') and os.path.exists(str(q['jpeg_path'])):
-                    with open(q['jpeg_path'], 'rb') as f:
-                        st.download_button(
-                            label="🖼️ DESCARGAR PNG",
-                            data=f,
-                            file_name=f"cotizacion_{q['quote_number']}.png",
-                            mime="image/png",
-                            use_container_width=True,
-                            key="mq_dl_png"
-                        )
-                else:
-                    st.button("🖼️ SIN PNG", disabled=True,
-                              use_container_width=True, key="mq_no_png")
-
-            with a4:
-                if st.button("📊 CUADRO COSTOS", use_container_width=True,
-                             type="secondary", key="mq_btn_cuadro"):
-                    st.session_state.cuadro_costos_quote_id = selected_id
-                    st.session_state.pop('cuadro_costos_png_path', None)
-                    st.rerun()
-
-            with a5:
-                if st.button("🗑️ ELIMINAR", use_container_width=True,
-                             type="secondary", key="mq_btn_eliminar"):
-                    st.session_state.mq_delete_id = selected_id
-                    st.rerun()
-
-    # ── BLOQUE 6: CUADRO DE COSTOS ─────────────────────────────────────────
+    # ── BLOQUE 5: CUADRO DE COSTOS ────────────────────────────────────────
     if st.session_state.get('cuadro_costos_quote_id'):
-        show_cuadro_costos(st.session_state.cuadro_costos_quote_id)
+        _show_cuadro_costos(st.session_state['cuadro_costos_quote_id'])
 
-    # ── BLOQUE 7: CONFIRMAR ELIMINACIÓN ───────────────────────────────────
+    # ── BLOQUE 6: CONFIRMAR ELIMINACIÓN ──────────────────────────────────
     if st.session_state.get('mq_delete_id'):
-        show_delete_confirmation(st.session_state.mq_delete_id)
+        _show_delete_confirmation(st.session_state['mq_delete_id'])
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# FUNCIONES AUXILIARES
-# ══════════════════════════════════════════════════════════════════════════════
-
-def show_quote_readonly(quote_id: int):
+# ─────────────────────────────────────────────────────────────────────────────
+# VISTA DE SOLO LECTURA
+# ─────────────────────────────────────────────────────────────────────────────
+def _show_quote_readonly(quote_id: int):
     """Vista de solo lectura: encabezado, datos del cliente e ítems."""
 
     st.markdown("---")
@@ -233,16 +212,12 @@ def show_quote_readonly(quote_id: int):
     items = DBManager.get_quote_items(quote_id)
 
     # Fecha
-    created_at = quote.get('created_at')
     try:
-        date_display = datetime.fromisoformat(str(created_at)).strftime("%d/%m/%Y %H:%M")
+        date_display = datetime.fromisoformat(
+            str(quote.get('created_at', ''))
+        ).strftime("%d/%m/%Y %H:%M")
     except Exception:
-        date_display = str(created_at) if created_at else "N/A"
-
-    estado_map = {
-        'draft':    '📝 Borrador', 'sent':     '📤 Enviada',
-        'approved': '✅ Aprobada', 'rejected': '❌ Rechazada',
-    }
+        date_display = str(quote.get('created_at', 'N/A'))
 
     # Encabezado
     h1, h2, h3 = st.columns(3)
@@ -251,7 +226,7 @@ def show_quote_readonly(quote_id: int):
     with h2:
         st.markdown(f"📅 **Fecha:** {date_display}")
     with h3:
-        st.markdown(f"**Estado:** {estado_map.get(quote.get('status', 'draft'), 'Desconocido')}")
+        st.markdown(f"**Estado:** {ESTADO_MAP.get(quote.get('status', 'draft'), 'Desconocido')}")
 
     # Datos del cliente
     st.markdown("👤 **Datos del Cliente**")
@@ -279,14 +254,16 @@ def show_quote_readonly(quote_id: int):
 
         rows = []
         for idx, item in enumerate(items, 1):
-            created_item = item.get('created_at') or quote.get('created_at')
             try:
-                fecha_item = datetime.fromisoformat(str(created_item)).strftime("%d/%m/%Y %H:%M")
+                fecha_item = datetime.fromisoformat(
+                    str(item.get('created_at') or quote.get('created_at', ''))
+                ).strftime("%d/%m/%Y %H:%M")
             except Exception:
                 fecha_item = date_display
 
             cantidad   = int(item.get('quantity', 1) or 1)
-            fob_total  = float(item.get('unit_cost', 0) or 0) * cantidad
+            fob_unit   = float(item.get('unit_cost', 0) or 0)
+            fob_total  = fob_unit * cantidad
             precio_usd = float(item.get('total_cost', 0) or 0)
             precio_bs  = precio_usd * (1 + dif_pct / 100)
 
@@ -306,7 +283,178 @@ def show_quote_readonly(quote_id: int):
         st.info("ℹ️ Esta cotización no tiene ítems registrados")
 
 
-def show_cuadro_costos(quote_id: int):
+# ─────────────────────────────────────────────────────────────────────────────
+# ACCIONES
+# ─────────────────────────────────────────────────────────────────────────────
+def _show_acciones(quote_id: int):
+    """Muestra los 5 botones de acción para la cotización seleccionada."""
+
+    st.subheader("🔧 Acciones")
+
+    quote = DBManager.get_quote_by_id(quote_id)
+    if not quote:
+        st.error("❌ Cotización no encontrada")
+        return
+
+    a1, a2, a3, a4, a5 = st.columns(5)
+
+    # ── EDITAR ────────────────────────────────────────────────────────────
+    with a1:
+        if st.button("✏️ EDITAR", use_container_width=True,
+                     type="secondary", key=f"acc_editar_{quote_id}"):
+            qd = DBManager.get_quote_full_details(quote_id)
+            if qd:
+                st.session_state.editing_mode         = True
+                st.session_state.editing_quote_id     = quote_id
+                st.session_state.editing_quote_number = qd['quote_number']
+                st.session_state.editing_quote_data   = qd
+                st.success(f"✅ Cotización #{qd['quote_number']} cargada para edición")
+                st.info("👉 Vaya a la pestaña 'Panel de Analista' para editar")
+            else:
+                st.error("❌ Error al cargar cotización")
+
+    # ── DESCARGAR PDF ─────────────────────────────────────────────────────
+    with a2:
+        pdf_path = str(quote.get('pdf_path') or '')
+        if pdf_path and os.path.exists(pdf_path):
+            with open(pdf_path, 'rb') as f:
+                st.download_button(
+                    label="📄 DESCARGAR PDF",
+                    data=f,
+                    file_name=f"cotizacion_{quote['quote_number']}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True,
+                    key=f"acc_pdf_{quote_id}"
+                )
+        else:
+            # Intentar regenerar el PDF
+            if st.button("📄 GENERAR PDF", use_container_width=True,
+                         type="secondary", key=f"acc_gen_pdf_{quote_id}"):
+                _regenerar_pdf(quote_id)
+
+    # ── DESCARGAR PNG ─────────────────────────────────────────────────────
+    with a3:
+        png_path = str(quote.get('jpeg_path') or '')
+        if png_path and os.path.exists(png_path):
+            with open(png_path, 'rb') as f:
+                st.download_button(
+                    label="🖼️ DESCARGAR PNG",
+                    data=f,
+                    file_name=f"cotizacion_{quote['quote_number']}.png",
+                    mime="image/png",
+                    use_container_width=True,
+                    key=f"acc_png_{quote_id}"
+                )
+        else:
+            # Intentar regenerar el PNG
+            if st.button("🖼️ GENERAR PNG", use_container_width=True,
+                         type="secondary", key=f"acc_gen_png_{quote_id}"):
+                _regenerar_png(quote_id)
+
+    # ── CUADRO DE COSTOS ──────────────────────────────────────────────────
+    with a4:
+        if st.button("📊 CUADRO COSTOS", use_container_width=True,
+                     type="secondary", key=f"acc_cuadro_{quote_id}"):
+            st.session_state.cuadro_costos_quote_id = quote_id
+            st.session_state.pop('cuadro_costos_png_path', None)
+            st.rerun()
+
+    # ── ELIMINAR ──────────────────────────────────────────────────────────
+    with a5:
+        if st.button("🗑️ ELIMINAR", use_container_width=True,
+                     type="secondary", key=f"acc_elim_{quote_id}"):
+            st.session_state.mq_delete_id = quote_id
+            st.rerun()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# REGENERAR PDF
+# ─────────────────────────────────────────────────────────────────────────────
+def _regenerar_pdf(quote_id: int):
+    """Regenera el PDF de una cotización y actualiza la BD."""
+    try:
+        from services.document_generation.pdf_generator import PDFQuoteGenerator
+        from database.db_manager import DBManager
+
+        qd = DBManager.get_quote_full_details(quote_id)
+        if not qd:
+            st.error("❌ No se pudo cargar la cotización")
+            return
+
+        quote_number = qd.get('quote_number', str(quote_id))
+        output_dir   = os.path.join(tempfile.gettempdir(), 'logipartve_docs')
+        os.makedirs(output_dir, exist_ok=True)
+        pdf_path = os.path.join(output_dir, f"cotizacion_{quote_number}.pdf")
+
+        with st.spinner("⏳ Generando PDF..."):
+            result = PDFQuoteGenerator.generate(qd, pdf_path)
+
+        if result and os.path.exists(pdf_path):
+            # Actualizar ruta en BD
+            conn   = DBManager.get_connection()
+            cursor = conn.cursor()
+            if DBManager.USE_POSTGRES:
+                cursor.execute("UPDATE quotes SET pdf_path = %s WHERE id = %s",
+                               (pdf_path, quote_id))
+            else:
+                cursor.execute("UPDATE quotes SET pdf_path = ? WHERE id = ?",
+                               (pdf_path, quote_id))
+            conn.commit()
+            cursor.close()
+            st.success("✅ PDF generado. Haz clic en DESCARGAR PDF.")
+            st.rerun()
+        else:
+            st.error("❌ Error al generar el PDF")
+    except Exception as e:
+        st.error(f"❌ Error: {e}")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# REGENERAR PNG
+# ─────────────────────────────────────────────────────────────────────────────
+def _regenerar_png(quote_id: int):
+    """Regenera el PNG de una cotización y actualiza la BD."""
+    try:
+        from services.document_generation.png_generator import PNGQuoteGenerator
+        from database.db_manager import DBManager
+
+        qd = DBManager.get_quote_full_details(quote_id)
+        if not qd:
+            st.error("❌ No se pudo cargar la cotización")
+            return
+
+        quote_number = qd.get('quote_number', str(quote_id))
+        output_dir   = os.path.join(tempfile.gettempdir(), 'logipartve_docs')
+        os.makedirs(output_dir, exist_ok=True)
+        png_path = os.path.join(output_dir, f"cotizacion_{quote_number}.png")
+
+        with st.spinner("⏳ Generando PNG..."):
+            result = PNGQuoteGenerator.generate(qd, png_path)
+
+        if result and os.path.exists(png_path):
+            # Actualizar ruta en BD
+            conn   = DBManager.get_connection()
+            cursor = conn.cursor()
+            if DBManager.USE_POSTGRES:
+                cursor.execute("UPDATE quotes SET jpeg_path = %s WHERE id = %s",
+                               (png_path, quote_id))
+            else:
+                cursor.execute("UPDATE quotes SET jpeg_path = ? WHERE id = ?",
+                               (png_path, quote_id))
+            conn.commit()
+            cursor.close()
+            st.success("✅ PNG generado. Haz clic en DESCARGAR PNG.")
+            st.rerun()
+        else:
+            st.error("❌ Error al generar el PNG")
+    except Exception as e:
+        st.error(f"❌ Error: {e}")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CUADRO DE COSTOS
+# ─────────────────────────────────────────────────────────────────────────────
+def _show_cuadro_costos(quote_id: int):
     """Genera y muestra el Cuadro de Costos interno."""
 
     st.markdown("---")
@@ -315,7 +463,8 @@ def show_cuadro_costos(quote_id: int):
     with hdr1:
         st.subheader("📊 CUADRO DE COSTOS — USO ADMINISTRATIVO INTERNO")
     with hdr2:
-        if st.button("✖ CERRAR", use_container_width=True, key="btn_cerrar_cuadro"):
+        if st.button("✖ CERRAR", use_container_width=True,
+                     key="btn_cerrar_cuadro", type="secondary"):
             st.session_state.pop('cuadro_costos_quote_id', None)
             st.session_state.pop('cuadro_costos_png_path', None)
             st.rerun()
@@ -347,11 +496,11 @@ def show_cuadro_costos(quote_id: int):
         imp_pct   = float(item.get('tax_percentage', 0) or 0)
         factor_ut = float(item.get('profit_factor', 1.0) or 1.0)
 
-        imp_int   = fob_total * (imp_pct / 100)
-        utilidad  = (fob_total + handling + manejo + imp_int) * (factor_ut - 1)
-        base_tax  = fob_total + handling + manejo + imp_int + utilidad + envio
-        tax_pct   = 7.0
-        costo_tax = base_tax * (tax_pct / 100)
+        imp_int    = fob_total * (imp_pct / 100)
+        utilidad   = (fob_total + handling + manejo + imp_int) * (factor_ut - 1)
+        base_tax   = fob_total + handling + manejo + imp_int + utilidad + envio
+        tax_pct    = 7.0
+        costo_tax  = base_tax * (tax_pct / 100)
         precio_usd = base_tax + costo_tax
         dif_val    = precio_usd * (dif_pct / 100)
         precio_bs  = precio_usd + dif_val
@@ -382,15 +531,19 @@ def show_cuadro_costos(quote_id: int):
 
     png_path = st.session_state.get('cuadro_costos_png_path')
 
-    if not png_path or not os.path.exists(png_path):
+    if not png_path or not os.path.exists(str(png_path)):
         with st.spinner("⏳ Generando Cuadro de Costos..."):
             try:
-                from services.document_generation.cuadro_costos_generator import generar_cuadro_costos_png
+                from services.document_generation.cuadro_costos_generator import (
+                    generar_cuadro_costos_png)
                 tmp_dir      = tempfile.gettempdir()
                 quote_number = quote.get('quote_number', str(quote_id))
                 png_path     = os.path.join(
-                    tmp_dir, f"cuadro_costos_{quote_number.replace('-','_')}.png")
-                if generar_cuadro_costos_png(quote_data=quote, items=items_para_cuadro,
+                    tmp_dir,
+                    f"cuadro_costos_{quote_number.replace('-', '_')}.png"
+                )
+                if generar_cuadro_costos_png(quote_data=quote,
+                                             items=items_para_cuadro,
                                              output_path=png_path):
                     st.session_state.cuadro_costos_png_path = png_path
                     st.success(f"✅ Cuadro generado — {quote_number}")
@@ -419,12 +572,16 @@ def show_cuadro_costos(quote_id: int):
                 file_name=f"CuadroCostos_{quote_number}.png",
                 mime="image/png",
                 use_container_width=True,
-                type="primary"
+                type="primary",
+                key=f"dl_cuadro_{quote_id}"
             )
         st.caption("💡 Descarga el PNG y envíalo al grupo de WhatsApp administrativo.")
 
 
-def show_delete_confirmation(quote_id: int):
+# ─────────────────────────────────────────────────────────────────────────────
+# CONFIRMAR ELIMINACIÓN
+# ─────────────────────────────────────────────────────────────────────────────
+def _show_delete_confirmation(quote_id: int):
     """Confirmación de eliminación de cotización."""
 
     st.markdown("---")
@@ -445,12 +602,11 @@ def show_delete_confirmation(quote_id: int):
                     st.success("✅ Cotización eliminada exitosamente")
                 except Exception as e:
                     st.error(f"❌ Error al eliminar: {e}")
-                for k in ['mq_delete_id', 'mq_ver_id',
-                          'cuadro_costos_quote_id', 'cuadro_costos_png_path']:
-                    st.session_state.pop(k, None)
+                _limpiar_todo()
                 st.rerun()
         with col2:
-            if st.button("❌ CANCELAR", use_container_width=True, key="mq_cancel_del"):
+            if st.button("❌ CANCELAR", use_container_width=True,
+                         key="mq_cancel_del"):
                 st.session_state.pop('mq_delete_id', None)
                 st.rerun()
     else:
