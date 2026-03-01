@@ -134,12 +134,20 @@ def render_my_quotes_panel():
         selected_quote_id = quote_options[selected_quote_display]
 
         with btn_col:
-            if st.button("🔍 VER", use_container_width=True, type="primary"):
-                st.session_state.ver_quote_id = selected_quote_id
-                # Limpiar vistas anteriores al cambiar de cotización
-                for k in ['cuadro_costos_quote_id', 'cuadro_costos_png_path', 'delete_quote_id']:
-                    st.session_state.pop(k, None)
-                st.rerun()
+            ver_col, cerrar_col = st.columns(2)
+            with ver_col:
+                if st.button("🔍 VER", use_container_width=True, type="primary", key="btn_ver"):
+                    st.session_state.ver_quote_id = selected_quote_id
+                    # Limpiar vistas anteriores al cambiar de cotización
+                    for k in ['cuadro_costos_quote_id', 'cuadro_costos_png_path', 'delete_quote_id']:
+                        st.session_state.pop(k, None)
+                    st.rerun()
+            with cerrar_col:
+                if st.session_state.get('ver_quote_id') == selected_quote_id:
+                    if st.button("✖ CERRAR", use_container_width=True, type="secondary", key="btn_cerrar"):
+                        for k in ['ver_quote_id', 'cuadro_costos_quote_id', 'cuadro_costos_png_path', 'delete_quote_id']:
+                            st.session_state.pop(k, None)
+                        st.rerun()
 
         # Si se presionó VER y la cotización seleccionada coincide, mostrar vista + botones
         if st.session_state.get('ver_quote_id') == selected_quote_id:
