@@ -36,7 +36,6 @@ def render_my_quotes_panel():
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        # Búsqueda por texto
         search_term = st.text_input(
             "Buscar por número, cliente o teléfono",
             placeholder="Ej: 2026-30022-A, José, 0424...",
@@ -44,7 +43,6 @@ def render_my_quotes_panel():
         )
     
     with col2:
-        # Filtro por estado
         status_filter = st.selectbox(
             "Estado",
             options=["Todas", "Aprobadas", "No Aprobadas"],
@@ -52,7 +50,6 @@ def render_my_quotes_panel():
         )
     
     with col3:
-        # Filtro por período
         period_filter = st.selectbox(
             "Período",
             options=["Últimos 7 días", "Últimos 30 días", "Últimos 3 meses", "Último año", "Todos"],
@@ -63,15 +60,12 @@ def render_my_quotes_panel():
     
     # ==================== OBTENER COTIZACIONES ====================
     
-    # Determinar si es búsqueda o listado
     if search_term:
-        # Búsqueda
         if role == 'admin':
             quotes = DBManager.search_quotes(None, search_term, limit=100)
         else:
             quotes = DBManager.search_quotes(user_id, search_term, limit=100)
     else:
-        # Listado normal
         if role == 'admin':
             quotes = DBManager.get_all_quotes(limit=100)
         else:
@@ -98,59 +92,102 @@ def render_my_quotes_panel():
             cutoff_date = None
         
         if cutoff_date:
-            quotes = [q for q in quotes if datetime.fromisoformat(str(q.get('created_at'))) >= cutoff_date]
+            filtered = []
+            for q in quotes:
+                try:
+                    if datetime.fromisoformat(str(q.get('created_at'))) >= cutoff_date:
+                        filtered.append(q)
+                except Exception:
+                    filtered.append(q)
+            quotes = filtered
     
-    # ==================== ACCIONES SOBRE COTIZACIONES ====================
-
     if not quotes:
         st.info("ℹ️ No se encontraron cotizaciones con los filtros seleccionados.")
         return
+    
+    # ==================== LISTA DE RESULTADOS COMPACTA ====================
 
-    # Construir lista compacta para el selector
-    df_data = []
-    for quote in quotes:
-        df_data.append({
-            "ID":      quote.get('id'),
-            "Número":  quote.get('quote_number', 'N/A'),
-            "Cliente": quote.get('client_name', 'Sin nombre'),
-        })
+    estado_map = {
+        'draft':    '📝 Borrador',
+        'sent':     '📤 Enviada',
+        'approved': '✅ Aprobada',
+        'rejected': '❌ Rechazada'
+    }
 
-    st.markdown("---")
-    st.subheader("🔧 Seleccionar Cotización")
+    st.markdown(f"**{len(quotes)} cotización(es) encontrada(s)**")
 
-    quote_options = {f"{q['Número']} - {q['Cliente']}": q['ID'] for q in df_data}
+    # Cabecera de la lista
+    hdr = st.columns([2, 2, 2, 1, 1, 1])
+    hdr[0].markdown("**Número**")
+    hdr[1].markdown("**Cliente**")
+    hdr[2].markdown("**Fecha**")
+    hdr[3].markdown("**Total**")
+    hdr[4].markdown("**Estado**")
+    hdr[5].markdown("")
 
-    if quote_options:
-        sel_col, btn_col = st.columns([4, 1])
+    st.markdown("<hr style='margin:4px 0'>", unsafe_allow_html=True)
 
-        with sel_col:
-            selected_quote_display = st.selectbox(
-                "Cotización",
-                options=list(quote_options.keys()),
-                key="selected_quote",
-                label_visibility="collapsed"
+    selected_quote_id = st.session_state.get('ver_quote_id')
+
+    for q in quotes:
+        qid   = q.get('id')
+        qnum  = q.get('quote_number', 'N/A')
+        qcli  = q.get('client_name', 'Sin nombre')
+        qtot  = f"${q.get('total_amount', 0):,.2f}"
+        qest  = estado_map.get(q.get('status', 'draft'), '❓')
+        try:
+            qfecha = datetime.fromisoformat(str(q.get('created_at'))).strftime("%d/%m/%Y %H:%M")
+        except Exception:
+            qfecha = str(q.get('created_at', 'N/A'))
+
+        is_selected = (selected_quote_id == qid)
+
+        # Resaltar fila seleccionada con fondo suave
+        if is_selected:
+            st.markdown(
+                "<div style='background:#1a3a5c;border-left:4px solid #f97316;"
+                "border-radius:4px;padding:2px 8px;margin:2px 0;'>",
+                unsafe_allow_html=True
             )
 
-        selected_quote_id = quote_options[selected_quote_display]
+        row = st.columns([2, 2, 2, 1, 1, 1])
+        row[0].markdown(f"`{qnum}`")
+        row[1].markdown(qcli)
+        row[2].markdown(qfecha)
+        row[3].markdown(qtot)
+        row[4].markdown(qest)
 
-        with btn_col:
-            ver_col, cerrar_col = st.columns(2)
-            with ver_col:
-                if st.button("🔍 VER", use_container_width=True, type="primary", key="btn_ver"):
-                    st.session_state.ver_quote_id = selected_quote_id
-                    # Limpiar vistas anteriores al cambiar de cotización
-                    for k in ['cuadro_costos_quote_id', 'cuadro_costos_png_path', 'delete_quote_id']:
+        with row[5]:
+            if is_selected:
+                # Botón CERRAR cuando está seleccionada
+                if st.button("✖", key=f"cerrar_{qid}", help="Cerrar vista",
+                             use_container_width=True):
+                    for k in ['ver_quote_id', 'cuadro_costos_quote_id',
+                              'cuadro_costos_png_path', 'delete_quote_id']:
                         st.session_state.pop(k, None)
                     st.rerun()
-            with cerrar_col:
-                if st.session_state.get('ver_quote_id') == selected_quote_id:
-                    if st.button("✖ CERRAR", use_container_width=True, type="secondary", key="btn_cerrar"):
-                        for k in ['ver_quote_id', 'cuadro_costos_quote_id', 'cuadro_costos_png_path', 'delete_quote_id']:
-                            st.session_state.pop(k, None)
-                        st.rerun()
+            else:
+                # Botón VER cuando no está seleccionada
+                if st.button("🔍 VER", key=f"ver_{qid}", use_container_width=True,
+                             type="primary"):
+                    st.session_state.ver_quote_id = qid
+                    for k in ['cuadro_costos_quote_id', 'cuadro_costos_png_path',
+                              'delete_quote_id']:
+                        st.session_state.pop(k, None)
+                    st.rerun()
 
-        # Si se presionó VER y la cotización seleccionada coincide, mostrar vista + botones
-        if st.session_state.get('ver_quote_id') == selected_quote_id:
+        if is_selected:
+            st.markdown("</div>", unsafe_allow_html=True)
+
+    # ==================== VISTA DE SOLO LECTURA + ACCIONES ====================
+
+    if selected_quote_id:
+        # Verificar que la cotización seleccionada sigue en la lista filtrada
+        ids_visibles = {q.get('id') for q in quotes}
+        if selected_quote_id not in ids_visibles:
+            # La cotización ya no está en los resultados filtrados, limpiar
+            st.session_state.pop('ver_quote_id', None)
+        else:
             show_quote_readonly(selected_quote_id)
 
             st.markdown("---")
@@ -159,7 +196,8 @@ def render_my_quotes_panel():
             action_col1, action_col2, action_col3, action_col4, action_col5 = st.columns(5)
 
             with action_col1:
-                if st.button("✏️ EDITAR", use_container_width=True, type="secondary", key="btn_editar"):
+                if st.button("✏️ EDITAR", use_container_width=True, type="secondary",
+                             key="btn_editar"):
                     quote_details = DBManager.get_quote_full_details(selected_quote_id)
                     if quote_details:
                         st.session_state.editing_mode         = True
@@ -210,17 +248,18 @@ def render_my_quotes_panel():
                     st.rerun()
 
             with action_col5:
-                if st.button("🗑️ ELIMINAR", use_container_width=True, type="secondary", key="btn_eliminar"):
+                if st.button("🗑️ ELIMINAR", use_container_width=True, type="secondary",
+                             key="btn_eliminar"):
                     st.session_state.delete_quote_id = selected_quote_id
                     st.rerun()
 
-        # ==================== SECCIÓN: CUADRO DE COSTOS ====================
-    
+    # ==================== SECCIÓN: CUADRO DE COSTOS ====================
+
     if st.session_state.get('cuadro_costos_quote_id'):
         show_cuadro_costos(st.session_state.cuadro_costos_quote_id)
-    
+
     # ==================== MODAL: CONFIRMAR ELIMINACIÓN ====================
-    
+
     if st.session_state.get('delete_quote_id'):
         show_delete_confirmation(st.session_state.delete_quote_id)
 
@@ -252,17 +291,20 @@ def show_quote_readonly(quote_id: int):
     with h_col3:
         estado_map = {'draft': '📝 Borrador', 'sent': '📤 Enviada',
                       'approved': '✅ Aprobada', 'rejected': '❌ Rechazada'}
-        st.markdown(f"**Estado:** {estado_map.get(quote.get('status','draft'), 'Desconocido')}")
+        st.markdown(f"**Estado:** {estado_map.get(quote.get('status', 'draft'), 'Desconocido')}")
 
     # --- Datos del cliente ---
     st.markdown("👤 **Datos del Cliente**")
     c1, c2, c3 = st.columns(3)
     with c1:
-        st.text_input("Nombre", value=quote.get('client_name', ''), disabled=True, key=f"ro_nombre_{quote_id}")
+        st.text_input("Nombre", value=quote.get('client_name', ''), disabled=True,
+                      key=f"ro_nom_{quote_id}")
     with c2:
-        st.text_input("Teléfono", value=quote.get('client_phone', ''), disabled=True, key=f"ro_tel_{quote_id}")
+        st.text_input("Teléfono", value=quote.get('client_phone', ''), disabled=True,
+                      key=f"ro_tel_{quote_id}")
     with c3:
-        st.text_input("Vehículo", value=quote.get('client_vehicle', ''), disabled=True, key=f"ro_veh_{quote_id}")
+        st.text_input("Vehículo", value=quote.get('client_vehicle', ''), disabled=True,
+                      key=f"ro_veh_{quote_id}")
 
     # --- Ítems ---
     st.markdown(f"🔧 **Ítems ({len(items)} repuesto{'s' if len(items) != 1 else ''})**")
@@ -280,7 +322,6 @@ def show_quote_readonly(quote_id: int):
             fob_total  = float(item.get('unit_cost', 0) or 0) * cantidad
             precio_usd = float(item.get('total_cost', 0) or 0)
 
-            # Precio Bs: recalcular con diferencial actual
             try:
                 from database.config_helpers import ConfigHelpers
                 dif_pct = ConfigHelpers.get_diferencial()
@@ -289,196 +330,20 @@ def show_quote_readonly(quote_id: int):
             precio_bs = precio_usd * (1 + dif_pct / 100)
 
             rows.append({
-                "#":              idx,
-                "Fecha/Hora":     fecha_item,
-                "Descripción":    item.get('description', 'N/A'),
-                "N° Parte":       item.get('part_number', 'N/A'),
-                "Cantidad":        cantidad,
-                "FOB Total ($)":   f"${fob_total:,.2f}",
-                "🇻🇪 Precio Bs":  f"Bs {precio_bs:,.2f}",
-                "Precio USD ($)":  f"${precio_usd:,.2f}",
+                "#":             idx,
+                "Fecha/Hora":    fecha_item,
+                "Descripción":   item.get('description', 'N/A'),
+                "N° Parte":      item.get('part_number', 'N/A'),
+                "Cantidad":      cantidad,
+                "FOB Total ($)": f"${fob_total:,.2f}",
+                "🇻🇪 Precio Bs": f"Bs {precio_bs:,.2f}",
+                "Precio USD ($)": f"${precio_usd:,.2f}",
             })
 
-        import pandas as pd
         df_items = pd.DataFrame(rows)
         st.dataframe(df_items, use_container_width=True, hide_index=True)
     else:
         st.info("ℹ️ Esta cotización no tiene ítems registrados")
-
-
-def show_quote_details(quote_id: int):
-    """Muestra los detalles completos de una cotización."""
-    
-    st.markdown("---")
-    st.subheader("📋 DETALLES DE LA COTIZACIÓN")
-    
-    # Obtener cotización
-    quote = DBManager.get_quote_by_id(quote_id)
-    
-    if not quote:
-        st.error("❌ Cotización no encontrada")
-        if st.button("❌ Cerrar"):
-            del st.session_state.view_quote_id
-            st.rerun()
-        return
-    
-    # Obtener ítems
-    items = DBManager.get_quote_items(quote_id)
-    
-    # Información general
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.metric("Número de Cotización", quote.get('quote_number', 'N/A'))
-    
-    with col2:
-        created_at = quote.get('created_at')
-        if created_at:
-            try:
-                date_obj = datetime.fromisoformat(str(created_at))
-                date_display = date_obj.strftime("%d/%m/%Y %H:%M")
-            except:
-                date_display = str(created_at)
-        else:
-            date_display = "N/A"
-        st.metric("Fecha de Creación", date_display)
-    
-    with col3:
-        status_map = {
-            "draft": "📝 Borrador",
-            "sent": "📤 Enviada",
-            "approved": "✅ Aprobada",
-            "rejected": "❌ Rechazada"
-        }
-        current_status = quote.get('status', 'draft')
-        status_display = status_map.get(current_status, '❓ Desconocido')
-        st.metric("Estado", status_display)
-    
-    # Cambiar estado
-    st.markdown("---")
-    st.subheader("🔄 CAMBIAR ESTADO")
-    
-    status_col1, status_col2 = st.columns([2, 1])
-    
-    with status_col1:
-        new_status = st.selectbox(
-            "Nuevo estado",
-            options=['draft', 'sent', 'approved', 'rejected'],
-            format_func=lambda x: status_map.get(x, x),
-            index=['draft', 'sent', 'approved', 'rejected'].index(current_status),
-            key=f"status_change_{quote_id}"
-        )
-    
-    with status_col2:
-        if new_status != current_status:
-            if st.button("✅ CAMBIAR ESTADO", use_container_width=True, type="primary"):
-                user = AuthManager.get_current_user()
-                success = DBManager.update_quote_status(quote_id, new_status, user['user_id'])
-                if success:
-                    st.success(f"✅ Estado actualizado a: {status_map.get(new_status)}")
-                    st.rerun()
-                else:
-                    st.error("❌ Error al actualizar estado")
-        else:
-            st.info("ℹ️ Seleccione un estado diferente")
-    
-    st.markdown("---")
-    
-    # Datos del cliente
-    st.subheader("👤 DATOS DEL CLIENTE")
-    
-    client_col1, client_col2 = st.columns(2)
-    
-    with client_col1:
-        st.text_input("Nombre", value=quote.get('client_name', ''), disabled=True)
-        st.text_input("Email", value=quote.get('client_email', ''), disabled=True)
-        st.text_input("Cédula/RIF", value=quote.get('client_cedula', ''), disabled=True)
-        st.text_input("Vehículo", value=quote.get('client_vehicle', ''), disabled=True)
-    
-    with client_col2:
-        st.text_input("Teléfono", value=quote.get('client_phone', ''), disabled=True)
-        st.text_input("Dirección", value=quote.get('client_address', ''), disabled=True)
-        st.text_input("Año", value=quote.get('client_year', ''), disabled=True)
-        st.text_input("VIN", value=quote.get('client_vin', ''), disabled=True)
-    
-    st.markdown("---")
-    
-    # Ítems de la cotización
-    st.subheader(f"🛠️ ÍTEMS ({len(items)} repuestos)")
-    
-    if items:
-        items_df_data = []
-        for idx, item in enumerate(items, 1):
-            items_df_data.append({
-                "#": idx,
-                "Descripción": item.get('description', 'N/A'),
-                "Parte": item.get('part_number', 'N/A'),
-                "Marca": item.get('marca', 'N/A'),
-                "Cantidad": item.get('quantity', 0),
-                "Precio Unit.": f"${item.get('unit_cost', 0):,.2f}",
-                "Total": f"${item.get('total_cost', 0):,.2f}"
-            })
-        
-        items_df = pd.DataFrame(items_df_data)
-        st.dataframe(items_df, use_container_width=True, hide_index=True)
-    else:
-        st.info("ℹ️ Esta cotización no tiene ítems registrados")
-    
-    st.markdown("---")
-    
-    # Totales
-    st.subheader("💰 TOTALES")
-    
-    total_col1, total_col2, total_col3, total_col4 = st.columns(4)
-    
-    with total_col1:
-        st.metric("Subtotal", f"${quote.get('sub_total', 0):,.2f}")
-    
-    with total_col2:
-        st.metric("IVA", f"${quote.get('iva_total', 0):,.2f}")
-    
-    with total_col3:
-        st.metric("Total a Pagar", f"${quote.get('total_amount', 0):,.2f}")
-    
-    with total_col4:
-        st.metric("Abona Ya", f"${quote.get('abona_ya', 0):,.2f}")
-    
-    st.markdown("---")
-    
-    # Historial de cambios
-    st.subheader("📜 HISTORIAL DE CAMBIOS")
-    
-    history = DBManager.get_quote_history(quote_id)
-    
-    if history:
-        for change in history:
-            edited_at = change.get('edited_at')
-            if edited_at:
-                try:
-                    date_obj = datetime.fromisoformat(str(edited_at))
-                    date_display = date_obj.strftime("%d/%m/%Y %H:%M")
-                except:
-                    date_display = str(edited_at)
-            else:
-                date_display = "N/A"
-            
-            editor_name = change.get('editor_name', 'Usuario desconocido')
-            change_summary = change.get('change_summary', 'Sin descripción')
-            
-            st.markdown(f"""
-            📅 **{date_display}** - {editor_name}  
-            {change_summary}
-            """)
-            st.markdown("---")
-    else:
-        st.info("ℹ️ Esta cotización no tiene historial de cambios")
-    
-    st.markdown("---")
-    
-    # Botón para cerrar
-    if st.button("❌ CERRAR", use_container_width=True):
-        del st.session_state.view_quote_id
-        st.rerun()
 
 
 def show_cuadro_costos(quote_id: int):
@@ -486,7 +351,6 @@ def show_cuadro_costos(quote_id: int):
     
     st.markdown("---")
     
-    # Encabezado de la sección
     cc_header_col1, cc_header_col2 = st.columns([5, 1])
     with cc_header_col1:
         st.subheader("📊 CUADRO DE COSTOS — USO ADMINISTRATIVO INTERNO")
@@ -497,23 +361,17 @@ def show_cuadro_costos(quote_id: int):
                 del st.session_state.cuadro_costos_png_path
             st.rerun()
     
-    # Obtener datos de la cotización
     quote = DBManager.get_quote_by_id(quote_id)
     if not quote:
         st.error("❌ Cotización no encontrada")
         return
     
-    # Obtener ítems con todos sus costos
     items_raw = DBManager.get_quote_items(quote_id)
     
     if not items_raw:
         st.warning("⚠️ Esta cotización no tiene ítems registrados")
         return
     
-    # Reconstruir los datos de costos de cada ítem desde la BD
-    # Los ítems en BD tienen: unit_cost (FOB), international_handling, national_handling,
-    # shipping_cost, tax_percentage, profit_factor, total_cost
-    # Los costos calculados (diferencial, utilidad, etc.) se recalculan aquí
     items_para_cuadro = []
     for item in items_raw:
         cantidad     = int(item.get('quantity', 1) or 1)
@@ -526,15 +384,13 @@ def show_cuadro_costos(quote_id: int):
         factor_ut    = float(item.get('profit_factor', 1.0) or 1.0)
         total_cost   = float(item.get('total_cost', 0) or 0)
         
-        # Reconstruir costos calculados
         imp_int      = fob_total * (imp_pct / 100)
         utilidad     = (fob_total + handling + manejo + imp_int) * (factor_ut - 1)
         base_tax     = fob_total + handling + manejo + imp_int + utilidad + envio
-        tax_pct      = 7.0   # valor fijo del sistema
+        tax_pct      = 7.0
         costo_tax    = base_tax * (tax_pct / 100)
         precio_usd   = base_tax + costo_tax
         
-        # Diferencial: intentar obtener de la config actual
         try:
             from database.config_helpers import ConfigHelpers
             dif_pct = ConfigHelpers.get_diferencial()
@@ -543,36 +399,34 @@ def show_cuadro_costos(quote_id: int):
         dif_val = precio_usd * (dif_pct / 100)
         precio_bs = precio_usd + dif_val
         
-        # IVA Venezuela (16% si aplica — por defecto no aplica en cuadro de costos)
         iva_pct = 16.0
         iva_val = 0.0
         aplicar_iva = False
         
         items_para_cuadro.append({
-            'descripcion':        item.get('description', f'Ítem'),
-            'parte':              item.get('part_number', ''),
-            'cantidad':           cantidad,
-            'costo_fob':          costo_fob,
-            'fob_total':          fob_total,
-            'costo_handling':     handling,
-            'costo_manejo':       manejo,
-            'costo_impuesto':     imp_int,
-            'impuesto_porcentaje': imp_pct,
-            'factor_utilidad':    factor_ut,
-            'utilidad_valor':     utilidad,
-            'costo_envio':        envio,
-            'costo_tax':          costo_tax,
-            'tax_porcentaje':     tax_pct,
-            'diferencial_valor':  dif_val,
+            'descripcion':            item.get('description', 'Ítem'),
+            'parte':                  item.get('part_number', ''),
+            'cantidad':               cantidad,
+            'costo_fob':              costo_fob,
+            'fob_total':              fob_total,
+            'costo_handling':         handling,
+            'costo_manejo':           manejo,
+            'costo_impuesto':         imp_int,
+            'impuesto_porcentaje':    imp_pct,
+            'factor_utilidad':        factor_ut,
+            'utilidad_valor':         utilidad,
+            'costo_envio':            envio,
+            'costo_tax':              costo_tax,
+            'tax_porcentaje':         tax_pct,
+            'diferencial_valor':      dif_val,
             'diferencial_porcentaje': dif_pct,
-            'precio_usd':         precio_usd,
-            'precio_bs':          precio_bs,
-            'iva_porcentaje':     iva_pct,
-            'iva_valor':          iva_val,
-            'aplicar_iva':        aplicar_iva,
+            'precio_usd':             precio_usd,
+            'precio_bs':              precio_bs,
+            'iva_porcentaje':         iva_pct,
+            'iva_valor':              iva_val,
+            'aplicar_iva':            aplicar_iva,
         })
     
-    # Generar PNG si no existe ya en session_state
     png_path = st.session_state.get('cuadro_costos_png_path')
     
     if not png_path or not os.path.exists(png_path):
@@ -580,7 +434,6 @@ def show_cuadro_costos(quote_id: int):
             try:
                 from services.document_generation.cuadro_costos_generator import generar_cuadro_costos_png
                 
-                # Directorio temporal para el PNG
                 tmp_dir = tempfile.gettempdir()
                 quote_number = quote.get('quote_number', str(quote_id))
                 png_filename = f"cuadro_costos_{quote_number.replace('-', '_')}.png"
@@ -602,7 +455,6 @@ def show_cuadro_costos(quote_id: int):
                 st.error(f"❌ Error: {str(e)}")
                 return
     
-    # Mostrar el PNG en pantalla
     if png_path and os.path.exists(png_path):
         st.markdown("### Vista Previa del Cuadro de Costos")
         st.info("📌 Solo lectura — Para modificar valores, edite la cotización primero.")
@@ -610,7 +462,6 @@ def show_cuadro_costos(quote_id: int):
         
         st.markdown("---")
         
-        # Botón de descarga
         with open(png_path, 'rb') as f:
             png_bytes = f.read()
         
@@ -645,7 +496,6 @@ def show_delete_confirmation(quote_id: int):
         
         with col1:
             if st.button("✅ SÍ, ELIMINAR", use_container_width=True, type="primary"):
-                # TODO: Implementar eliminación en db_manager.py
                 st.success("✅ Cotización eliminada exitosamente")
                 del st.session_state.delete_quote_id
                 st.rerun()
