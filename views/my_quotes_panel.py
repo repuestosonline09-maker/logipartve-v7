@@ -47,7 +47,7 @@ def render_my_quotes_panel():
         # Filtro por estado
         status_filter = st.selectbox(
             "Estado",
-            options=["Todos", "Borrador", "Enviada", "Aprobada", "Rechazada"],
+            options=["Todas", "Aprobadas", "No Aprobadas"],
             key="status_filter"
         )
     
@@ -78,15 +78,10 @@ def render_my_quotes_panel():
             quotes = DBManager.get_quotes_by_analyst(user_id, limit=100)
     
     # Aplicar filtro de estado
-    if status_filter != "Todos":
-        status_map = {
-            "Borrador": "draft",
-            "Enviada": "sent",
-            "Aprobada": "approved",
-            "Rechazada": "rejected"
-        }
-        status_value = status_map.get(status_filter)
-        quotes = [q for q in quotes if q.get('status') == status_value]
+    if status_filter == "Aprobadas":
+        quotes = [q for q in quotes if q.get('status') == 'approved']
+    elif status_filter == "No Aprobadas":
+        quotes = [q for q in quotes if q.get('status') != 'approved']
     
     # Aplicar filtro de período
     if period_filter != "Todos":
