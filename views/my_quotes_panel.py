@@ -1139,17 +1139,15 @@ def _enviar_orden_aprobada(quote_id: int):
 
 
 def _generar_png_cuadro_costos_para_email(quote_id: int, output_path: str):
-    """Genera el PNG del cuadro de costos para adjuntar al correo."""
-    import matplotlib
-    matplotlib.use('Agg')
-    import matplotlib.pyplot as plt
-    import matplotlib.patches as mpatches
-    from matplotlib.patches import FancyBboxPatch
+    """Genera el PNG del cuadro de costos para adjuntar al correo.
+    Usa el mismo generador completo que el botón 'Generar PNG' de la app.
+    """
+    from services.document_generation.cuadro_costos_generator import generar_cuadro_costos_png
     from database.config_helpers import ConfigHelpers
 
     quote = DBManager.get_quote_by_id(quote_id)
-    items = DBManager.get_quote_items(quote_id)
-    if not quote or not items:
+    items_raw = DBManager.get_quote_items(quote_id)
+    if not quote or not items_raw:
         raise ValueError("No se encontró la cotización o no tiene ítems")
 
     try:
@@ -1157,80 +1155,57 @@ def _generar_png_cuadro_costos_para_email(quote_id: int, output_path: str):
     except Exception:
         dif_pct = 45.0
 
-    # Reutilizar la lógica del cuadro de costos existente
-    # Generar imagen simple con matplotlib
-    n_items = len(items)
-    fig_h   = max(8, 4 + n_items * 4)
-    fig, ax = plt.subplots(figsize=(14, fig_h))
-    ax.axis('off')
+    # Preparar items con el mismo formato que usa el botón Generar PNG
+    items_para_cuadro = []
+    for item in items_raw:
+        cantidad  = int(item.get('quantity', 1) or 1)
+        costo_fob = float(item.get('unit_cost', 0) or 0)
+        fob_total = costo_fob * cantidad
+        handling  = float(item.get('international_handling', 0) or 0)
+        manejo    = float(item.get('national_handling', 0) or 0)
+        envio     = float(item.get('shipping_cost', 0) or 0)
+        imp_pct   = float(item.get('tax_percentage', 0) or 0)
+        factor_ut = float(item.get('profit_factor', 1.0) or 1.0)
 
-    # Título
-    ax.text(0.5, 0.98, 'CUADRO DE COSTOS', transform=ax.transAxes,
-            ha='center', va='top', fontsize=18, fontweight='bold',
-            color='white',
-            bbox=dict(boxstyle='round,pad=0.5', facecolor='#1a3c6e', edgecolor='none'))
-    ax.text(0.5, 0.93, f"COTIZACIÓN: {quote.get('quote_number', 'N/A')}",
-            transform=ax.transAxes, ha='center', va='top',
-            fontsize=13, color='#e07b00', fontweight='bold')
-
-    # Info cliente
-    y = 0.88
-    info_line = (
-        f"Cliente: {quote.get('client_name', 'N/A')}   |   "
-        f"Vehículo: {quote.get('client_vehicle', 'N/A')}   |   "
-        f"Fecha: {str(quote.get('created_at', ''))[:10]}"
-    )
-    ax.text(0.5, y, info_line, transform=ax.transAxes,
-            ha='center', va='top', fontsize=10, color='#333')
-
-    # Ítems
-    y -= 0.06
-    for idx, item in enumerate(items, 1):
-        cantidad   = int(item.get('quantity', 1) or 1)
-        fob_unit   = float(item.get('unit_cost', 0) or 0)
-        fob_total  = fob_unit * cantidad
-        factor_ut  = float(item.get('profit_factor', 1.5) or 1.5)
-        handling   = float(item.get('handling_fee', 0) or 0)
-        manejo     = float(item.get('manejo_fee', 0) or 0)
-        imp_int    = float(item.get('international_tax', 0) or 0)
-        envio      = float(item.get('shipping_cost', 0) or 0)
-        tax_pct    = float(item.get('tax_percentage', 7.0) or 7.0)
+        imp_int   = fob_total * (imp_pct / 100)
+        utilidad  = (fob_total * factor_ut) - fob_total
+        base_tax  = fob_total + handling + manejo + imp_int + utilidad + envio
+        tax_pct   = 7.0
+        costo_tax = base_tax * (tax_pct / 100)
         precio_usd = float(item.get('total_cost', 0) or 0)
+        if precio_usd == 0:
+            precio_usd = base_tax + costo_tax
+        dif_val   = precio_usd * (dif_pct / 100)
+        precio_bs = precio_usd + dif_val
 
-        utilidad   = (fob_total * factor_ut) - fob_total
-        base_tax   = fob_total + handling + manejo + imp_int + utilidad + envio
-        tax_val    = base_tax * (tax_pct / 100)
-        precio_bs  = precio_usd * (1 + dif_pct / 100)
+        items_para_cuadro.append({
+            'descripcion':            item.get('description', 'Ítem'),
+            'parte':                  item.get('part_number', ''),
+            'cantidad':               cantidad,
+            'costo_fob':              costo_fob,
+            'fob_total':              fob_total,
+            'costo_handling':         handling,
+            'costo_manejo':           manejo,
+            'costo_impuesto':         imp_int,
+            'impuesto_porcentaje':    imp_pct,
+            'factor_utilidad':        factor_ut,
+            'utilidad_valor':         utilidad,
+            'costo_envio':            envio,
+            'costo_tax':              costo_tax,
+            'tax_porcentaje':         tax_pct,
+            'diferencial_valor':      dif_val,
+            'diferencial_porcentaje': dif_pct,
+            'precio_usd':             precio_usd,
+            'precio_bs':              precio_bs,
+            'iva_porcentaje':         16.0,
+            'iva_valor':              0.0,
+            'aplicar_iva':            False,
+        })
 
-        desc = item.get('description', 'N/A')
-        ax.text(0.05, y, f"ÍTEM #{idx}: {desc}",
-                transform=ax.transAxes, ha='left', va='top',
-                fontsize=11, fontweight='bold', color='#1a3c6e')
-        y -= 0.04
-
-        filas = [
-            ("Cantidad de Repuestos",           str(cantidad)),
-            ("Costo FOB Unitario",               f"${fob_unit:,.2f}"),
-            ("Costo FOB Total",                  f"${fob_total:,.2f}"),
-            ("Handling (Internacional)",          f"${handling:,.2f}"),
-            ("Manejo (Nacional)",                 f"${manejo:,.2f}"),
-            (f"Impuesto Internacional ({imp_int:.1f}%)", f"${imp_int:,.2f}"),
-            (f"Utilidad (Factor {factor_ut:.4f})", f"${utilidad:,.2f}"),
-            ("Envío",                             f"${envio:,.2f}"),
-            (f"TAX ({tax_pct:.1f}%)",             f"${tax_val:,.2f}"),
-            ("Precio USD (Pago en Dólares)",      f"${precio_usd:,.2f}"),
-            (f"VE Precio Bs (Dif. {dif_pct:.1f}%)", f"Bs {precio_bs:,.2f}"),
-        ]
-        for concepto, valor in filas:
-            ax.text(0.10, y, concepto, transform=ax.transAxes,
-                    ha='left', va='top', fontsize=9, color='#444')
-            ax.text(0.85, y, valor, transform=ax.transAxes,
-                    ha='right', va='top', fontsize=9, color='#222', fontweight='bold')
-            y -= 0.03
-
-        y -= 0.02
-
-    plt.tight_layout()
-    plt.savefig(output_path, dpi=150, bbox_inches='tight',
-                facecolor='white', edgecolor='none')
-    plt.close(fig)
+    resultado = generar_cuadro_costos_png(
+        quote_data=quote,
+        items=items_para_cuadro,
+        output_path=output_path
+    )
+    if not resultado:
+        raise ValueError("El generador de Cuadro de Costos retornó False")
