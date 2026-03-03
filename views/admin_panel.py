@@ -64,11 +64,12 @@ def show_admin_panel():
     st.title("🔧 Panel de Administración")
     
     # Tabs para organizar las secciones
-    tab1, tab2, tab3, tab4 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "👤 Mi Perfil",
         "👥 Gestión de Usuarios",
         "⚙️ Configuración del Sistema",
-        "📊 Reportes y Estadísticas"
+        "📊 Reportes y Estadísticas",
+        "📧 Configuración de Correos"
     ])
     
     # TAB 1: MI PERFIL
@@ -86,6 +87,10 @@ def show_admin_panel():
     # TAB 4: REPORTES Y ESTADÍSTICAS
     with tab4:
         show_reports_and_stats()
+
+    # TAB 5: CONFIGURACIÓN DE CORREOS (FASE 5)
+    with tab5:
+        show_email_configuration()
 
 
 def show_my_profile():
@@ -1092,4 +1097,151 @@ def show_reports_and_stats():
     else:
         st.info("No hay actividad reciente")
     
+    st.markdown('</div>', unsafe_allow_html=True)
+
+
+# ==================== CONFIGURACIÓN DE CORREOS (FASE 5) ====================
+
+def show_email_configuration():
+    """Módulo de configuración de correos para el envío de Órdenes Aprobadas."""
+
+    st.markdown('<div class="admin-section">', unsafe_allow_html=True)
+    st.markdown("### 📧 Configuración de Correos — Órdenes Aprobadas")
+    st.markdown(
+        "Configura los destinatarios y los textos del correo que se envía "
+        "cuando un analista aprueba una orden. Los datos de la cotización "
+        "(ítems, cliente, links) se generan automáticamente y no son editables aquí."
+    )
+    st.markdown("---")
+
+    # Cargar configuración actual
+    cfg = DBManager.get_all_email_config()
+
+    # ── SECCIÓN 1: Destinatarios ──────────────────────────────────────────
+    st.markdown("#### 📬 Destinatarios")
+
+    col_to, col_reply = st.columns(2)
+    with col_to:
+        to_email = st.text_input(
+            "Para (To) — Destinatario principal",
+            value=cfg.get('to_email', ''),
+            key="ecfg_to_email",
+            help="Correo del líder de administración (Luciano)"
+        )
+    with col_reply:
+        reply_to = st.text_input(
+            "Reply-To — Las respuestas llegan a",
+            value=cfg.get('reply_to', ''),
+            key="ecfg_reply_to",
+            help="Cuando alguien responde el correo, la respuesta llega aquí"
+        )
+
+    cc_emails = st.text_area(
+        "Con Copia (CC) — separar correos con coma",
+        value=cfg.get('cc_emails', ''),
+        key="ecfg_cc_emails",
+        height=90,
+        help="Todos los correos en copia, separados por coma. Ej: a@gmail.com,b@gmail.com"
+    )
+
+    st.markdown("---")
+
+    # ── SECCIÓN 2: Remitente ──────────────────────────────────────────────
+    st.markdown("#### ✉️ Remitente")
+
+    col_fn, col_fe = st.columns(2)
+    with col_fn:
+        from_name = st.text_input(
+            "Nombre del remitente",
+            value=cfg.get('from_name', 'Ordenes LogiPartVE'),
+            key="ecfg_from_name",
+            help="Nombre que verán los destinatarios en el campo 'De:'"
+        )
+    with col_fe:
+        from_email = st.text_input(
+            "Correo remitente (verificado en Resend)",
+            value=cfg.get('from_email', 'ordenes@logipartve.com'),
+            key="ecfg_from_email",
+            help="Debe estar verificado en el panel de Resend"
+        )
+
+    st.markdown("---")
+
+    # ── SECCIÓN 3: Textos editables del cuerpo ───────────────────────────
+    st.markdown("#### 📝 Textos del Correo")
+    st.caption(
+        "Solo puedes editar los textos fijos. Los datos de la cotización "
+        "(número, cliente, ítems, links, totales) se insertan automáticamente."
+    )
+
+    texto_apertura = st.text_area(
+        "Texto de apertura (saludo e introducción)",
+        value=cfg.get(
+            'texto_apertura',
+            'Hola, por favor dar proceso a esta orden aprobada. '
+            'A continuación te envio los datos para comprar:'
+        ),
+        key="ecfg_apertura",
+        height=100,
+        help="Aparece al inicio del correo, antes de los datos de la cotización"
+    )
+
+    texto_cierre = st.text_area(
+        "Texto de cierre (despedida)",
+        value=cfg.get('texto_cierre', 'Sin más por el momento, queda de ustedes'),
+        key="ecfg_cierre",
+        height=80,
+        help="Aparece al final del correo, antes de la firma del analista"
+    )
+
+    cargo_analista = st.text_input(
+        "Cargo del analista (aparece en la firma)",
+        value=cfg.get('cargo_analista', 'Analista de Ventas'),
+        key="ecfg_cargo",
+        help="Ej: Analista de Ventas, Ejecutivo de Cotizaciones"
+    )
+
+    st.markdown("---")
+
+    # ── BOTÓN GUARDAR ─────────────────────────────────────────────────────
+    if st.button("💾 GUARDAR CONFIGURACIÓN DE CORREOS", type="primary",
+                 use_container_width=True, key="ecfg_save_btn"):
+        errores = []
+        if not to_email.strip():
+            errores.append("El campo 'Para (To)' no puede estar vacío.")
+        if not from_email.strip():
+            errores.append("El campo 'Correo remitente' no puede estar vacío.")
+        if not reply_to.strip():
+            errores.append("El campo 'Reply-To' no puede estar vacío.")
+
+        if errores:
+            for e in errores:
+                st.error(f"❌ {e}")
+        else:
+            cambios = {
+                'to_email':       to_email.strip(),
+                'cc_emails':      cc_emails.strip(),
+                'reply_to':       reply_to.strip(),
+                'from_name':      from_name.strip(),
+                'from_email':     from_email.strip(),
+                'texto_apertura': texto_apertura.strip(),
+                'texto_cierre':   texto_cierre.strip(),
+                'cargo_analista': cargo_analista.strip(),
+            }
+            ok = all(DBManager.set_email_config(k, v) for k, v in cambios.items())
+            if ok:
+                st.success("✅ Configuración de correos guardada correctamente.")
+                st.rerun()
+            else:
+                st.error("❌ Error al guardar. Intenta de nuevo.")
+
+    st.markdown("---")
+
+    # ── VISTA PREVIA DEL ASUNTO ───────────────────────────────────────────
+    st.markdown("#### 👁️ Vista Previa del Asunto")
+    st.info(
+        "📧 **Asunto del correo:** Orden de Compra #2026-XXXXX-A\n\n"
+        "El número de cotización se inserta automáticamente al enviar."
+    )
+
     st.markdown('</div>', unsafe_allow_html=True)

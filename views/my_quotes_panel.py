@@ -345,9 +345,13 @@ def render_my_quotes_panel():
     if st.session_state.get('cuadro_costos_quote_id'):
         _show_cuadro_costos(st.session_state['cuadro_costos_quote_id'])
 
-    # ── BLOQUE 6: CONFIRMAR ELIMINACIÓN ──────────────────────────────────
+        # ── BLOQUE 6: CONFIRMAR ELIMINACIÓN ────────────────────
     if st.session_state.get('mq_delete_id'):
         _show_delete_confirmation(st.session_state['mq_delete_id'])
+
+    # ── BLOQUE 7: FLUJO ORDEN APROBADA (FASE 5) ────────────────────
+    if st.session_state.get('mq_aprobar_id'):
+        _show_aprobar_orden(st.session_state['mq_aprobar_id'])
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -441,7 +445,7 @@ def _show_quote_readonly(quote_id: int):
 # ACCIONES
 # ─────────────────────────────────────────────────────────────────────────────
 def _show_acciones(quote_id: int):
-    """Muestra los 5 botones de acción para la cotización seleccionada."""
+    """Muestra los botones de acción para la cotización seleccionada."""
 
     st.subheader("🔧 Acciones")
 
@@ -450,12 +454,17 @@ def _show_acciones(quote_id: int):
         st.error("❌ Cotización no encontrada")
         return
 
-    a1, a2, a3, a4, a5 = st.columns(5)
+    estado_actual = quote.get('status', 'draft')
+    ya_aprobada   = (estado_actual == 'approved')
 
-    # ── EDITAR ────────────────────────────────────────────────────────────
+    a1, a2, a3, a4, a5, a6 = st.columns(6)
+
+    # ── EDITAR ────────────────────────────────────────────────────────────────────
     with a1:
+        editar_disabled = ya_aprobada
         if st.button("✏️ EDITAR", use_container_width=True,
-                     type="secondary", key=f"acc_editar_{quote_id}"):
+                     type="secondary", key=f"acc_editar_{quote_id}",
+                     disabled=editar_disabled):
             qd = DBManager.get_quote_full_details(quote_id)
             if qd:
                 st.session_state.editing_mode         = True
@@ -466,8 +475,10 @@ def _show_acciones(quote_id: int):
                 st.info("👉 Vaya a la pestaña 'Panel de Analista' para editar")
             else:
                 st.error("❌ Error al cargar cotización")
+        if ya_aprobada:
+            st.caption("🔒 Aprobada")
 
-    # ── DESCARGAR PDF ─────────────────────────────────────────────────────
+    # ── DESCARGAR PDF ───────────────────────────────────────────────────────────────────
     with a2:
         pdf_path = str(quote.get('pdf_path') or '')
         if pdf_path and os.path.exists(pdf_path):
@@ -485,7 +496,7 @@ def _show_acciones(quote_id: int):
                          type="secondary", key=f"acc_gen_pdf_{quote_id}"):
                 _regenerar_pdf(quote_id)
 
-    # ── DESCARGAR PNG ─────────────────────────────────────────────────────
+    # ── DESCARGAR PNG ───────────────────────────────────────────────────────────────────
     with a3:
         png_path = str(quote.get('jpeg_path') or '')
         if png_path and os.path.exists(png_path):
@@ -503,7 +514,7 @@ def _show_acciones(quote_id: int):
                          type="secondary", key=f"acc_gen_png_{quote_id}"):
                 _regenerar_png(quote_id)
 
-    # ── CUADRO DE COSTOS ──────────────────────────────────────────────────
+    # ── CUADRO DE COSTOS ───────────────────────────────────────────────────────────────────
     with a4:
         if st.button("📊 CUADRO COSTOS", use_container_width=True,
                      type="secondary", key=f"acc_cuadro_{quote_id}"):
@@ -511,12 +522,28 @@ def _show_acciones(quote_id: int):
             st.session_state.pop('cuadro_costos_png_path', None)
             st.rerun()
 
-    # ── ELIMINAR ──────────────────────────────────────────────────────────
+    # ── ORDEN APROBADA (FASE 5) ──────────────────────────────────────────────────────────
     with a5:
+        if ya_aprobada:
+            st.button("✅ APROBADA", use_container_width=True,
+                      type="secondary", key=f"acc_aprobada_dis_{quote_id}",
+                      disabled=True)
+            st.caption("Ya enviada")
+        else:
+            if st.button("✅ ORDEN APROBADA", use_container_width=True,
+                         type="primary", key=f"acc_aprobada_{quote_id}"):
+                st.session_state.mq_aprobar_id = quote_id
+                st.rerun()
+
+    # ── ELIMINAR ────────────────────────────────────────────────────────────────────
+    with a6:
         if st.button("🗑️ ELIMINAR", use_container_width=True,
-                     type="secondary", key=f"acc_elim_{quote_id}"):
+                     type="secondary", key=f"acc_elim_{quote_id}",
+                     disabled=ya_aprobada):
             st.session_state.mq_delete_id = quote_id
             st.rerun()
+        if ya_aprobada:
+            st.caption("🔒 Aprobada")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -780,3 +807,423 @@ def _show_delete_confirmation(quote_id: int):
         if st.button("Cerrar", key="mq_close_del"):
             st.session_state.pop('mq_delete_id', None)
             st.rerun()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FLUJO ORDEN APROBADA — FASE 5
+# ─────────────────────────────────────────────────────────────────────────────
+def _show_aprobar_orden(quote_id: int):
+    """
+    Flujo completo de aprobación de orden:
+    Paso 1 → Confirmación
+    Paso 2 → Vista previa del correo
+    Paso 3 → Envío + cambio de estado
+    """
+    import json
+
+    quote = DBManager.get_quote_by_id(quote_id)
+    if not quote:
+        st.error("❌ Cotización no encontrada")
+        st.session_state.pop('mq_aprobar_id', None)
+        return
+
+    st.markdown("---")
+    paso = st.session_state.get('mq_aprobar_paso', 1)
+
+    # ── PASO 1: CONFIRMACIÓN ──────────────────────────────────────────────────
+    if paso == 1:
+        st.warning(
+            f"⚠️ **¿Desea enviar la Orden de Compra #{quote.get('quote_number')} "
+            f"como APROBADA al equipo administrativo?**\n\n"
+            "Esta acción enviará un correo con los documentos adjuntos y cambiará "
+            "el estado de la cotización a **APROBADA**. Una vez aprobada, "
+            "**no podrá editarse ni eliminarse.**"
+        )
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("❌ CANCELAR", use_container_width=True,
+                         key="apr_cancel_1"):
+                st.session_state.pop('mq_aprobar_id', None)
+                st.session_state.pop('mq_aprobar_paso', None)
+                st.rerun()
+        with c2:
+            if st.button("➡️ CONTINUAR — VER VISTA PREVIA", use_container_width=True,
+                         type="primary", key="apr_continuar_1"):
+                st.session_state.mq_aprobar_paso = 2
+                st.rerun()
+
+    # ── PASO 2: VISTA PREVIA ──────────────────────────────────────────────────
+    elif paso == 2:
+        cfg  = DBManager.get_all_email_config()
+        qd   = DBManager.get_quote_full_details(quote_id)
+        items = DBManager.get_quote_items(quote_id)
+
+        st.markdown("### 👁️ Vista Previa del Correo")
+        st.info(
+            f"**Para:** {cfg.get('to_email', 'N/A')}\n\n"
+            f"**CC:** {cfg.get('cc_emails', 'N/A')}\n\n"
+            f"**Asunto:** Orden de Compra #{quote.get('quote_number', 'N/A')}\n\n"
+            f"**Adjuntos:** PNG Cotización + PNG Cuadro de Costos"
+        )
+
+        st.markdown("---")
+        st.markdown(f"**{cfg.get('texto_apertura', '')}**")
+        st.markdown("---")
+
+        # Datos del cliente (solo los que tienen valor)
+        st.markdown("**📋 Datos del Cliente:**")
+        campos_cliente = [
+            ("Nombre",    quote.get('client_name')),
+            ("Teléfono",  quote.get('client_phone')),
+            ("Vehículo",  quote.get('client_vehicle')),
+            ("Año",       quote.get('client_year')),
+            ("VIN",       quote.get('client_vin')),
+            ("Cédula",    quote.get('client_cedula')),
+            ("Dirección", quote.get('client_address')),
+        ]
+        for label, val in campos_cliente:
+            if val and str(val).strip():
+                st.write(f"• **{label}:** {val}")
+
+        st.markdown("---")
+        st.markdown("**🔧 Ítems:**")
+        for idx, item in enumerate(items, 1):
+            desc    = item.get('description', 'N/A')
+            parte   = item.get('part_number', '')
+            cant    = item.get('quantity', 1)
+            precio  = float(item.get('total_cost', 0) or 0)
+            st.markdown(f"**Ítem #{idx}: {desc}**")
+            if parte:
+                st.write(f"  • N° Parte: {parte}")
+            st.write(f"  • Cantidad: {cant}")
+            st.write(f"  • Precio USD: ${precio:,.2f}")
+
+            # Links con cantidad de compra
+            try:
+                raw_links = item.get('reference_links') or '[]'
+                links = json.loads(raw_links) if isinstance(raw_links, str) else raw_links
+                if links:
+                    for li in links:
+                        if isinstance(li, dict):
+                            url = li.get('url', '')
+                            qty = li.get('qty', 1)
+                        else:
+                            url = str(li)
+                            qty = 1
+                        if url:
+                            st.write(f"  🔗 Comprar {qty} → {url}")
+            except Exception:
+                pass
+
+        st.markdown("---")
+        st.markdown(f"*{cfg.get('texto_cierre', '')}*")
+        st.markdown(
+            f"**{st.session_state.get('full_name', st.session_state.get('username', 'Analista'))}**  \n"
+            f"*{cfg.get('cargo_analista', 'Analista de Ventas')}*  \n"
+            "LogiPartVE Pro"
+        )
+
+        st.markdown("---")
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("❌ CANCELAR", use_container_width=True,
+                         key="apr_cancel_2"):
+                st.session_state.pop('mq_aprobar_id', None)
+                st.session_state.pop('mq_aprobar_paso', None)
+                st.rerun()
+        with c2:
+            if st.button("📧 ENVIAR APROBACIÓN", use_container_width=True,
+                         type="primary", key="apr_enviar"):
+                st.session_state.mq_aprobar_paso = 3
+                st.rerun()
+
+    # ── PASO 3: ENVÍO ─────────────────────────────────────────────────────────
+    elif paso == 3:
+        with st.spinner("⏳ Generando documentos y enviando correo..."):
+            exito, mensaje = _enviar_orden_aprobada(quote_id)
+
+        if exito:
+            st.success(f"✅ {mensaje}")
+            st.balloons()
+            st.session_state.pop('mq_aprobar_id', None)
+            st.session_state.pop('mq_aprobar_paso', None)
+            # Refrescar la vista de la cotización
+            st.session_state.mq_ver_id = quote_id
+            st.rerun()
+        else:
+            st.error(f"❌ {mensaje}")
+            c1, c2 = st.columns(2)
+            with c1:
+                if st.button("🔄 INTENTAR DE NUEVO", use_container_width=True,
+                             type="primary", key="apr_retry"):
+                    st.rerun()
+            with c2:
+                if st.button("❌ CANCELAR", use_container_width=True,
+                             key="apr_cancel_3"):
+                    st.session_state.pop('mq_aprobar_id', None)
+                    st.session_state.pop('mq_aprobar_paso', None)
+                    st.rerun()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MOTOR DE ENVÍO — FASE 5
+# ─────────────────────────────────────────────────────────────────────────────
+def _enviar_orden_aprobada(quote_id: int):
+    """
+    Genera PNG cotización + PNG cuadro de costos, construye el correo
+    y lo envía usando Resend. Retorna (True, msg) o (False, msg).
+    """
+    import json
+    import base64
+
+    try:
+        from services.email_service import EmailService
+        from services.document_generation.png_generator import PNGQuoteGenerator
+
+        cfg   = DBManager.get_all_email_config()
+        qd    = DBManager.get_quote_full_details(quote_id)
+        quote = DBManager.get_quote_by_id(quote_id)
+        items = DBManager.get_quote_items(quote_id)
+
+        if not qd or not quote:
+            return False, "No se pudo cargar la cotización desde la base de datos."
+
+        quote_number = quote.get('quote_number', str(quote_id))
+        output_dir   = os.path.join(tempfile.gettempdir(), 'logipartve_docs')
+        os.makedirs(output_dir, exist_ok=True)
+
+        # ── Generar PNG de la cotización ──────────────────────────────────────
+        datos_adaptados = _adaptar_quote_para_generadores(qd)
+        png_cot_path    = os.path.join(output_dir, f"cot_{quote_number}.png")
+        try:
+            gen = PNGQuoteGenerator()
+            gen.generate_quote_png_from_data(datos_adaptados, png_cot_path)
+            # Actualizar ruta en BD
+            DBManager.update_quote_file_paths(quote_id, jpeg_path=png_cot_path)
+        except Exception as e:
+            return False, f"Error generando PNG de cotización: {e}"
+
+        # ── Generar PNG del cuadro de costos ─────────────────────────────────
+        png_cuadro_path = os.path.join(output_dir, f"cuadro_{quote_number}.png")
+        try:
+            _generar_png_cuadro_costos_para_email(quote_id, png_cuadro_path)
+        except Exception as e:
+            return False, f"Error generando PNG del Cuadro de Costos: {e}"
+
+        # ── Construir cuerpo del correo ───────────────────────────────────────
+        analista_nombre = st.session_state.get(
+            'full_name', st.session_state.get('username', 'Analista'))
+        cargo           = cfg.get('cargo_analista', 'Analista de Ventas')
+        texto_apertura  = cfg.get('texto_apertura',
+            'Hola, por favor dar proceso a esta orden aprobada. '
+            'A continuación te envio los datos para comprar:')
+        texto_cierre    = cfg.get('texto_cierre',
+            'Sin más por el momento, queda de ustedes')
+
+        # Datos del cliente (solo los que tienen valor)
+        campos_cliente = [
+            ("Nombre",    quote.get('client_name')),
+            ("Teléfono",  quote.get('client_phone')),
+            ("Vehículo",  quote.get('client_vehicle')),
+            ("Año",       quote.get('client_year')),
+            ("VIN",       quote.get('client_vin')),
+            ("Cédula",    quote.get('client_cedula')),
+            ("Dirección", quote.get('client_address')),
+        ]
+        cliente_html = "".join(
+            f"<li><strong>{lbl}:</strong> {val}</li>"
+            for lbl, val in campos_cliente
+            if val and str(val).strip()
+        )
+
+        # Ítems con links
+        items_html = ""
+        for idx, item in enumerate(items, 1):
+            desc   = item.get('description', 'N/A')
+            parte  = item.get('part_number', '')
+            cant   = item.get('quantity', 1)
+            precio = float(item.get('total_cost', 0) or 0)
+            items_html += (
+                f"<p><strong>Ítem #{idx}: {desc}</strong><br>"
+                f"{'N° Parte: ' + parte + '<br>' if parte else ''}"
+                f"Cantidad: {cant} &nbsp;|&nbsp; Precio USD: ${precio:,.2f}</p>"
+            )
+            try:
+                raw_links = item.get('reference_links') or '[]'
+                links = json.loads(raw_links) if isinstance(raw_links, str) else raw_links
+                if links:
+                    items_html += "<ul>"
+                    for li in links:
+                        if isinstance(li, dict):
+                            url = li.get('url', '')
+                            qty = li.get('qty', 1)
+                        else:
+                            url = str(li)
+                            qty = 1
+                        if url:
+                            items_html += (
+                                f"<li>🔗 Comprar {qty} → "
+                                f"<a href='{url}'>{url}</a></li>"
+                            )
+                    items_html += "</ul>"
+            except Exception:
+                pass
+
+        html_body = f"""
+        <div style="font-family:Arial,sans-serif;max-width:700px;margin:auto;">
+          <h2 style="color:#1a3c6e;">Orden de Compra #{quote_number}</h2>
+          <p>{texto_apertura}</p>
+          <hr>
+          <h3>📋 Datos del Cliente</h3>
+          <ul>{cliente_html}</ul>
+          <hr>
+          <h3>🔧 Ítems</h3>
+          {items_html}
+          <hr>
+          <p><em>{texto_cierre}</em></p>
+          <p><strong>{analista_nombre}</strong><br>
+          <em>{cargo}</em><br>
+          LogiPartVE Pro</p>
+        </div>
+        """
+
+        # ── Preparar adjuntos ─────────────────────────────────────────────────
+        adjuntos = []
+        for path_file, nombre_file in [
+            (png_cot_path,    f"cotizacion_{quote_number}.png"),
+            (png_cuadro_path, f"cuadro_costos_{quote_number}.png"),
+        ]:
+            if os.path.exists(path_file):
+                with open(path_file, 'rb') as f:
+                    adjuntos.append({
+                        "filename": nombre_file,
+                        "content":  base64.b64encode(f.read()).decode(),
+                        "type":     "image/png",
+                    })
+
+        # ── CC como lista ─────────────────────────────────────────────────────
+        cc_raw = cfg.get('cc_emails', '')
+        cc_list = [e.strip() for e in cc_raw.split(',') if e.strip()]
+
+        # ── Enviar con Resend ─────────────────────────────────────────────────
+        resultado = EmailService.send_approval_email(
+            from_name    = cfg.get('from_name', 'Ordenes LogiPartVE'),
+            from_email   = cfg.get('from_email', 'ordenes@logipartve.com'),
+            to_email     = cfg.get('to_email', ''),
+            cc_list      = cc_list,
+            reply_to     = cfg.get('reply_to', ''),
+            subject      = f"Orden de Compra #{quote_number}",
+            html_body    = html_body,
+            attachments  = adjuntos,
+        )
+
+        if resultado.get('success'):
+            # Cambiar estado a APROBADA
+            DBManager.update_quote_status(quote_id, 'approved')
+            return True, (
+                f"Orden #{quote_number} enviada exitosamente al equipo. "
+                "El estado ha sido cambiado a APROBADA."
+            )
+        else:
+            return False, f"Error al enviar el correo: {resultado.get('error', 'Error desconocido')}"
+
+    except Exception as e:
+        return False, f"Error inesperado: {e}"
+
+
+def _generar_png_cuadro_costos_para_email(quote_id: int, output_path: str):
+    """Genera el PNG del cuadro de costos para adjuntar al correo."""
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    import matplotlib.patches as mpatches
+    from matplotlib.patches import FancyBboxPatch
+    from database.config_helpers import ConfigHelpers
+
+    quote = DBManager.get_quote_by_id(quote_id)
+    items = DBManager.get_quote_items(quote_id)
+    if not quote or not items:
+        raise ValueError("No se encontró la cotización o no tiene ítems")
+
+    try:
+        dif_pct = ConfigHelpers.get_diferencial()
+    except Exception:
+        dif_pct = 45.0
+
+    # Reutilizar la lógica del cuadro de costos existente
+    # Generar imagen simple con matplotlib
+    n_items = len(items)
+    fig_h   = max(8, 4 + n_items * 4)
+    fig, ax = plt.subplots(figsize=(14, fig_h))
+    ax.axis('off')
+
+    # Título
+    ax.text(0.5, 0.98, 'CUADRO DE COSTOS', transform=ax.transAxes,
+            ha='center', va='top', fontsize=18, fontweight='bold',
+            color='white',
+            bbox=dict(boxstyle='round,pad=0.5', facecolor='#1a3c6e', edgecolor='none'))
+    ax.text(0.5, 0.93, f"COTIZACIÓN: {quote.get('quote_number', 'N/A')}",
+            transform=ax.transAxes, ha='center', va='top',
+            fontsize=13, color='#e07b00', fontweight='bold')
+
+    # Info cliente
+    y = 0.88
+    info_line = (
+        f"Cliente: {quote.get('client_name', 'N/A')}   |   "
+        f"Vehículo: {quote.get('client_vehicle', 'N/A')}   |   "
+        f"Fecha: {str(quote.get('created_at', ''))[:10]}"
+    )
+    ax.text(0.5, y, info_line, transform=ax.transAxes,
+            ha='center', va='top', fontsize=10, color='#333')
+
+    # Ítems
+    y -= 0.06
+    for idx, item in enumerate(items, 1):
+        cantidad   = int(item.get('quantity', 1) or 1)
+        fob_unit   = float(item.get('unit_cost', 0) or 0)
+        fob_total  = fob_unit * cantidad
+        factor_ut  = float(item.get('profit_factor', 1.5) or 1.5)
+        handling   = float(item.get('handling_fee', 0) or 0)
+        manejo     = float(item.get('manejo_fee', 0) or 0)
+        imp_int    = float(item.get('international_tax', 0) or 0)
+        envio      = float(item.get('shipping_cost', 0) or 0)
+        tax_pct    = float(item.get('tax_percentage', 7.0) or 7.0)
+        precio_usd = float(item.get('total_cost', 0) or 0)
+
+        utilidad   = (fob_total * factor_ut) - fob_total
+        base_tax   = fob_total + handling + manejo + imp_int + utilidad + envio
+        tax_val    = base_tax * (tax_pct / 100)
+        precio_bs  = precio_usd * (1 + dif_pct / 100)
+
+        desc = item.get('description', 'N/A')
+        ax.text(0.05, y, f"ÍTEM #{idx}: {desc}",
+                transform=ax.transAxes, ha='left', va='top',
+                fontsize=11, fontweight='bold', color='#1a3c6e')
+        y -= 0.04
+
+        filas = [
+            ("Cantidad de Repuestos",           str(cantidad)),
+            ("Costo FOB Unitario",               f"${fob_unit:,.2f}"),
+            ("Costo FOB Total",                  f"${fob_total:,.2f}"),
+            ("Handling (Internacional)",          f"${handling:,.2f}"),
+            ("Manejo (Nacional)",                 f"${manejo:,.2f}"),
+            (f"Impuesto Internacional ({imp_int:.1f}%)", f"${imp_int:,.2f}"),
+            (f"Utilidad (Factor {factor_ut:.4f})", f"${utilidad:,.2f}"),
+            ("Envío",                             f"${envio:,.2f}"),
+            (f"TAX ({tax_pct:.1f}%)",             f"${tax_val:,.2f}"),
+            ("Precio USD (Pago en Dólares)",      f"${precio_usd:,.2f}"),
+            (f"VE Precio Bs (Dif. {dif_pct:.1f}%)", f"Bs {precio_bs:,.2f}"),
+        ]
+        for concepto, valor in filas:
+            ax.text(0.10, y, concepto, transform=ax.transAxes,
+                    ha='left', va='top', fontsize=9, color='#444')
+            ax.text(0.85, y, valor, transform=ax.transAxes,
+                    ha='right', va='top', fontsize=9, color='#222', fontweight='bold')
+            y -= 0.03
+
+        y -= 0.02
+
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=150, bbox_inches='tight',
+                facecolor='white', edgecolor='none')
+    plt.close(fig)

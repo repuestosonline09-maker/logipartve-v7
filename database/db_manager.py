@@ -371,6 +371,65 @@ class DBManager:
         except Exception as e:
             print(f"⚠️ Migración de columnas en 'quote_items': {e}")
         
+        # ── Migración: Tabla email_config (Fase 5 — Envío de Órdenes Aprobadas) ──
+        try:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS email_config (
+                    id SERIAL PRIMARY KEY,
+                    key TEXT NOT NULL UNIQUE,
+                    value TEXT NOT NULL DEFAULT '',
+                    description TEXT DEFAULT '',
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """ if is_postgres else """
+                CREATE TABLE IF NOT EXISTS email_config (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    key TEXT NOT NULL UNIQUE,
+                    value TEXT NOT NULL DEFAULT '',
+                    description TEXT DEFAULT '',
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            conn.commit()
+            # Insertar valores por defecto si la clave no existe aún
+            _ph = '%s' if is_postgres else '?'
+            _defaults = [
+                ('to_email',       'lucianosequera.online@gmail.com',
+                 'Correo principal (Para)'),
+                ('cc_emails',
+                 'judi.online99@gmail.com,ogonzalez.online09@gmail.com,'
+                 'jesusonlinepro.99@gmail.com,svillamizarauto77@gmail.com,'
+                 'juliadorek17@gmail.com,repuestosonline09@gmail.com',
+                 'Correos en copia (CC), separados por coma'),
+                ('reply_to',       'repuestosonline09@gmail.com',
+                 'Correo Reply-To (respuestas llegan aqui)'),
+                ('from_name',      'Ordenes LogiPartVE',
+                 'Nombre del remitente'),
+                ('from_email',     'ordenes@logipartve.com',
+                 'Correo remitente (debe estar verificado en Resend)'),
+                ('texto_apertura',
+                 'Hola, por favor dar proceso a esta orden aprobada. '
+                 'A continuación te envio los datos para comprar:',
+                 'Texto de apertura del correo (editable)'),
+                ('texto_cierre',
+                 'Sin más por el momento, queda de ustedes',
+                 'Texto de cierre del correo (editable)'),
+                ('cargo_analista', 'Analista de Ventas',
+                 'Cargo del analista que aparece en la firma'),
+            ]
+            for _key, _val, _desc in _defaults:
+                cursor.execute(f"""
+                    INSERT INTO email_config (key, value, description)
+                    SELECT {_ph}, {_ph}, {_ph}
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM email_config WHERE key = {_ph}
+                    )
+                """, (_key, _val, _desc, _key))
+            conn.commit()
+            print('✅ Migración: Tabla email_config lista')
+        except Exception as e:
+            print(f'⚠️ Migración email_config: {e}')
+
         # Crear usuario admin por defecto si no existe
         cursor.execute("SELECT COUNT(*) FROM users WHERE username = 'admin'")
         result = cursor.fetchone()
@@ -759,6 +818,75 @@ class DBManager:
             print(f"Error al obtener configuración: {e}")
             return []
     
+    # ==================== MÉTODOS DE CONFIGURACIÓN DE CORREO (FASE 5) ====================
+
+    @staticmethod
+    def get_email_config(key: str) -> Optional[str]:
+        """Obtiene un valor de la configuración de correo."""
+        try:
+            conn = DBManager.get_connection()
+            cursor = conn.cursor()
+            is_postgres = DBManager.USE_POSTGRES
+            cursor.execute("""
+                SELECT value FROM email_config WHERE key = %s
+            """ if is_postgres else """
+                SELECT value FROM email_config WHERE key = ?
+            """, (key,))
+            result = cursor.fetchone()
+            cursor.close()
+            conn.close()
+            return result['value'] if result else None
+        except Exception as e:
+            print(f"Error al obtener email_config '{key}': {e}")
+            return None
+
+    @staticmethod
+    def set_email_config(key: str, value: str) -> bool:
+        """Actualiza un valor de la configuración de correo."""
+        try:
+            conn = DBManager.get_connection()
+            cursor = conn.cursor()
+            is_postgres = DBManager.USE_POSTGRES
+            ph = '%s' if is_postgres else '?'
+            cursor.execute(f"""
+                SELECT COUNT(*) FROM email_config WHERE key = {ph}
+            """, (key,))
+            result = cursor.fetchone()
+            exists = result['count'] if is_postgres else result[0]
+            if exists > 0:
+                cursor.execute(f"""
+                    UPDATE email_config
+                    SET value = {ph}, updated_at = CURRENT_TIMESTAMP
+                    WHERE key = {ph}
+                """, (value, key))
+            else:
+                cursor.execute(f"""
+                    INSERT INTO email_config (key, value)
+                    VALUES ({ph}, {ph})
+                """, (key, value))
+            conn.commit()
+            cursor.close()
+            conn.close()
+            return True
+        except Exception as e:
+            print(f"Error al guardar email_config '{key}': {e}")
+            return False
+
+    @staticmethod
+    def get_all_email_config() -> Dict[str, str]:
+        """Retorna toda la configuración de correo como diccionario {key: value}."""
+        try:
+            conn = DBManager.get_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT key, value FROM email_config")
+            rows = cursor.fetchall()
+            cursor.close()
+            conn.close()
+            return {row['key']: row['value'] for row in rows} if rows else {}
+        except Exception as e:
+            print(f"Error al obtener toda la email_config: {e}")
+            return {}
+
     # ==================== MÉTODOS DE TARIFAS DE FLETE ====================
     
     @staticmethod

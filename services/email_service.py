@@ -199,5 +199,52 @@ class EmailService:
             return False, f"Error: {str(e)}"
 
 
+    @staticmethod
+    def send_approval_email(
+        from_name: str,
+        from_email: str,
+        to_email: str,
+        cc_list: list,
+        reply_to: str,
+        subject: str,
+        html_body: str,
+        attachments: list,
+    ) -> dict:
+        """
+        Enviar correo de Orden Aprobada con adjuntos PNG.
+        Retorna {'success': True} o {'success': False, 'error': str}
+        """
+        api_key = os.environ.get('RESEND_API_KEY')
+        if not api_key:
+            return {'success': False, 'error': 'RESEND_API_KEY no configurada en Railway'}
+
+        resend.api_key = api_key
+
+        try:
+            params = {
+                "from":        f"{from_name} <{from_email}>",
+                "to":          [to_email],
+                "subject":     subject,
+                "html":        html_body,
+                "reply_to":    reply_to,
+            }
+
+            if cc_list:
+                params["cc"] = cc_list
+
+            if attachments:
+                params["attachments"] = attachments
+
+            logger.info(f"📧 Enviando Orden Aprobada a: {to_email} | CC: {cc_list}")
+            response = resend.Emails.send(params)
+            logger.info(f"✅ Correo enviado. ID: {response.get('id', 'N/A')}")
+            return {'success': True, 'id': response.get('id', 'N/A')}
+
+        except Exception as e:
+            error_msg = str(e)
+            logger.error(f"❌ Error enviando Orden Aprobada: {error_msg}")
+            return {'success': False, 'error': error_msg}
+
+
 # Instancia global del servicio
 email_service = EmailService()
