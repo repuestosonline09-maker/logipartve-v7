@@ -2420,10 +2420,12 @@ class DBManager:
             total_quotes = cursor.fetchone()
             total_quotes = total_quotes['total'] if is_postgres else total_quotes[0]
             
-            # Monto total cotizado
+            # Monto total cotizado (suma de Precio USD = unit_cost × quantity de los ítems)
             cursor.execute(f"""
-                SELECT COALESCE(SUM(total_amount), 0) as total FROM quotes 
-                WHERE analyst_id = {'%s' if is_postgres else '?'} {date_filter}
+                SELECT COALESCE(SUM(qi.unit_cost * qi.quantity), 0) as total
+                FROM quote_items qi
+                JOIN quotes q ON q.id = qi.quote_id
+                WHERE q.analyst_id = {'%s' if is_postgres else '?'} {date_filter.replace('AND created_at', 'AND q.created_at')}
             """, (analyst_id,))
             total_amount = cursor.fetchone()
             total_amount = total_amount['total'] if is_postgres else total_amount[0]
@@ -2488,26 +2490,28 @@ class DBManager:
             if is_postgres:
                 cursor.execute("""
                     SELECT 
-                        TO_CHAR(created_at, 'Mon YYYY') as month,
-                        COUNT(*) as quote_count,
-                        COALESCE(SUM(total_amount), 0) as total_amount
-                    FROM quotes
-                    WHERE analyst_id = %s 
-                    AND created_at >= CURRENT_DATE - INTERVAL '%s months'
-                    GROUP BY TO_CHAR(created_at, 'Mon YYYY'), DATE_TRUNC('month', created_at)
-                    ORDER BY DATE_TRUNC('month', created_at)
+                        TO_CHAR(q.created_at, 'Mon YYYY') as month,
+                        COUNT(DISTINCT q.id) as quote_count,
+                        COALESCE(SUM(qi.unit_cost * qi.quantity), 0) as total_amount
+                    FROM quotes q
+                    LEFT JOIN quote_items qi ON qi.quote_id = q.id
+                    WHERE q.analyst_id = %s 
+                    AND q.created_at >= CURRENT_DATE - INTERVAL '%s months'
+                    GROUP BY TO_CHAR(q.created_at, 'Mon YYYY'), DATE_TRUNC('month', q.created_at)
+                    ORDER BY DATE_TRUNC('month', q.created_at)
                 """, (analyst_id, months))
             else:
                 cursor.execute("""
                     SELECT 
-                        strftime('%m/%Y', created_at) as month,
-                        COUNT(*) as quote_count,
-                        COALESCE(SUM(total_amount), 0) as total_amount
-                    FROM quotes
-                    WHERE analyst_id = ? 
-                    AND created_at >= date('now', '-' || ? || ' months')
-                    GROUP BY strftime('%m/%Y', created_at)
-                    ORDER BY created_at
+                        strftime('%m/%Y', q.created_at) as month,
+                        COUNT(DISTINCT q.id) as quote_count,
+                        COALESCE(SUM(qi.unit_cost * qi.quantity), 0) as total_amount
+                    FROM quotes q
+                    LEFT JOIN quote_items qi ON qi.quote_id = q.id
+                    WHERE q.analyst_id = ? 
+                    AND q.created_at >= date('now', '-' || ? || ' months')
+                    GROUP BY strftime('%m/%Y', q.created_at)
+                    ORDER BY q.created_at
                 """, (analyst_id, months))
             
             evolution = []
@@ -2557,8 +2561,14 @@ class DBManager:
             total_quotes = cursor.fetchone()
             total_quotes = total_quotes['total'] if is_postgres else total_quotes[0]
             
-            # Monto total cotizado
-            cursor.execute(f"SELECT COALESCE(SUM(total_amount), 0) as total FROM quotes {date_filter}")
+            # Monto total cotizado (suma de Precio USD = unit_cost × quantity de los ítems)
+            _date_filter_items = date_filter.replace('WHERE created_at', 'WHERE q.created_at') if date_filter else ''
+            cursor.execute(f"""
+                SELECT COALESCE(SUM(qi.unit_cost * qi.quantity), 0) as total
+                FROM quote_items qi
+                JOIN quotes q ON q.id = qi.quote_id
+                {_date_filter_items}
+            """)
             total_amount = cursor.fetchone()
             total_amount = total_amount['total'] if is_postgres else total_amount[0]
             
@@ -2648,9 +2658,11 @@ class DBManager:
                     SELECT 
                         u.id as analyst_id,
                         u.full_name as analyst_name,
-                        COALESCE(SUM(q.total_amount), 0) as metric_value
+                        COALESCE(SUM(qi.unit_cost * qi.quantity), 0) as metric_value
                     FROM users u
-                    LEFT JOIN quotes q ON u.id = q.analyst_id {date_filter.replace('AND', 'WHERE') if date_filter else ''}
+                    LEFT JOIN quotes q ON u.id = q.analyst_id
+                    LEFT JOIN quote_items qi ON qi.quote_id = q.id
+                    {date_filter.replace('AND', 'WHERE') if date_filter else ''}
                     WHERE u.role = 'analyst'
                     GROUP BY u.id, u.full_name
                     ORDER BY metric_value DESC
