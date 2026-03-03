@@ -1000,7 +1000,17 @@ def _enviar_orden_aprobada(quote_id: int):
             gen = PNGQuoteGenerator()
             gen.generate_quote_png_from_data(datos_adaptados, png_cot_path)
             # Actualizar ruta en BD
-            DBManager.update_quote_file_paths(quote_id, jpeg_path=png_cot_path)
+            _conn = DBManager.get_connection()
+            _cur  = _conn.cursor()
+            if DBManager.USE_POSTGRES:
+                _cur.execute("UPDATE quotes SET jpeg_path = %s WHERE id = %s",
+                             (png_cot_path, quote_id))
+            else:
+                _cur.execute("UPDATE quotes SET jpeg_path = ? WHERE id = ?",
+                             (png_cot_path, quote_id))
+            _conn.commit()
+            _cur.close()
+            _conn.close()
         except Exception as e:
             return False, f"Error generando PNG de cotización: {e}"
 
@@ -1120,7 +1130,8 @@ def _enviar_orden_aprobada(quote_id: int):
 
         if resultado.get('success'):
             # Cambiar estado a APROBADA
-            DBManager.update_quote_status(quote_id, 'approved')
+            user_id = st.session_state.get('user_id', 0)
+            DBManager.update_quote_status(quote_id, 'approved', user_id)
             return True, (
                 f"Orden #{quote_number} enviada exitosamente al equipo. "
                 "El estado ha sido cambiado a APROBADA."
