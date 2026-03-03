@@ -894,19 +894,25 @@ def _show_aprobar_orden(quote_id: int):
 
             # Links con cantidad de compra (formato requerido)
             try:
-                raw_links = item.get('reference_links') or '[]'
-                links = json.loads(raw_links) if isinstance(raw_links, str) else raw_links
-                if links:
-                    for li in links:
-                        if isinstance(li, dict):
-                            url = li.get('url', '')
-                            qty = li.get('qty', 1)
-                        else:
-                            url = str(li)
-                            qty = 1
-                        if url:
-                            st.write(f"  • Comprar: {qty}")
-                            st.write(f"  • Link: {url}")
+                raw_links = item.get('page_url') or item.get('reference_links') or '[]'
+                if isinstance(raw_links, str) and raw_links.strip().startswith('['):
+                    links = json.loads(raw_links)
+                elif isinstance(raw_links, list):
+                    links = raw_links
+                elif raw_links and str(raw_links).strip():
+                    links = [{'url': str(raw_links), 'qty': 1}]
+                else:
+                    links = []
+                for li in links:
+                    if isinstance(li, dict):
+                        url = li.get('url', '')
+                        qty = li.get('qty', 1)
+                    else:
+                        url = str(li)
+                        qty = 1
+                    if url:
+                        st.write(f"  • Comprar: {qty}")
+                        st.write(f"  • Link: {url}")
             except Exception:
                 pass
 
@@ -1037,8 +1043,15 @@ def _enviar_orden_aprobada(quote_id: int):
             desc = item.get('description', 'N/A')
             items_html += f"<p><strong>Ítem #{idx}</strong><br>Descripción: {desc}</p>"
             try:
-                raw_links = item.get('reference_links') or '[]'
-                links = json.loads(raw_links) if isinstance(raw_links, str) else raw_links
+                raw_links = item.get('page_url') or item.get('reference_links') or '[]'
+                if isinstance(raw_links, str) and raw_links.strip().startswith('['):
+                    links = json.loads(raw_links)
+                elif isinstance(raw_links, list):
+                    links = raw_links
+                elif raw_links and str(raw_links).strip():
+                    links = [{'url': str(raw_links), 'qty': 1}]
+                else:
+                    links = []
                 if links:
                     items_html += "<ul>"
                     for li in links:
