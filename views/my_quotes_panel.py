@@ -1112,16 +1112,12 @@ def _enviar_orden_aprobada(quote_id: int):
                         "type":     "image/png",
                     })
 
-        # ── CC como lista ─────────────────────────────────────────────────────
-        cc_raw = cfg.get('cc_emails', '')
-        cc_list = [e.strip() for e in cc_raw.split(',') if e.strip()]
-
-        # ── Enviar con Resend ─────────────────────────────────────────────────
+        # ── Enviar con Resend (sin CC para garantizar entrega) ───────────────
         resultado = EmailService.send_approval_email(
             from_name    = cfg.get('from_name', 'Ordenes LogiPartVE'),
             from_email   = cfg.get('from_email', 'ordenes@logipartve.com'),
             to_email     = cfg.get('to_email', ''),
-            cc_list      = cc_list,
+            cc_list      = [],
             reply_to     = cfg.get('reply_to', ''),
             subject      = f"Orden de Compra #{quote_number}",
             html_body    = html_body,
