@@ -888,17 +888,11 @@ def _show_aprobar_orden(quote_id: int):
         st.markdown("---")
         st.markdown("**🔧 Ítems:**")
         for idx, item in enumerate(items, 1):
-            desc    = item.get('description', 'N/A')
-            parte   = item.get('part_number', '')
-            cant    = item.get('quantity', 1)
-            precio  = float(item.get('total_cost', 0) or 0)
-            st.markdown(f"**Ítem #{idx}: {desc}**")
-            if parte:
-                st.write(f"  • N° Parte: {parte}")
-            st.write(f"  • Cantidad: {cant}")
-            st.write(f"  • Precio USD: ${precio:,.2f}")
+            desc = item.get('description', 'N/A')
+            st.markdown(f"**Ítem #{idx}**")
+            st.write(f"  • Descripción: {desc}")
 
-            # Links con cantidad de compra
+            # Links con cantidad de compra (formato requerido)
             try:
                 raw_links = item.get('reference_links') or '[]'
                 links = json.loads(raw_links) if isinstance(raw_links, str) else raw_links
@@ -911,7 +905,8 @@ def _show_aprobar_orden(quote_id: int):
                             url = str(li)
                             qty = 1
                         if url:
-                            st.write(f"  🔗 Comprar {qty} → {url}")
+                            st.write(f"  • Comprar: {qty}")
+                            st.write(f"  • Link: {url}")
             except Exception:
                 pass
 
@@ -1036,18 +1031,11 @@ def _enviar_orden_aprobada(quote_id: int):
             if val and str(val).strip()
         )
 
-        # Ítems con links
+        # Ítems con links (formato requerido: Descripción, Comprar, Link)
         items_html = ""
         for idx, item in enumerate(items, 1):
-            desc   = item.get('description', 'N/A')
-            parte  = item.get('part_number', '')
-            cant   = item.get('quantity', 1)
-            precio = float(item.get('total_cost', 0) or 0)
-            items_html += (
-                f"<p><strong>Ítem #{idx}: {desc}</strong><br>"
-                f"{'N° Parte: ' + parte + '<br>' if parte else ''}"
-                f"Cantidad: {cant} &nbsp;|&nbsp; Precio USD: ${precio:,.2f}</p>"
-            )
+            desc = item.get('description', 'N/A')
+            items_html += f"<p><strong>Ítem #{idx}</strong><br>Descripción: {desc}</p>"
             try:
                 raw_links = item.get('reference_links') or '[]'
                 links = json.loads(raw_links) if isinstance(raw_links, str) else raw_links
@@ -1062,8 +1050,8 @@ def _enviar_orden_aprobada(quote_id: int):
                             qty = 1
                         if url:
                             items_html += (
-                                f"<li>🔗 Comprar {qty} → "
-                                f"<a href='{url}'>{url}</a></li>"
+                                f"<li>Comprar: {qty}<br>"
+                                f"Link: <a href='{url}'>{url}</a></li>"
                             )
                     items_html += "</ul>"
             except Exception:
