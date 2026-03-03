@@ -861,7 +861,6 @@ def _show_aprobar_orden(quote_id: int):
         st.markdown("### 👁️ Vista Previa del Correo")
         st.info(
             f"**Para:** {cfg.get('to_email', 'N/A')}\n\n"
-            f"**CC:** {cfg.get('cc_emails', 'N/A')}\n\n"
             f"**Asunto:** Orden de Compra #{quote.get('quote_number', 'N/A')}\n\n"
             f"**Adjuntos:** PNG Cotización + PNG Cuadro de Costos"
         )
