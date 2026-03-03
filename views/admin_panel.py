@@ -1136,14 +1136,6 @@ def show_email_configuration():
             help="Cuando alguien responde el correo, la respuesta llega aquí"
         )
 
-    cc_emails = st.text_area(
-        "Con Copia (CC) — separar correos con coma",
-        value=cfg.get('cc_emails', ''),
-        key="ecfg_cc_emails",
-        height=90,
-        help="Todos los correos en copia, separados por coma. Ej: a@gmail.com,b@gmail.com"
-    )
-
     st.markdown("---")
 
     # ── SECCIÓN 2: Remitente ──────────────────────────────────────────────
@@ -1220,7 +1212,6 @@ def show_email_configuration():
         else:
             cambios = {
                 'to_email':       to_email.strip(),
-                'cc_emails':      cc_emails.strip(),
                 'reply_to':       reply_to.strip(),
                 'from_name':      from_name.strip(),
                 'from_email':     from_email.strip(),
