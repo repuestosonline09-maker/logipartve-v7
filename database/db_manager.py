@@ -2776,3 +2776,121 @@ class DBManager:
             traceback.print_exc()
             return False
 
+
+    @staticmethod
+    def get_stats_by_date_range(fecha_desde: str, fecha_hasta: str, analyst_id: int = None) -> Dict[str, Any]:
+        """
+        Calcula estadísticas filtradas por rango de fechas exacto.
+        Si analyst_id es None, devuelve estadísticas globales (todos los analistas).
+        Si analyst_id tiene valor, devuelve solo las estadísticas de ese analista.
+
+        Args:
+            fecha_desde: Fecha de inicio en formato 'YYYY-MM-DD'
+            fecha_hasta: Fecha de fin en formato 'YYYY-MM-DD'
+            analyst_id: ID del analista (opcional, None = global)
+
+        Returns:
+            Diccionario con estadísticas del período
+        """
+        try:
+            conn = DBManager.get_connection()
+            cursor = conn.cursor()
+            is_postgres = DBManager.USE_POSTGRES
+
+            ph = '%s' if is_postgres else '?'
+
+            if analyst_id is not None:
+                # Filtro por analista + rango de fechas
+                where_quotes = f"WHERE analyst_id = {ph} AND DATE(created_at) >= {ph} AND DATE(created_at) <= {ph}"
+                where_items  = f"WHERE q.analyst_id = {ph} AND DATE(q.created_at) >= {ph} AND DATE(q.created_at) <= {ph}"
+                params_quotes = (analyst_id, fecha_desde, fecha_hasta)
+                params_items  = (analyst_id, fecha_desde, fecha_hasta)
+            else:
+                # Solo rango de fechas (global)
+                where_quotes = f"WHERE DATE(created_at) >= {ph} AND DATE(created_at) <= {ph}"
+                where_items  = f"WHERE DATE(q.created_at) >= {ph} AND DATE(q.created_at) <= {ph}"
+                params_quotes = (fecha_desde, fecha_hasta)
+                params_items  = (fecha_desde, fecha_hasta)
+
+            # Total de cotizaciones
+            cursor.execute(f"SELECT COUNT(*) as total FROM quotes {where_quotes}", params_quotes)
+            row = cursor.fetchone()
+            total_quotes = row['total'] if is_postgres else row[0]
+
+            # Monto total (PRECIO USD = total_cost de los ítems)
+            cursor.execute(f"""
+                SELECT COALESCE(SUM(qi.total_cost), 0) as total
+                FROM quote_items qi
+                JOIN quotes q ON q.id = qi.quote_id
+                {where_items}
+            """, params_items)
+            row = cursor.fetchone()
+            total_amount = float(row['total'] if is_postgres else row[0])
+
+            # Distribución por estado
+            cursor.execute(f"SELECT status, COUNT(*) as count FROM quotes {where_quotes} GROUP BY status", params_quotes)
+            quotes_by_status = {}
+            for row in cursor.fetchall():
+                status = row['status'] if is_postgres else row[0]
+                count  = row['count']  if is_postgres else row[1]
+                quotes_by_status[status] = count
+
+            # Analistas activos (solo para vista global)
+            active_analysts = 0
+            if analyst_id is None:
+                cursor.execute(f"SELECT COUNT(DISTINCT analyst_id) as count FROM quotes {where_quotes}", params_quotes)
+                row = cursor.fetchone()
+                active_analysts = row['count'] if is_postgres else row[0]
+
+            cursor.close()
+            conn.close()
+
+            return {
+                'total_quotes':    total_quotes,
+                'total_amount':    total_amount,
+                'quotes_by_status': quotes_by_status,
+                'active_analysts': active_analysts,
+            }
+
+        except Exception as e:
+            print(f"❌ Error en get_stats_by_date_range: {e}")
+            import traceback
+            traceback.print_exc()
+            return {
+                'total_quotes':    0,
+                'total_amount':    0.0,
+                'quotes_by_status': {},
+                'active_analysts': 0,
+            }
+
+    @staticmethod
+    def get_all_analysts() -> List[Dict[str, Any]]:
+        """
+        Devuelve la lista de todos los usuarios con rol 'analyst'.
+
+        Returns:
+            Lista de dicts con id y full_name de cada analista
+        """
+        try:
+            conn = DBManager.get_connection()
+            cursor = conn.cursor()
+            is_postgres = DBManager.USE_POSTGRES
+
+            cursor.execute("""
+                SELECT id, full_name, username
+                FROM users
+                WHERE role = 'analyst'
+                ORDER BY full_name
+            """)
+            rows = cursor.fetchall()
+            cursor.close()
+            conn.close()
+
+            if is_postgres:
+                return [{'id': r['id'], 'full_name': r['full_name'], 'username': r['username']} for r in rows]
+            else:
+                return [{'id': r[0], 'full_name': r[1], 'username': r[2]} for r in rows]
+
+        except Exception as e:
+            print(f"❌ Error en get_all_analysts: {e}")
+            return []

@@ -208,10 +208,11 @@ def show_main_app():
             default_idx = 0
         else:
             menu_options = [
+                "🏠 Mi Dashboard",
                 "📝 Crear Cotización",
                 "📊 Mis Cotizaciones",
             ]
-            # Analista: inicio = Crear Cotización
+            # Analista: inicio = Mi Dashboard
             default_idx = 0
 
         # Mantener la selección en session_state para no resetear en cada rerun
@@ -243,10 +244,11 @@ def show_main_app():
         if st.button("🚪 Cerrar Sesión", use_container_width=True,
                      key="btn_cerrar_sesion", on_click=do_logout):
             st.rerun()
-
-    # ── CONTENIDO PRINCIPAL ───────────────────────────────────────────────
+    # ── CONTENIDO PRINCIPAL ────────────────────────────────────────────────────
     if selected_menu == "🏠 Dashboard":
         show_admin_dashboard()
+    elif selected_menu == "🏠 Mi Dashboard":
+        show_analyst_dashboard()
     elif selected_menu == "🔧 Panel de Administración":
         show_admin_panel()
     elif selected_menu == "📝 Crear Cotización":
@@ -260,11 +262,13 @@ def show_main_app():
 
 # ── DASHBOARD DEL ADMINISTRADOR ────────────────────────────────────────────
 def show_admin_dashboard():
-    """Dashboard ejecutivo para el administrador con métricas reales."""
+    """Dashboard ejecutivo para el administrador con rango de fechas y filtro por analista."""
+    import pandas as pd
+    from datetime import date
 
     user = AuthManager.get_current_user()
 
-    # Saludo dinámico según la hora
+    # ── Saludo dinámico ────────────────────────────────────────────────────
     hora = datetime.now().hour
     if hora < 12:
         saludo = "Buenos días"
@@ -273,86 +277,102 @@ def show_admin_dashboard():
     else:
         saludo = "Buenas noches"
 
+    DIAS_ES   = ["lunes","martes","miércoles","jueves","viernes","sábado","domingo"]
+    MESES_ES  = ["enero","febrero","marzo","abril","mayo","junio",
+                 "julio","agosto","septiembre","octubre","noviembre","diciembre"]
+    hoy = date.today()
+    dia_nombre = DIAS_ES[hoy.weekday()]
+    mes_nombre = MESES_ES[hoy.month - 1]
+    fecha_str  = f"{dia_nombre} {hoy.day} de {mes_nombre} de {hoy.year}"
+
     st.markdown(f"## {saludo}, {user['full_name']} 👋")
-    st.caption(f"Hoy es {datetime.now().strftime('%A %d de %B de %Y')} — LogiPartVE Pro v7.0")
+    st.caption(f"Hoy es {fecha_str} — LogiPartVE Pro v7.0")
     st.markdown("---")
 
-    # ── Selector de período ────────────────────────────────────────────────
-    periodo_col, _, _ = st.columns([2, 2, 2])
-    with periodo_col:
-        periodo = st.selectbox(
-            "📅 Ver métricas del período:",
-            options=["Últimos 7 días", "Últimos 30 días",
-                     "Últimos 3 meses", "Último año", "Todo el tiempo"],
-            index=1,
-            key="dash_periodo"
+    # ── Selector de rango de fechas ────────────────────────────────────────
+    primer_dia_mes = hoy.replace(day=1)
+
+    st.markdown("#### 📅 Rango de Fechas")
+    col_desde, col_hasta, col_btn = st.columns([2, 2, 1])
+    with col_desde:
+        fecha_desde = st.date_input(
+            "Desde",
+            value=st.session_state.get('admin_dash_desde', primer_dia_mes),
+            key="admin_dash_desde_input",
+            format="DD/MM/YYYY"
         )
+    with col_hasta:
+        fecha_hasta = st.date_input(
+            "Hasta",
+            value=st.session_state.get('admin_dash_hasta', hoy),
+            key="admin_dash_hasta_input",
+            format="DD/MM/YYYY"
+        )
+    with col_btn:
+        st.markdown("<br>", unsafe_allow_html=True)
+        aplicar = st.button("🔍 Aplicar", use_container_width=True, key="admin_dash_aplicar")
 
-    period_map = {
-        "Últimos 7 días":   'week',
-        "Últimos 30 días":  'month',
-        "Últimos 3 meses":  'quarter',
-        "Último año":       'year',
-        "Todo el tiempo":   'all',
-    }
-    period_key = period_map[periodo]
+    if aplicar:
+        st.session_state['admin_dash_desde'] = fecha_desde
+        st.session_state['admin_dash_hasta'] = fecha_hasta
+    else:
+        fecha_desde = st.session_state.get('admin_dash_desde', primer_dia_mes)
+        fecha_hasta = st.session_state.get('admin_dash_hasta', hoy)
 
-    # Calcular fecha de corte para filtrar cotizaciones recientes
-    days_map = {
-        'week': 7, 'month': 30, 'quarter': 90, 'year': 365, 'all': 99999
-    }
-    cutoff = datetime.now() - timedelta(days=days_map[period_key])
+    # Validar rango
+    if fecha_desde > fecha_hasta:
+        st.warning("⚠️ La fecha de inicio no puede ser mayor que la fecha de fin.")
+        return
 
-    # ── Cargar datos ───────────────────────────────────────────────────────
+    periodo_label = f"{fecha_desde.strftime('%d/%m/%Y')} — {fecha_hasta.strftime('%d/%m/%Y')}"
+    st.info(f"📊 Período activo: **{periodo_label}**")
+    st.markdown("---")
+
+    fecha_desde_str = fecha_desde.strftime('%Y-%m-%d')
+    fecha_hasta_str = fecha_hasta.strftime('%Y-%m-%d')
+
+    # ── Cargar estadísticas globales ───────────────────────────────────────
     with st.spinner("Cargando métricas..."):
         try:
-            stats   = DBManager.get_global_statistics(period_key)
-            ranking = DBManager.get_analyst_ranking('quote_count', period_key, limit=10)
-            recent  = DBManager.get_all_quotes(limit=200)
+            stats_global = DBManager.get_stats_by_date_range(fecha_desde_str, fecha_hasta_str)
+            analistas    = DBManager.get_all_analysts()
+            recent       = DBManager.get_all_quotes(limit=500)
         except Exception as e:
             st.error(f"❌ Error al cargar métricas: {e}")
             return
 
-    # Filtrar cotizaciones recientes por período
+    # Filtrar cotizaciones recientes por rango
     recent_filtered = []
     for q in recent:
         try:
-            if datetime.fromisoformat(str(q.get('created_at', ''))) >= cutoff:
+            q_fecha = datetime.fromisoformat(str(q.get('created_at', ''))).date()
+            if fecha_desde <= q_fecha <= fecha_hasta:
                 recent_filtered.append(q)
         except Exception:
-            if period_key == 'all':
-                recent_filtered.append(q)
+            pass
 
-    # ── FILA 1: Métricas principales ──────────────────────────────────────
+    total_quotes    = stats_global.get('total_quotes', 0)
+    total_amount    = stats_global.get('total_amount', 0.0)
+    active_analysts = stats_global.get('active_analysts', 0)
+    by_status       = stats_global.get('quotes_by_status', {})
+    approved_count  = by_status.get('approved', 0)
+    draft_count     = by_status.get('draft', 0)
+
+    # ── BLOQUE GLOBAL ─────────────────────────────────────────────────────
     st.markdown("### 📊 Resumen General")
-
-    total_quotes   = stats.get('total_quotes', 0)
-    total_amount   = stats.get('total_amount', 0.0)
-    approval_rate  = stats.get('approval_rate', 0.0)
-    active_analysts= stats.get('active_analysts', 0)
-    by_status      = stats.get('quotes_by_status', {})
-
-    approved_count = by_status.get('approved', 0)
-    draft_count    = by_status.get('draft', 0)
-    sent_count     = by_status.get('sent', 0)
-    rejected_count = by_status.get('rejected', 0)
-
     c1, c2, c3 = st.columns(3)
-
     with c1:
         st.markdown(f"""
         <div class="dash-card">
             <div class="dash-card-value">{total_quotes}</div>
             <div class="dash-card-label">Total Cotizaciones</div>
         </div>""", unsafe_allow_html=True)
-
     with c2:
         st.markdown(f"""
         <div class="dash-card dash-card-green">
             <div class="dash-card-value">${total_amount:,.0f}</div>
             <div class="dash-card-label">Monto Total Cotizado (USD)</div>
         </div>""", unsafe_allow_html=True)
-
     with c3:
         st.markdown(f"""
         <div class="dash-card dash-card-purple">
@@ -361,19 +381,14 @@ def show_admin_dashboard():
         </div>""", unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
-
-    # ── FILA 2: Desglose por estado ────────────────────────────────────────
     st.markdown("### 📋 Estado de las Cotizaciones")
-
     s1, s2 = st.columns(2)
-
     with s1:
         st.markdown(f"""
         <div class="dash-card">
             <div class="dash-card-value">{draft_count}</div>
             <div class="dash-card-label">📝 Borradores</div>
         </div>""", unsafe_allow_html=True)
-
     with s2:
         st.markdown(f"""
         <div class="dash-card dash-card-green">
@@ -382,89 +397,270 @@ def show_admin_dashboard():
         </div>""", unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("---")
 
-    # ── FILA 3: Ranking de analistas + Últimas cotizaciones ───────────────
-    col_rank, col_recent = st.columns([1, 2])
+    # ── FILTRO POR ANALISTA ────────────────────────────────────────────────
+    st.markdown("### 👤 Estadísticas por Analista")
 
-    with col_rank:
-        st.markdown("### 🏆 Ranking de Analistas")
-        st.caption(f"Por número de cotizaciones — {periodo}")
+    opciones_analistas = ["— Todos —"] + [a['full_name'] for a in analistas]
+    analista_sel = st.selectbox(
+        "Seleccionar analista:",
+        options=opciones_analistas,
+        index=0,
+        key="admin_dash_analista"
+    )
 
-        if ranking:
-            import pandas as pd
-            df_rank = pd.DataFrame([
-                {
-                    "Pos.":     f"#{i+1}",
-                    "Analista": r['analyst_name'],
-                    "Cotiz.":   int(r['metric_value'])
-                }
-                for i, r in enumerate(ranking)
-            ])
-            st.dataframe(df_rank, use_container_width=True, hide_index=True)
-        else:
-            st.info("Sin datos para el período seleccionado")
+    if analista_sel != "— Todos —":
+        analista_obj = next((a for a in analistas if a['full_name'] == analista_sel), None)
+        if analista_obj:
+            with st.spinner(f"Cargando datos de {analista_sel}..."):
+                stats_a = DBManager.get_stats_by_date_range(
+                    fecha_desde_str, fecha_hasta_str,
+                    analyst_id=analista_obj['id']
+                )
 
-    with col_recent:
-        st.markdown("### 🕐 Últimas Cotizaciones")
-        st.caption(f"Más recientes — {periodo}")
+            tq_a  = stats_a.get('total_quotes', 0)
+            ta_a  = stats_a.get('total_amount', 0.0)
+            bs_a  = stats_a.get('quotes_by_status', {})
+            dr_a  = bs_a.get('draft', 0)
+            ap_a  = bs_a.get('approved', 0)
 
-        if recent_filtered:
-            import pandas as pd
+            st.markdown(f"#### 📌 {analista_sel}")
+            st.caption(f"Período: {periodo_label}")
 
-            ESTADO_LABELS = {
-                'draft':    '📝 Borrador',
-                'sent':     '📤 Enviada',
-                'approved': '✅ Aprobada',
-                'rejected': '❌ Rechazada',
-            }
+            a1, a2 = st.columns(2)
+            with a1:
+                st.markdown(f"""
+                <div class="dash-card">
+                    <div class="dash-card-value">{tq_a}</div>
+                    <div class="dash-card-label">Total Cotizaciones</div>
+                </div>""", unsafe_allow_html=True)
+            with a2:
+                st.markdown(f"""
+                <div class="dash-card dash-card-green">
+                    <div class="dash-card-value">${ta_a:,.0f}</div>
+                    <div class="dash-card-label">Monto Total Cotizado (USD)</div>
+                </div>""", unsafe_allow_html=True)
 
-            rows = []
-            for q in recent_filtered[:15]:
-                try:
-                    fecha = datetime.fromisoformat(
-                        str(q.get('created_at', ''))
-                    ).strftime('%d/%m/%Y')
-                except Exception:
-                    fecha = '—'
+            st.markdown("<br>", unsafe_allow_html=True)
+            b1, b2 = st.columns(2)
+            with b1:
+                st.markdown(f"""
+                <div class="dash-card">
+                    <div class="dash-card-value">{dr_a}</div>
+                    <div class="dash-card-label">📝 Borradores</div>
+                </div>""", unsafe_allow_html=True)
+            with b2:
+                st.markdown(f"""
+                <div class="dash-card dash-card-green">
+                    <div class="dash-card-value">{ap_a}</div>
+                    <div class="dash-card-label">✅ Aprobadas</div>
+                </div>""", unsafe_allow_html=True)
 
-                rows.append({
-                    "N° Cotización": q.get('quote_number', 'N/A'),
-                    "Cliente":       q.get('client_name', 'N/A'),
-                    "Analista":      q.get('analyst_name', 'N/A'),
-                    "Total USD":     f"${float(q.get('total_amount', 0) or 0):,.2f}",
-                    "Estado":        ESTADO_LABELS.get(q.get('status', 'draft'), '—'),
-                    "Fecha":         fecha,
+            st.markdown("<br>", unsafe_allow_html=True)
+    else:
+        # Mostrar tabla resumen de todos los analistas
+        if analistas:
+            filas = []
+            for a in analistas:
+                s = DBManager.get_stats_by_date_range(fecha_desde_str, fecha_hasta_str, analyst_id=a['id'])
+                filas.append({
+                    "Analista":         a['full_name'],
+                    "Cotizaciones":     s.get('total_quotes', 0),
+                    "Monto USD":        f"${s.get('total_amount', 0.0):,.0f}",
+                    "Borradores":       s.get('quotes_by_status', {}).get('draft', 0),
+                    "Aprobadas":        s.get('quotes_by_status', {}).get('approved', 0),
                 })
-
-            df_rec = pd.DataFrame(rows)
-            st.dataframe(df_rec, use_container_width=True, hide_index=True)
+            df_analistas = pd.DataFrame(filas)
+            st.dataframe(df_analistas, use_container_width=True, hide_index=True)
         else:
-            st.info("No hay cotizaciones en el período seleccionado")
+            st.info("No hay analistas registrados aún.")
+
+    st.markdown("---")
+
+    # ── Últimas cotizaciones del período ───────────────────────────────────
+    st.markdown("### 🕐 Últimas Cotizaciones del Período")
+    ESTADO_LABELS = {
+        'draft':    '📝 Borrador',
+        'sent':     '📤 Enviada',
+        'approved': '✅ Aprobada',
+        'rejected': '❌ Rechazada',
+    }
+    if recent_filtered:
+        rows = []
+        for q in recent_filtered[:20]:
+            try:
+                fecha_q = datetime.fromisoformat(str(q.get('created_at', ''))).strftime('%d/%m/%Y')
+            except Exception:
+                fecha_q = '—'
+            rows.append({
+                "N° Cotización": q.get('quote_number', 'N/A'),
+                "Cliente":       q.get('client_name', 'N/A'),
+                "Analista":      q.get('analyst_name', 'N/A'),
+                "Estado":        ESTADO_LABELS.get(q.get('status', 'draft'), '—'),
+                "Fecha":         fecha_q,
+            })
+        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+    else:
+        st.info("No hay cotizaciones en el período seleccionado.")
 
     st.markdown("---")
 
     # ── Accesos rápidos ────────────────────────────────────────────────────
     st.markdown("### ⚡ Accesos Rápidos")
     qa1, qa2, qa3, qa4 = st.columns(4)
-
     with qa1:
-        if st.button("📝 Nueva Cotización", use_container_width=True, type="primary"):
+        if st.button("📝 Nueva Cotización", use_container_width=True, type="primary", key="admin_qa1"):
             st.session_state.selected_menu = "📝 Crear Cotización"
             st.rerun()
-
     with qa2:
-        if st.button("📊 Ver Mis Cotizaciones", use_container_width=True):
+        if st.button("📊 Ver Mis Cotizaciones", use_container_width=True, key="admin_qa2"):
             st.session_state.selected_menu = "📊 Mis Cotizaciones"
             st.rerun()
-
     with qa3:
-        if st.button("🔧 Panel de Administración", use_container_width=True):
+        if st.button("🔧 Panel de Administración", use_container_width=True, key="admin_qa3"):
             st.session_state.selected_menu = "🔧 Panel de Administración"
             st.rerun()
-
     with qa4:
-        if st.button("🔍 Diagnóstico del Sistema", use_container_width=True):
+        if st.button("🔍 Diagnóstico del Sistema", use_container_width=True, key="admin_qa4"):
             st.session_state.selected_menu = "🔍 Diagnóstico del Sistema"
+            st.rerun()
+
+
+# ── DASHBOARD DEL ANALISTA ──────────────────────────────────────────────
+def show_analyst_dashboard():
+    """Dashboard personal del analista: solo sus propios datos, aislado del resto."""
+    from datetime import date
+
+    user = AuthManager.get_current_user()
+
+    # ── Saludo dinámico ────────────────────────────────────────────────────
+    hora = datetime.now().hour
+    if hora < 12:
+        saludo = "Buenos días"
+    elif hora < 18:
+        saludo = "Buenas tardes"
+    else:
+        saludo = "Buenas noches"
+
+    DIAS_ES  = ["lunes","martes","miércoles","jueves","viernes","sábado","domingo"]
+    MESES_ES = ["enero","febrero","marzo","abril","mayo","junio",
+                "julio","agosto","septiembre","octubre","noviembre","diciembre"]
+    hoy = date.today()
+    dia_nombre = DIAS_ES[hoy.weekday()]
+    mes_nombre = MESES_ES[hoy.month - 1]
+    fecha_str  = f"{dia_nombre} {hoy.day} de {mes_nombre} de {hoy.year}"
+
+    st.markdown(f"## {saludo}, {user['full_name']} 👋")
+    st.caption(f"Hoy es {fecha_str} — LogiPartVE Pro v7.0")
+    st.markdown("---")
+
+    # ── Selector de rango de fechas ────────────────────────────────────────
+    primer_dia_mes = hoy.replace(day=1)
+
+    st.markdown("#### 📅 Rango de Fechas")
+    col_desde, col_hasta, col_btn = st.columns([2, 2, 1])
+    with col_desde:
+        fecha_desde = st.date_input(
+            "Desde",
+            value=st.session_state.get('analyst_dash_desde', primer_dia_mes),
+            key="analyst_dash_desde_input",
+            format="DD/MM/YYYY"
+        )
+    with col_hasta:
+        fecha_hasta = st.date_input(
+            "Hasta",
+            value=st.session_state.get('analyst_dash_hasta', hoy),
+            key="analyst_dash_hasta_input",
+            format="DD/MM/YYYY"
+        )
+    with col_btn:
+        st.markdown("<br>", unsafe_allow_html=True)
+        aplicar = st.button("🔍 Aplicar", use_container_width=True, key="analyst_dash_aplicar")
+
+    if aplicar:
+        st.session_state['analyst_dash_desde'] = fecha_desde
+        st.session_state['analyst_dash_hasta'] = fecha_hasta
+    else:
+        fecha_desde = st.session_state.get('analyst_dash_desde', primer_dia_mes)
+        fecha_hasta = st.session_state.get('analyst_dash_hasta', hoy)
+
+    if fecha_desde > fecha_hasta:
+        st.warning("⚠️ La fecha de inicio no puede ser mayor que la fecha de fin.")
+        return
+
+    periodo_label = f"{fecha_desde.strftime('%d/%m/%Y')} — {fecha_hasta.strftime('%d/%m/%Y')}"
+    st.info(f"📊 Período activo: **{periodo_label}**")
+    st.markdown("---")
+
+    fecha_desde_str = fecha_desde.strftime('%Y-%m-%d')
+    fecha_hasta_str = fecha_hasta.strftime('%Y-%m-%d')
+
+    # ── Cargar estadísticas del analista (solo sus datos) ───────────────────
+    analyst_id = user.get('id')
+    with st.spinner("Cargando tus métricas..."):
+        try:
+            stats = DBManager.get_stats_by_date_range(
+                fecha_desde_str, fecha_hasta_str,
+                analyst_id=analyst_id
+            )
+        except Exception as e:
+            st.error(f"❌ Error al cargar métricas: {e}")
+            return
+
+    total_quotes   = stats.get('total_quotes', 0)
+    total_amount   = stats.get('total_amount', 0.0)
+    by_status      = stats.get('quotes_by_status', {})
+    draft_count    = by_status.get('draft', 0)
+    approved_count = by_status.get('approved', 0)
+
+    # ── Resumen General ─────────────────────────────────────────────────────
+    st.markdown("### 📊 Resumen General")
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown(f"""
+        <div class="dash-card">
+            <div class="dash-card-value">{total_quotes}</div>
+            <div class="dash-card-label">Total Cotizaciones</div>
+        </div>""", unsafe_allow_html=True)
+    with c2:
+        st.markdown(f"""
+        <div class="dash-card dash-card-green">
+            <div class="dash-card-value">${total_amount:,.0f}</div>
+            <div class="dash-card-label">Monto Total Cotizado (USD)</div>
+        </div>""", unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # ── Estado de las Cotizaciones ──────────────────────────────────────────
+    st.markdown("### 📋 Estado de las Cotizaciones")
+    s1, s2 = st.columns(2)
+    with s1:
+        st.markdown(f"""
+        <div class="dash-card">
+            <div class="dash-card-value">{draft_count}</div>
+            <div class="dash-card-label">📝 Borradores</div>
+        </div>""", unsafe_allow_html=True)
+    with s2:
+        st.markdown(f"""
+        <div class="dash-card dash-card-green">
+            <div class="dash-card-value">{approved_count}</div>
+            <div class="dash-card-label">✅ Aprobadas</div>
+        </div>""", unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("---")
+
+    # ── Accesos rápidos ────────────────────────────────────────────────────
+    st.markdown("### ⚡ Accesos Rápidos")
+    qa1, qa2 = st.columns(2)
+    with qa1:
+        if st.button("📝 Nueva Cotización", use_container_width=True, type="primary", key="analyst_qa1"):
+            st.session_state.selected_menu = "📝 Crear Cotización"
+            st.rerun()
+    with qa2:
+        if st.button("📊 Ver Mis Cotizaciones", use_container_width=True, key="analyst_qa2"):
+            st.session_state.selected_menu = "📊 Mis Cotizaciones"
             st.rerun()
 
 
