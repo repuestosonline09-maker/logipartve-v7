@@ -711,18 +711,43 @@ class DBManager:
     
     @staticmethod
     def delete_user(user_id: int) -> bool:
-        """Elimina un usuario."""
+        """Elimina un usuario y todos sus registros dependientes."""
         try:
             conn = DBManager.get_connection()
             cursor = conn.cursor()
-            
-            is_postgres = DBManager.USE_POSTGRES
-            cursor.execute("""
-                DELETE FROM users WHERE id = %s
-            """ if is_postgres else """
-                DELETE FROM users WHERE id = ?
-            """, (user_id,))
-            
+            ph = '%s' if DBManager.USE_POSTGRES else '?'
+
+            # 1. Obtener IDs de cotizaciones del usuario
+            cursor.execute(f"SELECT id FROM quotes WHERE analyst_id = {ph}", (user_id,))
+            quote_ids = [row[0] for row in cursor.fetchall()]
+
+            # 2. Eliminar registros dependientes de cada cotización
+            if quote_ids:
+                placeholders = ','.join([ph] * len(quote_ids))
+                for tbl in ('quote_items', 'quote_history', 'quote_attachments', 'quote_comments'):
+                    try:
+                        cursor.execute(f"DELETE FROM {tbl} WHERE quote_id IN ({placeholders})", tuple(quote_ids))
+                    except Exception:
+                        pass  # tabla puede no existir
+
+            # 3. Eliminar las cotizaciones del usuario
+            cursor.execute(f"DELETE FROM quotes WHERE analyst_id = {ph}", (user_id,))
+
+            # 4. Eliminar activity_logs del usuario
+            try:
+                cursor.execute(f"DELETE FROM activity_logs WHERE user_id = {ph}", (user_id,))
+            except Exception:
+                pass
+
+            # 5. Eliminar password_history del usuario
+            try:
+                cursor.execute(f"DELETE FROM password_history WHERE user_id = {ph}", (user_id,))
+            except Exception:
+                pass
+
+            # 6. Eliminar el usuario
+            cursor.execute(f"DELETE FROM users WHERE id = {ph}", (user_id,))
+
             conn.commit()
             cursor.close()
             conn.close()
