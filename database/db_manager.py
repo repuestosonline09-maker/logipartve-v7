@@ -719,12 +719,13 @@ class DBManager:
 
             # 1. Obtener IDs de cotizaciones del usuario
             cursor.execute(f"SELECT id FROM quotes WHERE analyst_id = {ph}", (user_id,))
-            quote_ids = [row[0] for row in cursor.fetchall()]
+            rows = cursor.fetchall()
+            quote_ids = [row['id'] if isinstance(row, dict) else row[0] for row in rows]
 
-            # 2. Eliminar registros dependientes de cada cotización
+            # 2. Eliminar registros dependientes de cada cotización (ON DELETE CASCADE puede no estar activo)
             if quote_ids:
                 placeholders = ','.join([ph] * len(quote_ids))
-                for tbl in ('quote_items', 'quote_history', 'quote_attachments', 'quote_comments'):
+                for tbl in ('quote_notifications', 'quote_history', 'quote_items', 'quote_attachments', 'quote_comments'):
                     try:
                         cursor.execute(f"DELETE FROM {tbl} WHERE quote_id IN ({placeholders})", tuple(quote_ids))
                     except Exception:
@@ -733,17 +734,28 @@ class DBManager:
             # 3. Eliminar las cotizaciones del usuario
             cursor.execute(f"DELETE FROM quotes WHERE analyst_id = {ph}", (user_id,))
 
-            # 4. Eliminar activity_logs del usuario
-            try:
-                cursor.execute(f"DELETE FROM activity_logs WHERE user_id = {ph}", (user_id,))
-            except Exception:
-                pass
+            # 4. Limpiar referencias en tablas que usan user_id
+            for tbl_col in [
+                ('activity_logs', 'user_id'),
+                ('password_reset_tokens', 'user_id'),
+                ('password_history', 'user_id'),
+            ]:
+                try:
+                    cursor.execute(f"DELETE FROM {tbl_col[0]} WHERE {tbl_col[1]} = {ph}", (user_id,))
+                except Exception:
+                    pass
 
-            # 5. Eliminar password_history del usuario
-            try:
-                cursor.execute(f"DELETE FROM password_history WHERE user_id = {ph}", (user_id,))
-            except Exception:
-                pass
+            # 5. Limpiar referencias updated_by / edited_by / created_by (poner NULL en lugar de borrar)
+            for tbl_col in [
+                ('system_config', 'updated_by'),
+                ('freight_rates', 'updated_by'),
+                ('quote_history', 'edited_by'),
+                ('quote_notifications', 'created_by'),
+            ]:
+                try:
+                    cursor.execute(f"UPDATE {tbl_col[0]} SET {tbl_col[1]} = NULL WHERE {tbl_col[1]} = {ph}", (user_id,))
+                except Exception:
+                    pass
 
             # 6. Eliminar el usuario
             cursor.execute(f"DELETE FROM users WHERE id = {ph}", (user_id,))
@@ -753,7 +765,7 @@ class DBManager:
             conn.close()
             return True
         except Exception as e:
-            print(f"Error al eliminar usuario: {e}")
+            print(f"[delete_user] ERROR DETALLADO: {type(e).__name__}: {e}")
             return False
     
     # ==================== MÉTODOS DE CONFIGURACIÓN ====================
