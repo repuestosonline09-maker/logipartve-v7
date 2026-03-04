@@ -19,7 +19,7 @@ from services.session_manager import SessionManager
 from services.cookie_session import restore_session_from_cookie, save_session_cookie, delete_session_cookie
 import os
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from components.header import show_header
 from views.login_view import show_login
 from views.admin_panel import show_admin_panel
@@ -275,8 +275,10 @@ def show_admin_dashboard():
 
     user = AuthManager.get_current_user()
 
-    # ── Saludo dinámico ────────────────────────────────────────────────────
-    hora = datetime.now().hour
+    # ── Saludo dinámico (Venezuela UTC-4) ────────────────────────────────────
+    VEN_TZ = timezone(timedelta(hours=-4))
+    ahora_ven = datetime.now(VEN_TZ)
+    hora = ahora_ven.hour
     if hora < 12:
         saludo = "Buenos días"
     elif hora < 18:
@@ -287,7 +289,7 @@ def show_admin_dashboard():
     DIAS_ES   = ["lunes","martes","miércoles","jueves","viernes","sábado","domingo"]
     MESES_ES  = ["enero","febrero","marzo","abril","mayo","junio",
                  "julio","agosto","septiembre","octubre","noviembre","diciembre"]
-    hoy = date.today()
+    hoy = ahora_ven.date()
     dia_nombre = DIAS_ES[hoy.weekday()]
     mes_nombre = MESES_ES[hoy.month - 1]
     fecha_str  = f"{dia_nombre} {hoy.day} de {mes_nombre} de {hoy.year}"
@@ -541,8 +543,10 @@ def show_analyst_dashboard():
 
     user = AuthManager.get_current_user()
 
-    # ── Saludo dinámico ────────────────────────────────────────────────────
-    hora = datetime.now().hour
+    # ── Saludo dinámico (Venezuela UTC-4) ──────────────────────────────────
+    VEN_TZ = timezone(timedelta(hours=-4))
+    ahora_ven = datetime.now(VEN_TZ)
+    hora = ahora_ven.hour
     if hora < 12:
         saludo = "Buenos días"
     elif hora < 18:
@@ -553,7 +557,7 @@ def show_analyst_dashboard():
     DIAS_ES  = ["lunes","martes","miércoles","jueves","viernes","sábado","domingo"]
     MESES_ES = ["enero","febrero","marzo","abril","mayo","junio",
                 "julio","agosto","septiembre","octubre","noviembre","diciembre"]
-    hoy = date.today()
+    hoy = ahora_ven.date()
     dia_nombre = DIAS_ES[hoy.weekday()]
     mes_nombre = MESES_ES[hoy.month - 1]
     fecha_str  = f"{dia_nombre} {hoy.day} de {mes_nombre} de {hoy.year}"
