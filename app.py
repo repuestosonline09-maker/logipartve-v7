@@ -337,7 +337,7 @@ def show_admin_dashboard():
     sent_count     = by_status.get('sent', 0)
     rejected_count = by_status.get('rejected', 0)
 
-    c1, c2, c3, c4 = st.columns(4)
+    c1, c2, c3 = st.columns(3)
 
     with c1:
         st.markdown(f"""
@@ -354,14 +354,6 @@ def show_admin_dashboard():
         </div>""", unsafe_allow_html=True)
 
     with c3:
-        color_rate = "dash-card-green" if approval_rate >= 50 else "dash-card-orange"
-        st.markdown(f"""
-        <div class="dash-card {color_rate}">
-            <div class="dash-card-value">{approval_rate:.1f}%</div>
-            <div class="dash-card-label">Tasa de Aprobación</div>
-        </div>""", unsafe_allow_html=True)
-
-    with c4:
         st.markdown(f"""
         <div class="dash-card dash-card-purple">
             <div class="dash-card-value">{active_analysts}</div>
@@ -373,7 +365,7 @@ def show_admin_dashboard():
     # ── FILA 2: Desglose por estado ────────────────────────────────────────
     st.markdown("### 📋 Estado de las Cotizaciones")
 
-    s1, s2, s3, s4 = st.columns(4)
+    s1, s2 = st.columns(2)
 
     with s1:
         st.markdown(f"""
@@ -384,23 +376,9 @@ def show_admin_dashboard():
 
     with s2:
         st.markdown(f"""
-        <div class="dash-card dash-card-orange">
-            <div class="dash-card-value">{sent_count}</div>
-            <div class="dash-card-label">📤 Enviadas</div>
-        </div>""", unsafe_allow_html=True)
-
-    with s3:
-        st.markdown(f"""
         <div class="dash-card dash-card-green">
             <div class="dash-card-value">{approved_count}</div>
             <div class="dash-card-label">✅ Aprobadas</div>
-        </div>""", unsafe_allow_html=True)
-
-    with s4:
-        st.markdown(f"""
-        <div class="dash-card dash-card-red">
-            <div class="dash-card-value">{rejected_count}</div>
-            <div class="dash-card-label">❌ Rechazadas</div>
         </div>""", unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
