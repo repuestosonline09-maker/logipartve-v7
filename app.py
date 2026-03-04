@@ -225,6 +225,9 @@ def show_main_app():
 
         current_idx = menu_options.index(st.session_state.selected_menu)
 
+        # Forzar sincronización del radio con el menú seleccionado programáticamente
+        st.session_state['sidebar_radio'] = menu_options[current_idx]
+
         selected_menu = st.radio(
             "",
             menu_options,
