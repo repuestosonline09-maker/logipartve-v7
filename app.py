@@ -225,13 +225,14 @@ def show_main_app():
 
         current_idx = menu_options.index(st.session_state.selected_menu)
 
-        # Forzar sincronización del radio con el menú seleccionado programáticamente
-        st.session_state['sidebar_radio'] = menu_options[current_idx]
+        # Sincronizar el radio con el menú seleccionado programáticamente
+        # Solo se asigna si no coincide para evitar conflicto con index=
+        if st.session_state.get('sidebar_radio') != menu_options[current_idx]:
+            st.session_state['sidebar_radio'] = menu_options[current_idx]
 
         selected_menu = st.radio(
             "",
             menu_options,
-            index=current_idx,
             label_visibility="collapsed",
             key="sidebar_radio"
         )
