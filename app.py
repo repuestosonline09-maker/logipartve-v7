@@ -597,7 +597,7 @@ def show_analyst_dashboard():
     fecha_hasta_str = fecha_hasta.strftime('%Y-%m-%d')
 
     # ── Cargar estadísticas del analista (solo sus datos) ───────────────────
-    analyst_id = user.get('id')
+    analyst_id = user.get('user_id')
     with st.spinner("Cargando tus métricas..."):
         try:
             stats = DBManager.get_stats_by_date_range(
