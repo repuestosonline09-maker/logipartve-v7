@@ -699,10 +699,12 @@ def show_analyst_dashboard():
     with qa1:
         if st.button("📝 Nueva Cotización", use_container_width=True, type="primary", key="analyst_qa1"):
             st.session_state.selected_menu = "📝 Crear Cotización"
+            st.session_state.pop('sidebar_radio', None)
             st.rerun()
     with qa2:
         if st.button("📊 Ver Mis Cotizaciones", use_container_width=True, key="analyst_qa2"):
             st.session_state.selected_menu = "📊 Mis Cotizaciones"
+            st.session_state.pop('sidebar_radio', None)
             st.rerun()
 
 
