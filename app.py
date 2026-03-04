@@ -218,6 +218,8 @@ def show_main_app():
         # Mantener la selección en session_state para no resetear en cada rerun
         if 'selected_menu' not in st.session_state:
             st.session_state.selected_menu = menu_options[default_idx]
+        if 'menu_version' not in st.session_state:
+            st.session_state.menu_version = 0
 
         # Si el menú guardado ya no está en las opciones actuales (cambio de rol), resetear
         if st.session_state.selected_menu not in menu_options:
@@ -225,12 +227,16 @@ def show_main_app():
 
         current_idx = menu_options.index(st.session_state.selected_menu)
 
+        # La key incluye la versión: cuando un botón la incrementa, el radio se recrea
+        # desde cero con el index correcto, sincronizando el indicador visual
+        radio_key = f"sidebar_radio_{st.session_state.menu_version}"
+
         selected_menu = st.radio(
             "",
             menu_options,
             index=current_idx,
             label_visibility="collapsed",
-            key="sidebar_radio"
+            key=radio_key
         )
         # El radio siempre gana: actualizar selected_menu con lo que el usuario eligió
         st.session_state.selected_menu = selected_menu
@@ -700,12 +706,12 @@ def show_analyst_dashboard():
     with qa1:
         if st.button("📝 Nueva Cotización", use_container_width=True, type="primary", key="analyst_qa1"):
             st.session_state.selected_menu = "📝 Crear Cotización"
-            st.session_state.pop('sidebar_radio', None)
+            st.session_state.menu_version = st.session_state.get('menu_version', 0) + 1
             st.rerun()
     with qa2:
         if st.button("📊 Ver Mis Cotizaciones", use_container_width=True, key="analyst_qa2"):
             st.session_state.selected_menu = "📊 Mis Cotizaciones"
-            st.session_state.pop('sidebar_radio', None)
+            st.session_state.menu_version = st.session_state.get('menu_version', 0) + 1
             st.rerun()
 
 
