@@ -651,6 +651,48 @@ def show_analyst_dashboard():
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("---")
 
+    # ── Últimas cotizaciones del período (solo las del analista) ────────────────
+    st.markdown("### 🕐 Mis Últimas Cotizaciones del Período")
+    ESTADO_LABELS = {
+        'draft':    '📝 Borrador',
+        'sent':     '📤 Enviada',
+        'approved': '✅ Aprobada',
+        'rejected': '❌ Rechazada',
+    }
+    try:
+        import pandas as pd
+        mis_quotes = DBManager.get_quotes_by_analyst(analyst_id, limit=500)
+        # Filtrar por rango de fechas
+        mis_quotes_filtradas = []
+        for q in mis_quotes:
+            try:
+                q_fecha = datetime.fromisoformat(str(q.get('created_at', ''))).date()
+                if fecha_desde <= q_fecha <= fecha_hasta:
+                    mis_quotes_filtradas.append(q)
+            except Exception:
+                pass
+
+        if mis_quotes_filtradas:
+            rows = []
+            for q in mis_quotes_filtradas[:20]:
+                try:
+                    fecha_q = datetime.fromisoformat(str(q.get('created_at', ''))).strftime('%d/%m/%Y')
+                except Exception:
+                    fecha_q = '—'
+                rows.append({
+                    "N° Cotización": q.get('quote_number', 'N/A'),
+                    "Cliente":       q.get('client_name', 'N/A'),
+                    "Estado":        ESTADO_LABELS.get(q.get('status', 'draft'), '—'),
+                    "Fecha":         fecha_q,
+                })
+            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+        else:
+            st.info("No tienes cotizaciones en el período seleccionado.")
+    except Exception as e:
+        st.error(f"❌ Error al cargar cotizaciones: {e}")
+
+    st.markdown("---")
+
     # ── Accesos rápidos ────────────────────────────────────────────────────
     st.markdown("### ⚡ Accesos Rápidos")
     qa1, qa2 = st.columns(2)
