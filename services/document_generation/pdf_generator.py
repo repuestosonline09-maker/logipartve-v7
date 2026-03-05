@@ -480,19 +480,38 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
     # Anchos de columna optimizados (12 columnas) - Ajustados para alineación perfecta con DATOS DEL CLIENTE (9.48 inches total)
     col_widths = [0.4*inch, 1.7*inch, 0.95*inch, 0.85*inch, 0.6*inch, 0.4*inch, 0.6*inch, 0.7*inch, 0.78*inch, 0.5*inch, 1.0*inch, 1.0*inch]
     
+    # ── OPCIÓN A: Ajuste dinámico de fuente y padding según número de ítems ──────────
+    # Garantiza que todo el contenido (tabla + sección inferior) quepa en una sola página.
+    # Con <= 4 ítems: tamaños normales. Con 5-7: reducidos. Con 8+: mínimos.
+    num_items = len(items) 
+    if num_items <= 4:
+        _font_header  = 6
+        _font_content = 6.5
+        _pad_v        = 4    # padding vertical (top y bottom) por celda
+    elif num_items <= 7:
+        _font_header  = 5.5
+        _font_content = 6.0
+        _pad_v        = 2
+    else:
+        # 8 o más ítems: tamaño mínimo legible
+        _font_header  = 5.0
+        _font_content = 5.5
+        _pad_v        = 1
+    # ─────────────────────────────────────────────────────────────────────────────────
+
     tabla_items = Table(items_data, colWidths=col_widths)
     tabla_items.setStyle(TableStyle([
         # Encabezado con color azul AUTO ONLINE PRO
         ('BACKGROUND', (0, 0), (-1, 0), COLOR_AZUL_AOP),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 6),  # Reducido a 6pt para que quepan palabras completas
+        ('FONTSIZE', (0, 0), (-1, 0), _font_header),
         ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
-        ('VALIGN', (0, 0), (-1, 0), 'MIDDLE'),  # Centrar verticalmente encabezados
+        ('VALIGN', (0, 0), (-1, 0), 'MIDDLE'),
         
         # Contenido
         ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 1), (-1, -1), 6.5),
+        ('FONTSIZE', (0, 1), (-1, -1), _font_content),
         ('ALIGN', (0, 1), (0, -1), 'CENTER'),  # ITEM centrado
         ('ALIGN', (5, 1), (5, -1), 'CENTER'),  # QTY centrado
         ('ALIGN', (10, 1), (10, -1), 'RIGHT'),  # UNIT alineado a derecha
@@ -503,11 +522,11 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
         ('INNERGRID', (0, 0), (-1, -1), 0.5, COLOR_GRIS_CLARO),
         ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, COLOR_GRIS_CLARO]),
         
-        # Padding
-        ('TOPPADDING', (0, 0), (-1, -1), 4),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-        ('LEFTPADDING', (0, 0), (-1, -1), 4),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+        # Padding dinámico según cantidad de ítems
+        ('TOPPADDING',    (0, 0), (-1, -1), _pad_v),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), _pad_v),
+        ('LEFTPADDING',   (0, 0), (-1, -1), 4),
+        ('RIGHTPADDING',  (0, 0), (-1, -1), 4),
         
         # Alineación vertical
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),

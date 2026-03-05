@@ -227,8 +227,8 @@ def render_my_quotes_panel():
     col1, col2, col3 = st.columns(3)
     with col1:
         search_term = st.text_input(
-            "Buscar por número, cliente o teléfono",
-            placeholder="Ej: 2026-30022-A, José, 0424...",
+            "Buscar por número, cliente, teléfono o email",
+            placeholder="Ej: 2026-30022-A, José, 0424..., cliente@gmail.com",
             key=f"mq_search_{reset_key}"
         )
     with col2:

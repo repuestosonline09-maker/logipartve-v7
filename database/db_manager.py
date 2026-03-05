@@ -1735,7 +1735,7 @@ class DBManager:
     @staticmethod
     def search_quotes(analyst_id: Optional[int], search_term: str, limit: int = 100) -> List[Dict[str, Any]]:
         """
-        Busca cotizaciones por número, nombre de cliente o teléfono.
+        Busca cotizaciones por número, nombre de cliente, teléfono o correo email.
         
         Args:
             analyst_id: ID del analista (None para buscar en todas)
@@ -1754,42 +1754,62 @@ class DBManager:
             
             if analyst_id:
                 # Buscar solo cotizaciones del analista
+                # Incluye: número de cotización, nombre, teléfono y email
                 if is_postgres:
                     cursor.execute("""
                         SELECT * FROM quotes
                         WHERE analyst_id = %s
-                        AND (quote_number ILIKE %s OR client_name ILIKE %s OR client_phone ILIKE %s)
+                        AND (
+                            quote_number ILIKE %s
+                            OR client_name  ILIKE %s
+                            OR client_phone ILIKE %s
+                            OR client_email ILIKE %s
+                        )
                         ORDER BY created_at DESC
                         LIMIT %s
-                    """, (analyst_id, search_pattern, search_pattern, search_pattern, limit))
+                    """, (analyst_id, search_pattern, search_pattern, search_pattern, search_pattern, limit))
                 else:
                     cursor.execute("""
                         SELECT * FROM quotes
                         WHERE analyst_id = ?
-                        AND (quote_number LIKE ? OR client_name LIKE ? OR client_phone LIKE ?)
+                        AND (
+                            quote_number LIKE ?
+                            OR client_name  LIKE ?
+                            OR client_phone LIKE ?
+                            OR client_email LIKE ?
+                        )
                         ORDER BY created_at DESC
                         LIMIT ?
-                    """, (analyst_id, search_pattern, search_pattern, search_pattern, limit))
+                    """, (analyst_id, search_pattern, search_pattern, search_pattern, search_pattern, limit))
             else:
                 # Buscar en todas las cotizaciones (administrador)
+                # Incluye: número de cotización, nombre, teléfono y email
                 if is_postgres:
                     cursor.execute("""
                         SELECT q.*, u.full_name as analyst_name
                         FROM quotes q
                         JOIN users u ON q.analyst_id = u.id
-                        WHERE quote_number ILIKE %s OR client_name ILIKE %s OR client_phone ILIKE %s
+                        WHERE
+                            q.quote_number ILIKE %s
+                            OR q.client_name  ILIKE %s
+                            OR q.client_phone ILIKE %s
+                            OR q.client_email ILIKE %s
                         ORDER BY q.created_at DESC
                         LIMIT %s
-                    """, (search_pattern, search_pattern, search_pattern, limit))
+                    """, (search_pattern, search_pattern, search_pattern, search_pattern, limit))
                 else:
                     cursor.execute("""
                         SELECT q.*, u.full_name as analyst_name
                         FROM quotes q
                         JOIN users u ON q.analyst_id = u.id
-                        WHERE quote_number LIKE ? OR client_name LIKE ? OR client_phone LIKE ?
+                        WHERE
+                            q.quote_number LIKE ?
+                            OR q.client_name  LIKE ?
+                            OR q.client_phone LIKE ?
+                            OR q.client_email LIKE ?
                         ORDER BY q.created_at DESC
                         LIMIT ?
-                    """, (search_pattern, search_pattern, search_pattern, limit))
+                    """, (search_pattern, search_pattern, search_pattern, search_pattern, limit))
             
             quotes = [dict(row) for row in cursor.fetchall()]
             cursor.close()
