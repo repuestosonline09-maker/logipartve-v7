@@ -238,8 +238,47 @@ def show_main_app():
             label_visibility="collapsed",
             key=radio_key
         )
-        # El radio siempre gana: actualizar selected_menu con lo que el usuario eligió
-        st.session_state.selected_menu = selected_menu
+        # ── MEJORA UX: Proteger navegación cuando hay edición activa ───────────────────
+        # Si el analista está editando una cotización y hace clic en "Crear Cotización",
+        # mostramos una advertencia en lugar de navegar directamente.
+        _en_edicion = st.session_state.get('editing_mode', False)
+        _quote_num_edicion = st.session_state.get('editing_quote_number', '')
+        _navegando_a_crear = (
+            selected_menu == "📝 Crear Cotización"
+            and st.session_state.get('selected_menu') != "📝 Crear Cotización"
+            and _en_edicion
+        )
+        if _navegando_a_crear:
+            # Mostrar advertencia sin navegar todavía
+            st.warning(
+                f"⚠️ Estás editando la cotización **#{_quote_num_edicion}**. "
+                "Si navegas a Crear Cotización, **perderás los cambios no guardados**. "
+                "Guarda primero o cancela la edición."
+            )
+            col_a, col_b = st.columns(2)
+            with col_a:
+                if st.button("✅ Continuar editando", use_container_width=True,
+                             key="guard_continuar"):
+                    # Volver al panel de edición
+                    st.session_state.selected_menu = "📝 Crear Cotización"
+                    st.rerun()
+            with col_b:
+                if st.button("🗑️ Descartar edición y crear nueva", use_container_width=True,
+                             key="guard_descartar", type="secondary"):
+                    # Limpiar modo edición y navegar
+                    for _k in ['editing_mode', 'editing_quote_id', 'editing_quote_number',
+                               'editing_quote_data', 'editing_data_loaded',
+                               'cotizacion_items', 'cliente_datos',
+                               'editing_item_index', 'editing_item_data',
+                               'item_links', 'limpiar_campos_item',
+                               'mostrar_cotizacion', 'cotizacion_guardada']:
+                        st.session_state.pop(_k, None)
+                    st.session_state.selected_menu = "📝 Crear Cotización"
+                    st.rerun()
+            # No actualizar selected_menu todavía
+        else:
+            # El radio siempre gana: actualizar selected_menu con lo que el usuario eligió
+            st.session_state.selected_menu = selected_menu
 
         st.markdown("---")
 

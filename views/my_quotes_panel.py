@@ -519,7 +519,21 @@ def _show_acciones(quote_id: int):
         if st.button("📊 CUADRO COSTOS", use_container_width=True,
                      type="secondary", key=f"acc_cuadro_{quote_id}"):
             st.session_state.cuadro_costos_quote_id = quote_id
+            # SIEMPRE limpiar el PNG en caché para forzar regeneración con datos frescos
+            # Esto corrige el bug donde el Cuadro mostraba valores anteriores a una edición
             st.session_state.pop('cuadro_costos_png_path', None)
+            # También limpiar el archivo físico si existe, para evitar servir imagen vieja
+            import tempfile, os as _os2
+            _qb = DBManager.get_quote_by_id(quote_id)
+            if _qb:
+                _qnum = _qb.get('quote_number', str(quote_id))
+                _old_png = _os2.path.join(tempfile.gettempdir(),
+                    f"cuadro_costos_{_qnum.replace('-', '_')}.png")
+                if _os2.path.exists(_old_png):
+                    try:
+                        _os2.remove(_old_png)
+                    except Exception:
+                        pass
             st.rerun()
 
     # ── ORDEN APROBADA (FASE 5) ──────────────────────────────────────────────────────────

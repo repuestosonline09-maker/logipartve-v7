@@ -2781,6 +2781,10 @@ class DBManager:
             conn.close()
             
             # Preparar datos para update_quote
+            # IMPORTANTE: pdf_path y jpeg_path se ponen en None para invalidar los documentos
+            # anteriores. Al editar una cotización, los PDF/PNG previos quedan desactualizados
+            # y deben regenerarse. Esto obliga a los botones a mostrar "GENERAR" en lugar
+            # de ofrecer descargar un archivo con datos viejos.
             quote_data = {
                 'client_name': cliente_datos.get('nombre', ''),
                 'client_phone': cliente_datos.get('telefono', ''),
@@ -2790,6 +2794,8 @@ class DBManager:
                 'client_vehicle': cliente_datos.get('vehiculo', ''),
                 'client_year': cliente_datos.get('ano', ''),
                 'client_vin': cliente_datos.get('vin', ''),
+                'pdf_path': None,   # Invalidar PDF anterior
+                'jpeg_path': None,  # Invalidar PNG anterior
             }
             
             # Actualizar datos del cliente

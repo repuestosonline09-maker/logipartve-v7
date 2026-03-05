@@ -225,8 +225,29 @@ def render_analyst_panel():
     # Título con información del analista y número de cotización
     if editing_mode and editing_quote_number:
         st.title(f"✏️ Editando Cotización #{editing_quote_number}")
-        st.info("📝 Modo edición activado. Modifique los datos y haga clic en 'ACTUALIZAR COTIZACIÓN' para guardar los cambios.")
-        
+        # ── BANNER LLAMATIVO: imposible de ignorar ──────────────────────────────
+        st.markdown(
+            f"""
+            <div style="
+                background-color: #FF6B35;
+                border: 3px solid #CC4400;
+                border-radius: 8px;
+                padding: 16px 20px;
+                margin: 8px 0 16px 0;
+                text-align: center;
+            ">
+                <span style="font-size:1.4rem; font-weight:800; color:#FFFFFF;">
+                    ⚠️ MODO EDICIÓN ACTIVO — Cotización #{editing_quote_number}
+                </span><br>
+                <span style="font-size:1.0rem; color:#FFE8D6;">
+                    Estás modificando una cotización existente. El botón central dice
+                    <strong>GUARDAR CAMBIOS</strong>.
+                    Para crear una cotización nueva, primero cancela la edición.
+                </span>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
         # Botón para cancelar edición
         if st.button("❌ CANCELAR EDICIÓN", type="secondary"):
             # Limpiar COMPLETAMENTE el modo edición y todos los datos del formulario
@@ -1106,7 +1127,10 @@ def render_analyst_panel():
             final_button_text = "📄 GENERAR COTIZACIÓN"
             final_button_key = "btn_generar_cotizacion"
         
-        if st.button(final_button_text, use_container_width=True, type="primary", key=final_button_key):
+        # En modo edición el botón es "secondary" (gris) para diferenciarlo visualmente
+        # del flujo normal de crear cotización (rojo/primary)
+        final_button_type = "secondary" if editing_mode else "primary"
+        if st.button(final_button_text, use_container_width=True, type=final_button_type, key=final_button_key):
             # Validar datos del cliente
             if not cliente_nombre:
                 st.error("⚠️ Ingrese el nombre del cliente")
