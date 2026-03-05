@@ -2830,7 +2830,75 @@ class DBManager:
                 print(f"❌ Error al actualizar ítems")
                 return False
             
+            # ── RECALCULAR TOTALES FINANCIEROS DESDE LOS ÍTEMS ACTUALIZADOS ──────────────
+            # Los campos sub_total, iva_total, total_amount, abona_ya y en_entrega viven
+            # en la tabla quotes y NO se actualizan en update_quote_items. Si no los
+            # recalculamos aquí, el PNG/PDF generado después de editar mostrará los
+            # valores financieros originales (ej. IVA = $0 aunque se haya activado).
+            recalc_sub_total      = 0.0
+            recalc_iva_total      = 0.0
+            recalc_abona_ya       = 0.0
+            recalc_total_usd      = 0.0
+
+            for item in items:
+                # Sub-Total: todos los costos sin IVA
+                sub_item = (
+                    item.get('fob_total', 0) +
+                    item.get('costo_handling', 0) +
+                    item.get('costo_manejo', 0) +
+                    item.get('costo_impuesto', 0) +
+                    item.get('utilidad_valor', 0) +
+                    item.get('costo_envio', 0) +
+                    item.get('costo_tax', 0) +
+                    item.get('diferencial_valor', 0)
+                )
+                recalc_sub_total += sub_item
+
+                # IVA (solo si el ítem lo tiene activado)
+                if item.get('aplicar_iva', False):
+                    recalc_iva_total += item.get('iva_valor', 0)
+
+                # Abona Ya: costos base × (1 + diferencial%)
+                costos_base = (
+                    item.get('fob_total', 0) +
+                    item.get('costo_handling', 0) +
+                    item.get('costo_manejo', 0) +
+                    item.get('costo_impuesto', 0) +
+                    item.get('utilidad_valor', 0) +
+                    item.get('costo_tax', 0)
+                )
+                dif_factor = item.get('diferencial_porcentaje', 0) / 100
+                recalc_abona_ya += costos_base * (1 + dif_factor)
+
+                # Total USD Divisas (sin diferencial)
+                recalc_total_usd += (
+                    item.get('fob_total', 0) +
+                    item.get('costo_handling', 0) +
+                    item.get('costo_manejo', 0) +
+                    item.get('costo_impuesto', 0) +
+                    item.get('utilidad_valor', 0) +
+                    item.get('costo_envio', 0) +
+                    item.get('costo_tax', 0)
+                )
+
+            recalc_total_a_pagar = recalc_sub_total + recalc_iva_total
+            recalc_en_entrega    = recalc_total_a_pagar - recalc_abona_ya
+
+            # Guardar totales recalculados en la tabla quotes
+            financials_data = {
+                'sub_total':      recalc_sub_total,
+                'iva_total':      recalc_iva_total,
+                'total_amount':   recalc_total_usd,
+                'abona_ya':       recalc_abona_ya,
+                'en_entrega':     recalc_en_entrega,
+                'pdf_path':       None,  # Ya invalidado en el paso anterior
+                'jpeg_path':      None,  # Ya invalidado en el paso anterior
+            }
+            DBManager.update_quote(quote_id, financials_data, user_id)
+            # ─────────────────────────────────────────────────────────────────────────────
+
             print(f"✅ Cotización {quote_id} actualizada completamente")
+            print(f"   Sub-Total: ${recalc_sub_total:.2f} | IVA: ${recalc_iva_total:.2f} | Total: ${recalc_total_a_pagar:.2f}")
             return True
             
         except Exception as e:
