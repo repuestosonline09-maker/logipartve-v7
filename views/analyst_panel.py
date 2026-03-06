@@ -143,12 +143,15 @@ def render_analyst_panel():
         st.session_state.cotizacion_items = []
     if 'cliente_datos' not in st.session_state:
         st.session_state.cliente_datos = {}
-    if 'tarifas' not in st.session_state:
-        st.session_state.tarifas = {
-            "mia_a": 5.5,   # Miami Aéreo $/lb
-            "mia_m": 12.0,  # Miami Marítimo $/ft³
-            "mad": 8.0      # Madrid Aéreo $/kg
-        }
+    # Siempre recargar tarifas desde la BD para reflejar cambios del admin
+    _mia_a = DBManager.get_freight_rate('Miami', 'Aéreo')
+    _mia_m = DBManager.get_freight_rate('Miami', 'Marítimo')
+    _mad   = DBManager.get_freight_rate('Madrid', 'Aéreo')
+    st.session_state.tarifas = {
+        "mia_a": float(_mia_a) if _mia_a is not None else 9.0,   # Miami Aéreo $/lb
+        "mia_m": float(_mia_m) if _mia_m is not None else 40.0,  # Miami Marítimo $/ft³
+        "mad":   float(_mad)   if _mad   is not None else 25.0,  # Madrid Aéreo $/kg
+    }
     
     # ==========================================
     # FUNCIONES CALLBACK PARA BOTONES DE ÍTEMS
@@ -426,6 +429,15 @@ def render_analyst_panel():
     with st.sidebar:
         st.markdown("### 📊 Calculadora de Envío")
         st.info("💡 Use esta calculadora para estimar el costo de envío. El resultado es solo una **referencia**.")
+        
+        # Mostrar tarifas activas (cargadas desde BD)
+        _t = st.session_state.tarifas
+        st.caption(
+            f"📋 Tarifas activas: "
+            f"Miami Aéreo **${_t['mia_a']}/lb** | "
+            f"Miami Marítimo **${_t['mia_m']}/ft³** | "
+            f"Madrid Aéreo **${_t['mad']}/kg**"
+        )
         
         # Inicializar contador de reset si no existe
         if 'calc_reset_counter' not in st.session_state:
