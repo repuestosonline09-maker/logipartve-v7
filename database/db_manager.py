@@ -786,21 +786,48 @@ class DBManager:
         Returns:
             True si se eliminó exitosamente, False en caso de error
         """
+        conn = None
+        cursor = None
         try:
             conn = DBManager.get_connection()
-            cursor = conn.cursor()
-            ph = '%s' if DBManager.USE_POSTGRES else '?'
+            is_postgres = DBManager.USE_POSTGRES
+            ph = '%s' if is_postgres else '?'
 
-            # 1. Eliminar registros dependientes (ON DELETE CASCADE puede no estar activo)
-            for tabla in ('quote_notifications', 'quote_history', 'quote_items',
-                          'quote_attachments', 'quote_comments'):
-                try:
-                    cursor.execute(
-                        f"DELETE FROM {tabla} WHERE quote_id = {ph}",
-                        (quote_id,)
-                    )
-                except Exception:
-                    pass  # La tabla puede no existir en todas las versiones del esquema
+            # En PostgreSQL, un error dentro de una transacción deja la conexión
+            # en estado de error y bloquea todos los comandos siguientes.
+            # Usamos SAVEPOINT para que los errores en tablas opcionales sean
+            # recuperables sin abortar la transacción completa.
+            cursor = conn.cursor()
+
+            # 1. Eliminar registros dependientes con protección por savepoint
+            tablas_dependientes = (
+                'quote_notifications',
+                'quote_history',
+                'quote_items',
+                'quote_attachments',
+                'quote_comments',
+            )
+            for tabla in tablas_dependientes:
+                if is_postgres:
+                    try:
+                        cursor.execute(f"SAVEPOINT sp_{tabla}")
+                        cursor.execute(
+                            f"DELETE FROM {tabla} WHERE quote_id = {ph}",
+                            (quote_id,)
+                        )
+                        cursor.execute(f"RELEASE SAVEPOINT sp_{tabla}")
+                    except Exception as e_dep:
+                        # La tabla no existe o hay otro error menor — revertir solo este paso
+                        print(f"[delete_quote] Aviso en {tabla}: {e_dep}")
+                        cursor.execute(f"ROLLBACK TO SAVEPOINT sp_{tabla}")
+                else:
+                    try:
+                        cursor.execute(
+                            f"DELETE FROM {tabla} WHERE quote_id = {ph}",
+                            (quote_id,)
+                        )
+                    except Exception:
+                        pass  # SQLite: ignorar tablas que no existen
 
             # 2. Eliminar la cotización principal
             cursor.execute(
@@ -809,9 +836,6 @@ class DBManager:
             )
 
             conn.commit()
-            cursor.close()
-            conn.close()
-
             print(f"✅ Cotización {quote_id} eliminada correctamente")
             return True
 
@@ -819,7 +843,23 @@ class DBManager:
             print(f"[delete_quote] ERROR: {type(e).__name__}: {e}")
             import traceback
             traceback.print_exc()
+            if conn:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
             return False
+        finally:
+            if cursor:
+                try:
+                    cursor.close()
+                except Exception:
+                    pass
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
 
     # ==================== MÉTODOS DE CONFIGURACIÓN ====================
     
