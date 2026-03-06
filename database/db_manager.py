@@ -2952,7 +2952,6 @@ class DBManager:
                         COUNT(q.id) as metric_value
                     FROM users u
                     LEFT JOIN quotes q ON u.id = q.analyst_id {date_filter.replace('AND', 'WHERE') if date_filter else ''}
-                    WHERE u.role = 'analyst'
                     GROUP BY u.id, u.full_name
                     ORDER BY metric_value DESC
                     LIMIT {'%s' if is_postgres else '?'}
@@ -2967,7 +2966,6 @@ class DBManager:
                     LEFT JOIN quotes q ON u.id = q.analyst_id
                     LEFT JOIN quote_items qi ON qi.quote_id = q.id
                     {date_filter.replace('AND', 'WHERE') if date_filter else ''}
-                    WHERE u.role = 'analyst'
                     GROUP BY u.id, u.full_name
                     ORDER BY metric_value DESC
                     LIMIT {'%s' if is_postgres else '?'}
@@ -2986,7 +2984,6 @@ class DBManager:
                         END as metric_value
                     FROM users u
                     LEFT JOIN quotes q ON u.id = q.analyst_id {date_filter.replace('AND', 'WHERE') if date_filter else ''}
-                    WHERE u.role = 'analyst'
                     GROUP BY u.id, u.full_name
                     ORDER BY metric_value DESC
                     LIMIT {'%s' if is_postgres else '?'}
@@ -3250,10 +3247,11 @@ class DBManager:
     @staticmethod
     def get_all_analysts() -> List[Dict[str, Any]]:
         """
-        Devuelve la lista de todos los usuarios con rol 'analyst'.
+        Devuelve la lista de todos los usuarios (analistas y administradores)
+        que pueden crear cotizaciones.
 
         Returns:
-            Lista de dicts con id y full_name de cada analista
+            Lista de dicts con id, full_name y username de cada usuario
         """
         try:
             conn = DBManager.get_connection()
@@ -3263,7 +3261,6 @@ class DBManager:
             cursor.execute("""
                 SELECT id, full_name, username
                 FROM users
-                WHERE role = 'analyst'
                 ORDER BY full_name
             """)
             rows = cursor.fetchall()
