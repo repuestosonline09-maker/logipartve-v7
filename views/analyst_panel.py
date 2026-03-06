@@ -936,17 +936,10 @@ def render_analyst_panel():
     st.markdown("### 🇻🇪 IVA Venezuela")
     
     # Inicializar el estado de IVA de la cotización si no existe
-    # En modo edición, detectar si alguno de los ítems ya tiene IVA activo
+    # REGLA: El IVA siempre inicia en NO (False) por defecto.
+    # El analista debe activarlo manualmente si la venta está sujeta a IVA.
     if 'cotizacion_aplica_iva' not in st.session_state:
-        if editing_mode and st.session_state.get('cotizacion_items'):
-            # Heredar el valor del primer ítem que tenga IVA definido
-            _iva_heredado = any(
-                item.get('aplicar_iva', False)
-                for item in st.session_state.cotizacion_items
-            )
-            st.session_state.cotizacion_aplica_iva = _iva_heredado
-        else:
-            st.session_state.cotizacion_aplica_iva = False
+        st.session_state.cotizacion_aplica_iva = False
     
     iva_col1, iva_col2 = st.columns([2, 3])
     with iva_col1:
@@ -1649,6 +1642,7 @@ def render_analyst_panel():
                                     st.session_state.editing_data_loaded = False
                                     st.session_state.cotizacion_items = []
                                     st.session_state.cliente_datos = {}
+                                    st.session_state.cotizacion_aplica_iva = False  # Resetear IVA a NO
                                     
                                     print(f"✅ DEBUG - Cotización actualizada exitosamente: {editing_quote_number}")
                                     
@@ -1942,6 +1936,7 @@ def render_analyst_panel():
                         'editing_quote_data', 'editing_data_loaded',
                         'editing_item_index', 'editing_item_data',
                         'item_links', 'limpiar_campos_item',
+                        'cotizacion_aplica_iva',  # Resetear IVA a NO por defecto
                     ]
                     for _k in _keys_to_clear_nueva:
                         if _k in st.session_state:
