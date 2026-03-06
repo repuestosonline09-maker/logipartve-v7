@@ -711,53 +711,71 @@ class DBManager:
     
     @staticmethod
     def delete_user(user_id: int) -> bool:
-        """Elimina un usuario y todos sus registros dependientes."""
+        """
+        Elimina un usuario y todos sus registros dependientes.
+        Usa SAVEPOINTs en PostgreSQL para que errores en tablas opcionales
+        no envenenen la transacción principal.
+        """
+        conn = None
+        cursor = None
         try:
             conn = DBManager.get_connection()
             cursor = conn.cursor()
-            ph = '%s' if DBManager.USE_POSTGRES else '?'
+            is_postgres = DBManager.USE_POSTGRES
+            ph = '%s' if is_postgres else '?'
+
+            def _safe_exec(sql, params=()):
+                """Ejecuta SQL usando SAVEPOINT en Postgres para aislar errores."""
+                if is_postgres:
+                    try:
+                        cursor.execute("SAVEPOINT sp_del_user")
+                        cursor.execute(sql, params)
+                        cursor.execute("RELEASE SAVEPOINT sp_del_user")
+                    except Exception as _e:
+                        cursor.execute("ROLLBACK TO SAVEPOINT sp_del_user")
+                        print(f"[delete_user] SAVEPOINT rollback: {_e}")
+                else:
+                    try:
+                        cursor.execute(sql, params)
+                    except Exception as _e:
+                        print(f"[delete_user] SQLite skip: {_e}")
 
             # 1. Obtener IDs de cotizaciones del usuario
             cursor.execute(f"SELECT id FROM quotes WHERE analyst_id = {ph}", (user_id,))
             rows = cursor.fetchall()
             quote_ids = [row['id'] if isinstance(row, dict) else row[0] for row in rows]
 
-            # 2. Eliminar registros dependientes de cada cotización (ON DELETE CASCADE puede no estar activo)
+            # 2. Eliminar registros dependientes de cada cotización
             if quote_ids:
                 placeholders = ','.join([ph] * len(quote_ids))
-                for tbl in ('quote_notifications', 'quote_history', 'quote_items', 'quote_attachments', 'quote_comments'):
-                    try:
-                        cursor.execute(f"DELETE FROM {tbl} WHERE quote_id IN ({placeholders})", tuple(quote_ids))
-                    except Exception:
-                        pass  # tabla puede no existir
+                for tbl in ('quote_notifications', 'quote_history', 'quote_items',
+                            'quote_attachments', 'quote_comments'):
+                    _safe_exec(
+                        f"DELETE FROM {tbl} WHERE quote_id IN ({placeholders})",
+                        tuple(quote_ids)
+                    )
 
             # 3. Eliminar las cotizaciones del usuario
             cursor.execute(f"DELETE FROM quotes WHERE analyst_id = {ph}", (user_id,))
 
             # 4. Limpiar referencias en tablas que usan user_id
-            for tbl_col in [
+            for tbl, col in [
                 ('activity_logs', 'user_id'),
                 ('password_reset_tokens', 'user_id'),
                 ('password_history', 'user_id'),
             ]:
-                try:
-                    cursor.execute(f"DELETE FROM {tbl_col[0]} WHERE {tbl_col[1]} = {ph}", (user_id,))
-                except Exception:
-                    pass
+                _safe_exec(f"DELETE FROM {tbl} WHERE {col} = {ph}", (user_id,))
 
-            # 5. Limpiar referencias updated_by / edited_by / created_by (poner NULL en lugar de borrar)
-            for tbl_col in [
+            # 5. Poner NULL en referencias updated_by / edited_by / created_by
+            for tbl, col in [
                 ('system_config', 'updated_by'),
                 ('freight_rates', 'updated_by'),
                 ('quote_history', 'edited_by'),
                 ('quote_notifications', 'created_by'),
             ]:
-                try:
-                    cursor.execute(f"UPDATE {tbl_col[0]} SET {tbl_col[1]} = NULL WHERE {tbl_col[1]} = {ph}", (user_id,))
-                except Exception:
-                    pass
+                _safe_exec(f"UPDATE {tbl} SET {col} = NULL WHERE {col} = {ph}", (user_id,))
 
-            # 6. Eliminar el usuario
+            # 6. Eliminar el usuario principal
             cursor.execute(f"DELETE FROM users WHERE id = {ph}", (user_id,))
 
             conn.commit()
@@ -766,6 +784,11 @@ class DBManager:
             return True
         except Exception as e:
             print(f"[delete_user] ERROR DETALLADO: {type(e).__name__}: {e}")
+            try:
+                if conn:
+                    conn.rollback()
+            except Exception:
+                pass
             return False
     
     # ==================== ELIMINAR COTIZACIÓN ====================
