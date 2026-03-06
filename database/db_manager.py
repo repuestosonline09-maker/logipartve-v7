@@ -768,6 +768,59 @@ class DBManager:
             print(f"[delete_user] ERROR DETALLADO: {type(e).__name__}: {e}")
             return False
     
+    # ==================== ELIMINAR COTIZACIÓN ====================
+
+    @staticmethod
+    def delete_quote(quote_id: int) -> bool:
+        """
+        Elimina una cotización y todos sus registros dependientes.
+
+        Orden de eliminación:
+            1. Tablas dependientes (quote_items, quote_history, quote_notifications,
+               quote_attachments, quote_comments)
+            2. La cotización principal (quotes)
+
+        Args:
+            quote_id: ID de la cotización a eliminar
+
+        Returns:
+            True si se eliminó exitosamente, False en caso de error
+        """
+        try:
+            conn = DBManager.get_connection()
+            cursor = conn.cursor()
+            ph = '%s' if DBManager.USE_POSTGRES else '?'
+
+            # 1. Eliminar registros dependientes (ON DELETE CASCADE puede no estar activo)
+            for tabla in ('quote_notifications', 'quote_history', 'quote_items',
+                          'quote_attachments', 'quote_comments'):
+                try:
+                    cursor.execute(
+                        f"DELETE FROM {tabla} WHERE quote_id = {ph}",
+                        (quote_id,)
+                    )
+                except Exception:
+                    pass  # La tabla puede no existir en todas las versiones del esquema
+
+            # 2. Eliminar la cotización principal
+            cursor.execute(
+                f"DELETE FROM quotes WHERE id = {ph}",
+                (quote_id,)
+            )
+
+            conn.commit()
+            cursor.close()
+            conn.close()
+
+            print(f"✅ Cotización {quote_id} eliminada correctamente")
+            return True
+
+        except Exception as e:
+            print(f"[delete_quote] ERROR: {type(e).__name__}: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
     # ==================== MÉTODOS DE CONFIGURACIÓN ====================
     
     @staticmethod
