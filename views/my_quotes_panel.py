@@ -219,6 +219,10 @@ def render_my_quotes_panel():
     st.title("📋 MIS COTIZACIONES")
     st.markdown("---")
 
+    # ── MENSAJE DE ÉXITO PERSISTENTE (se muestra tras eliminar o actualizar) ──────────
+    if st.session_state.get('mq_delete_success_msg'):
+        st.success(st.session_state.pop('mq_delete_success_msg'))
+
     # ── BLOQUE 1: FILTROS ─────────────────────────────────────────────────
     st.subheader("🔍 Filtros y Búsqueda")
 
@@ -805,12 +809,20 @@ def _show_delete_confirmation(quote_id: int):
             if st.button("✅ SÍ, ELIMINAR", use_container_width=True,
                          type="primary", key="mq_confirm_del"):
                 try:
-                    DBManager.delete_quote(quote_id)
-                    st.success("✅ Cotización eliminada exitosamente")
+                    resultado = DBManager.delete_quote(quote_id)
+                    if resultado:
+                        # Guardar mensaje de éxito en session_state para mostrarlo
+                        # DESPUÉS del rerun (antes del rerun no se ve)
+                        st.session_state['mq_delete_success_msg'] = (
+                            f"✅ Cotización #{quote.get('quote_number', quote_id)} "
+                            f"eliminada exitosamente."
+                        )
+                        _limpiar_todo()
+                        st.rerun()
+                    else:
+                        st.error("❌ No se pudo eliminar la cotización. Intente nuevamente.")
                 except Exception as e:
                     st.error(f"❌ Error al eliminar: {e}")
-                _limpiar_todo()
-                st.rerun()
         with col2:
             if st.button("❌ CANCELAR", use_container_width=True,
                          key="mq_cancel_del"):
