@@ -482,6 +482,56 @@ class DBManager:
         except Exception as e:
             print(f'⚠️ Migración email_config: {e}')
 
+        # ── Migración: Agregar ON DELETE CASCADE a quotes.analyst_id ──
+        # Esto permite eliminar usuarios sin violar FK constraints
+        try:
+            if is_postgres:
+                # Verificar si ya existe la constraint con CASCADE
+                cursor.execute("""
+                    SELECT rc.delete_rule
+                    FROM information_schema.referential_constraints rc
+                    JOIN information_schema.table_constraints tc
+                        ON rc.constraint_name = tc.constraint_name
+                    WHERE tc.table_name = 'quotes'
+                      AND rc.constraint_name LIKE '%analyst_id%'
+                """)
+                row = cursor.fetchone()
+                delete_rule = row['delete_rule'] if row else None
+
+                if delete_rule != 'CASCADE':
+                    # Buscar el nombre exacto de la constraint
+                    cursor.execute("""
+                        SELECT tc.constraint_name
+                        FROM information_schema.table_constraints tc
+                        JOIN information_schema.key_column_usage kcu
+                            ON tc.constraint_name = kcu.constraint_name
+                        WHERE tc.table_name = 'quotes'
+                          AND tc.constraint_type = 'FOREIGN KEY'
+                          AND kcu.column_name = 'analyst_id'
+                    """)
+                    fk_row = cursor.fetchone()
+                    if fk_row:
+                        fk_name = fk_row['constraint_name']
+                        cursor.execute(f"ALTER TABLE quotes DROP CONSTRAINT {fk_name}")
+                        print(f"[migration] FK '{fk_name}' eliminada")
+
+                    cursor.execute("""
+                        ALTER TABLE quotes
+                        ADD CONSTRAINT quotes_analyst_id_fkey
+                        FOREIGN KEY (analyst_id) REFERENCES users(id)
+                        ON DELETE CASCADE
+                    """)
+                    conn.commit()
+                    print('✅ Migración: FK quotes.analyst_id ahora tiene ON DELETE CASCADE')
+                else:
+                    print('✅ Migración: FK quotes.analyst_id ya tiene ON DELETE CASCADE')
+        except Exception as e:
+            print(f'⚠️ Migración FK CASCADE en quotes: {e}')
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+
         # Crear usuario admin por defecto si no existe
         cursor.execute("SELECT COUNT(*) FROM users WHERE username = 'admin'")
         result = cursor.fetchone()
@@ -765,8 +815,9 @@ class DBManager:
     def delete_user(user_id: int) -> bool:
         """
         Elimina un usuario y todos sus registros dependientes.
-        Estrategia definitiva: deshabilitar FKs temporalmente en PostgreSQL
-        usando session_replication_role, luego eliminar en cascada manual.
+        Estrategia: eliminar manualmente quote_items primero (CASCADE no siempre
+        aplica a tablas anidadas), luego quotes (ON DELETE CASCADE en analyst_id
+        se encarga si existe), y finalmente el usuario.
         """
         conn = None
         try:
@@ -775,18 +826,15 @@ class DBManager:
             ph = '%s' if is_postgres else '?'
             cursor = conn.cursor()
 
-            if is_postgres:
-                # Deshabilitar verificación de FK para esta sesión
-                # Esto permite eliminar en cualquier orden sin violar restricciones
-                cursor.execute("SET session_replication_role = 'replica'")
-
             # Paso 1: Obtener IDs de cotizaciones del usuario
             cursor.execute(f"SELECT id FROM quotes WHERE analyst_id = {ph}", (user_id,))
             rows = cursor.fetchall()
             quote_ids = [row['id'] if isinstance(row, dict) else row[0] for row in rows]
-            print(f"[delete_user] Usuario {user_id} - cotizaciones encontradas: {len(quote_ids)}")
+            print(f"[delete_user] Usuario {user_id} - cotizaciones: {len(quote_ids)}")
 
-            # Paso 2: Eliminar todos los registros dependientes de las cotizaciones
+            # Paso 2: Eliminar ítems y dependientes de cada cotización
+            # (necesario porque quote_items.quote_id tiene ON DELETE CASCADE,
+            #  pero lo hacemos explícito para mayor seguridad)
             if quote_ids:
                 placeholders = ','.join([ph] * len(quote_ids))
                 for tbl in ('quote_items', 'quote_history', 'quote_notifications',
@@ -796,15 +844,17 @@ class DBManager:
                             f"DELETE FROM {tbl} WHERE quote_id IN ({placeholders})",
                             tuple(quote_ids)
                         )
-                        print(f"[delete_user] {tbl}: {cursor.rowcount} filas eliminadas")
+                        print(f"[delete_user] {tbl}: {cursor.rowcount} filas")
                     except Exception as _e:
-                        print(f"[delete_user] {tbl} no existe o error: {_e}")
+                        print(f"[delete_user] {tbl} skip: {_e}")
 
-            # Paso 3: Eliminar las cotizaciones del usuario
+            # Paso 3: Eliminar las cotizaciones
+            # Con ON DELETE CASCADE en analyst_id, esto también se haría automáticamente
+            # al borrar el usuario, pero lo hacemos explícito por compatibilidad
             cursor.execute(f"DELETE FROM quotes WHERE analyst_id = {ph}", (user_id,))
-            print(f"[delete_user] quotes eliminadas: {cursor.rowcount}")
+            print(f"[delete_user] quotes: {cursor.rowcount} filas")
 
-            # Paso 4: Eliminar registros del usuario en tablas opcionales
+            # Paso 4: Limpiar tablas opcionales del usuario
             for tbl, col in [
                 ('activity_logs',         'user_id'),
                 ('password_reset_tokens', 'user_id'),
@@ -812,40 +862,23 @@ class DBManager:
             ]:
                 try:
                     cursor.execute(f"DELETE FROM {tbl} WHERE {col} = {ph}", (user_id,))
-                    print(f"[delete_user] {tbl}: {cursor.rowcount} filas eliminadas")
                 except Exception as _e:
-                    print(f"[delete_user] {tbl} no existe o error: {_e}")
+                    print(f"[delete_user] {tbl} skip: {_e}")
 
-            # Paso 5: Poner NULL en referencias opcionales
-            for tbl, col in [
-                ('system_config',       'updated_by'),
-                ('freight_rates',       'updated_by'),
-            ]:
-                try:
-                    cursor.execute(
-                        f"UPDATE {tbl} SET {col} = NULL WHERE {col} = {ph}", (user_id,)
-                    )
-                except Exception as _e:
-                    print(f"[delete_user] UPDATE {tbl}.{col} skip: {_e}")
-
-            # Paso 6: Eliminar el usuario principal
+            # Paso 5: Eliminar el usuario
             cursor.execute(f"DELETE FROM users WHERE id = {ph}", (user_id,))
             deleted_user = cursor.rowcount
-            print(f"[delete_user] users eliminados: {deleted_user}")
-
-            if is_postgres:
-                # Restaurar verificación de FK
-                cursor.execute("SET session_replication_role = 'origin'")
+            print(f"[delete_user] users: {deleted_user} filas")
 
             conn.commit()
             cursor.close()
             conn.close()
 
             if deleted_user > 0:
-                print(f"[delete_user] ✅ Usuario {user_id} eliminado correctamente")
+                print(f"[delete_user] ✅ Usuario {user_id} eliminado")
                 return True
             else:
-                print(f"[delete_user] ⚠️ Usuario {user_id} no encontrado en BD")
+                print(f"[delete_user] ⚠️ Usuario {user_id} no encontrado")
                 return False
 
         except Exception as e:
@@ -854,11 +887,6 @@ class DBManager:
             traceback.print_exc()
             try:
                 if conn:
-                    if is_postgres:
-                        try:
-                            conn.cursor().execute("SET session_replication_role = 'origin'")
-                        except Exception:
-                            pass
                     conn.rollback()
             except Exception:
                 pass
