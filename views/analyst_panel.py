@@ -1197,160 +1197,167 @@ def render_analyst_panel():
                 st.rerun()
     
     with btn_action_col2:
-        # Cambiar texto del botón según si se está editando la cotización completa
-        if editing_mode:
-            final_button_text = "💾 GUARDAR CAMBIOS"
-            final_button_key = "btn_guardar_cambios"
+        # Cuando el analista está editando un ítem individual (editing_item=True),
+        # el botón ACTUALIZAR ÍTEM ya guarda automáticamente en BD.
+        # En ese caso, ocultamos GUARDAR CAMBIOS para evitar redundancia y confusión.
+        if editing_item:
+            # Mostrar un placeholder informativo en lugar del botón
+            st.info("💡 Haz clic en **ACTUALIZAR ÍTEM** para guardar los cambios automáticamente.")
         else:
-            final_button_text = "📄 GENERAR COTIZACIÓN"
-            final_button_key = "btn_generar_cotizacion"
-        
-        # En modo edición el botón es "secondary" (gris) para diferenciarlo visualmente
-        # del flujo normal de crear cotización (rojo/primary)
-        final_button_type = "secondary" if editing_mode else "primary"
-        if st.button(final_button_text, use_container_width=True, type=final_button_type, key=final_button_key):
-            # Validar datos del cliente
-            if not cliente_nombre:
-                st.error("⚠️ Ingrese el nombre del cliente")
-            elif not cliente_vehiculo:
-                st.error("⚠️ Ingrese el vehículo")
-            elif not item_descripcion and len(st.session_state.cotizacion_items) == 0:
-                st.error("⚠️ Agregue al menos un ítem")
+            # Cambiar texto del botón según si se está editando la cotización completa
+            if editing_mode:
+                final_button_text = "💾 GUARDAR CAMBIOS"
+                final_button_key = "btn_guardar_cambios"
             else:
-                # Si hay un ítem en el formulario actual, agregarlo
-                # ── Determinar si el formulario tiene un ítem pendiente ──────────────
-                # En modo edición de cotización (editing_mode), si el formulario
-                # tiene datos Y hay exactamente 1 ítem cargado que corresponde al
-                # ítem original, NO se agrega como nuevo — se reemplaza en su posición.
-                _formulario_tiene_item = bool(item_descripcion and costo_fob > 0)
-                _editing_item_idx_activo = st.session_state.get('editing_item_index', None)
-
-                if _formulario_tiene_item:
-                    # Obtener links de forma segura - variable independiente
-                    _lnks2 = st.session_state.get('item_links', [])
-                    if not isinstance(_lnks2, list):
-                        _lnks2 = []
-                    # Auto-capturar link pendiente en el campo de texto
-                    _pending_link_key2 = f"new_link_input_{reset_key}_{st.session_state.get('link_counter', 0)}"
-                    _pending_link2 = st.session_state.get(_pending_link_key2, '').strip()
-                    if _pending_link2 and _pending_link2 != 'https://':
-                        _existing_urls2 = [_link_url(l) for l in _lnks2]
-                        if _pending_link2 not in _existing_urls2:
-                            _pending_qty_key2 = f"new_link_qty_{reset_key}_{st.session_state.get('link_counter', 0)}"
-                            _pending_qty2 = st.session_state.get(_pending_qty_key2, 1)
-                            _lnks2 = list(_lnks2) + [{'url': _pending_link2, 'qty': _pending_qty2}]
-                    _lnks2_json = json.dumps(_lnks2)
-                    
-                    nuevo_item = {
-                        "descripcion": item_descripcion,
-                        "parte": item_parte,
-                        "marca": item_marca,
-                        "garantia": item_garantia,
-                        "cantidad": item_cantidad,
-                        "origen": item_origen,
-                        "envio_tipo": item_envio_tipo,
-                        "tiempo_entrega": item_tiempo,
-                        "fabricacion": item_fabricacion,
-                        "link": _lnks2_json,
-                        "costo_fob": costo_fob,
-                        "costo_handling": costo_handling,
-                        "costo_manejo": costo_manejo,
-                        "costo_impuesto": costo_impuesto_total,
-                        "impuesto_porcentaje": impuesto_porcentaje,
-                        "factor_utilidad": factor_utilidad,
-                        "utilidad_valor": utilidad_total,
-                        "costo_envio": costo_envio,
-                        "costo_tax": costo_tax_total,
-                        "tax_porcentaje": tax_porcentaje,
-                        "diferencial_valor": diferencial_total,
-                        "diferencial_porcentaje": diferencial_porcentaje,
-                        "aplicar_iva": aplicar_iva == "SÍ",
-                        "iva_porcentaje": iva_porcentaje,
-                        "iva_valor": iva_total,
-                        "precio_usd": precio_usd_total,
-                        "precio_bs": precio_bs_total,
-                        "costo_unitario": precio_usd,
-                        "costo_total": costo_total_usd,
-                        "fob_total": fob_total,
-                        "costo_total_bs": costo_total_bs
-                    }
-                    # ── Inserción inteligente: actualizar o agregar según contexto ──
-                    if not isinstance(st.session_state.cotizacion_items, list):
-                        st.session_state.cotizacion_items = []
-
-                    if _editing_item_idx_activo is not None:
-                        # Estaba editando un ítem específico → reemplazarlo en su posición
-                        st.session_state.cotizacion_items[_editing_item_idx_activo] = nuevo_item
-                        if 'editing_item_index' in st.session_state:
-                            del st.session_state['editing_item_index']
-                        if 'editing_item_data' in st.session_state:
-                            del st.session_state['editing_item_data']
-                    elif editing_mode:
-                        # Modo edición de cotización completa (no de ítem individual):
-                        # El formulario tiene el ítem original cargado.
-                        # Si la descripción del formulario coincide con alguno ya en la
-                        # lista, reemplazarlo. Si no coincide, es un ítem genuinamente nuevo.
-                        _idx_coincide = None
-                        for _ci, _existing in enumerate(st.session_state.cotizacion_items):
-                            _desc_existing = _existing.get('descripcion', '') or _existing.get('description', '')
-                            _parte_existing = _existing.get('parte', '') or _existing.get('part_number', '')
-                            if _desc_existing == item_descripcion and _parte_existing == item_parte:
-                                _idx_coincide = _ci
-                                break
-                        if _idx_coincide is not None:
-                            # Reemplazar el ítem coincidente con los datos actualizados
-                            st.session_state.cotizacion_items[_idx_coincide] = nuevo_item
-                        else:
-                            # Es un ítem genuinamente nuevo — agregarlo
-                            st.session_state.cotizacion_items.append(nuevo_item)
-                    else:
-                        # Modo creación normal → siempre agregar
-                        st.session_state.cotizacion_items.append(nuevo_item)
-
-                # Guardar datos del cliente (solo campos con datos)
-                st.session_state.cliente_datos = {
-                    "nombre": cliente_nombre,
-                    "telefono": cliente_telefono,
-                    "email": cliente_email,
-                    "vehiculo": cliente_vehiculo,
-                    "cilindrada": cliente_cilindrada,
-                    "ano": cliente_ano,
-                    "vin": cliente_vin,
-                    "direccion": cliente_direccion,
-                    "ci_rif": cliente_ci_rif
-                }
-                
-                # Si estamos en modo edición, actualizar en BD
-                if editing_mode:
-                    editing_quote_id = st.session_state.get('editing_quote_id')
-                    if editing_quote_id:
-                        # Actualizar cotización completa en BD
-                        _username_save = username or st.session_state.get('username', 'admin')
-                        success = DBManager.update_quote_complete(
-                            quote_id=editing_quote_id,
-                            cliente_datos=st.session_state.cliente_datos,
-                            items=st.session_state.cotizacion_items,
-                            username=_username_save
-                        )
-                        
-                        if success:
-                            st.success("✅ Cotización actualizada correctamente en la base de datos")
-                            # Limpiar estado de edición
-                            if 'editing_quote_id' in st.session_state:
-                                del st.session_state.editing_quote_id
-                            if 'editing_quote_number' in st.session_state:
-                                del st.session_state.editing_quote_number
-                            # Esperar 2 segundos y redirigir a Mis Cotizaciones
-                            import time
-                            time.sleep(2)
-                            st.session_state.selected_panel = "Mis Cotizaciones"
-                            st.rerun()
-                        else:
-                            st.error("❌ Error al actualizar la cotización en la base de datos")
+                final_button_text = "📄 GENERAR COTIZACIÓN"
+                final_button_key = "btn_generar_cotizacion"
+            
+            # En modo edición el botón es "secondary" (gris) para diferenciarlo visualmente
+            # del flujo normal de crear cotización (rojo/primary)
+            final_button_type = "secondary" if editing_mode else "primary"
+            if st.button(final_button_text, use_container_width=True, type=final_button_type, key=final_button_key):
+                # Validar datos del cliente
+                if not cliente_nombre:
+                    st.error("⚠️ Ingrese el nombre del cliente")
+                elif not cliente_vehiculo:
+                    st.error("⚠️ Ingrese el vehículo")
+                elif not item_descripcion and len(st.session_state.cotizacion_items) == 0:
+                    st.error("⚠️ Agregue al menos un ítem")
                 else:
-                    # Modo creación normal
-                    st.session_state.mostrar_cotizacion = True
-                    st.rerun()
+                    # Si hay un ítem en el formulario actual, agregarlo
+                    # ── Determinar si el formulario tiene un ítem pendiente ──────────
+                    # En modo edición de cotización (editing_mode), si el formulario
+                    # tiene datos Y hay exactamente 1 ítem cargado que corresponde al
+                    # ítem original, NO se agrega como nuevo — se reemplaza en su posición.
+                    _formulario_tiene_item = bool(item_descripcion and costo_fob > 0)
+                    _editing_item_idx_activo = st.session_state.get('editing_item_index', None)
+
+                    if _formulario_tiene_item:
+                        # Obtener links de forma segura - variable independiente
+                        _lnks2 = st.session_state.get('item_links', [])
+                        if not isinstance(_lnks2, list):
+                            _lnks2 = []
+                        # Auto-capturar link pendiente en el campo de texto
+                        _pending_link_key2 = f"new_link_input_{reset_key}_{st.session_state.get('link_counter', 0)}"
+                        _pending_link2 = st.session_state.get(_pending_link_key2, '').strip()
+                        if _pending_link2 and _pending_link2 != 'https://':
+                            _existing_urls2 = [_link_url(l) for l in _lnks2]
+                            if _pending_link2 not in _existing_urls2:
+                                _pending_qty_key2 = f"new_link_qty_{reset_key}_{st.session_state.get('link_counter', 0)}"
+                                _pending_qty2 = st.session_state.get(_pending_qty_key2, 1)
+                                _lnks2 = list(_lnks2) + [{'url': _pending_link2, 'qty': _pending_qty2}]
+                        _lnks2_json = json.dumps(_lnks2)
+                        
+                        nuevo_item = {
+                            "descripcion": item_descripcion,
+                            "parte": item_parte,
+                            "marca": item_marca,
+                            "garantia": item_garantia,
+                            "cantidad": item_cantidad,
+                            "origen": item_origen,
+                            "envio_tipo": item_envio_tipo,
+                            "tiempo_entrega": item_tiempo,
+                            "fabricacion": item_fabricacion,
+                            "link": _lnks2_json,
+                            "costo_fob": costo_fob,
+                            "costo_handling": costo_handling,
+                            "costo_manejo": costo_manejo,
+                            "costo_impuesto": costo_impuesto_total,
+                            "impuesto_porcentaje": impuesto_porcentaje,
+                            "factor_utilidad": factor_utilidad,
+                            "utilidad_valor": utilidad_total,
+                            "costo_envio": costo_envio,
+                            "costo_tax": costo_tax_total,
+                            "tax_porcentaje": tax_porcentaje,
+                            "diferencial_valor": diferencial_total,
+                            "diferencial_porcentaje": diferencial_porcentaje,
+                            "aplicar_iva": aplicar_iva == "SÍ",
+                            "iva_porcentaje": iva_porcentaje,
+                            "iva_valor": iva_total,
+                            "precio_usd": precio_usd_total,
+                            "precio_bs": precio_bs_total,
+                            "costo_unitario": precio_usd,
+                            "costo_total": costo_total_usd,
+                            "fob_total": fob_total,
+                            "costo_total_bs": costo_total_bs
+                        }
+                        # ── Inserción inteligente: actualizar o agregar según contexto ──
+                        if not isinstance(st.session_state.cotizacion_items, list):
+                            st.session_state.cotizacion_items = []
+
+                        if _editing_item_idx_activo is not None:
+                            # Estaba editando un ítem específico → reemplazarlo en su posición
+                            st.session_state.cotizacion_items[_editing_item_idx_activo] = nuevo_item
+                            if 'editing_item_index' in st.session_state:
+                                del st.session_state['editing_item_index']
+                            if 'editing_item_data' in st.session_state:
+                                del st.session_state['editing_item_data']
+                        elif editing_mode:
+                            # Modo edición de cotización completa (no de ítem individual):
+                            # El formulario tiene el ítem original cargado.
+                            # Si la descripción del formulario coincide con alguno ya en la
+                            # lista, reemplazarlo. Si no coincide, es un ítem genuinamente nuevo.
+                            _idx_coincide = None
+                            for _ci, _existing in enumerate(st.session_state.cotizacion_items):
+                                _desc_existing = _existing.get('descripcion', '') or _existing.get('description', '')
+                                _parte_existing = _existing.get('parte', '') or _existing.get('part_number', '')
+                                if _desc_existing == item_descripcion and _parte_existing == item_parte:
+                                    _idx_coincide = _ci
+                                    break
+                            if _idx_coincide is not None:
+                                # Reemplazar el ítem coincidente con los datos actualizados
+                                st.session_state.cotizacion_items[_idx_coincide] = nuevo_item
+                            else:
+                                # Es un ítem genuinamente nuevo — agregarlo
+                                st.session_state.cotizacion_items.append(nuevo_item)
+                        else:
+                            # Modo creación normal → siempre agregar
+                            st.session_state.cotizacion_items.append(nuevo_item)
+
+                    # Guardar datos del cliente (solo campos con datos)
+                    st.session_state.cliente_datos = {
+                        "nombre": cliente_nombre,
+                        "telefono": cliente_telefono,
+                        "email": cliente_email,
+                        "vehiculo": cliente_vehiculo,
+                        "cilindrada": cliente_cilindrada,
+                        "ano": cliente_ano,
+                        "vin": cliente_vin,
+                        "direccion": cliente_direccion,
+                        "ci_rif": cliente_ci_rif
+                    }
+                    
+                    # Si estamos en modo edición, actualizar en BD
+                    if editing_mode:
+                        editing_quote_id = st.session_state.get('editing_quote_id')
+                        if editing_quote_id:
+                            # Actualizar cotización completa en BD
+                            _username_save = username or st.session_state.get('username', 'admin')
+                            success = DBManager.update_quote_complete(
+                                quote_id=editing_quote_id,
+                                cliente_datos=st.session_state.cliente_datos,
+                                items=st.session_state.cotizacion_items,
+                                username=_username_save
+                            )
+                            
+                            if success:
+                                st.success("✅ Cotización actualizada correctamente en la base de datos")
+                                # Limpiar estado de edición
+                                if 'editing_quote_id' in st.session_state:
+                                    del st.session_state.editing_quote_id
+                                if 'editing_quote_number' in st.session_state:
+                                    del st.session_state.editing_quote_number
+                                # Esperar 2 segundos y redirigir a Mis Cotizaciones
+                                import time
+                                time.sleep(2)
+                                st.session_state.selected_panel = "Mis Cotizaciones"
+                                st.rerun()
+                            else:
+                                st.error("❌ Error al actualizar la cotización en la base de datos")
+                    else:
+                        # Modo creación normal
+                        st.session_state.mostrar_cotizacion = True
+                        st.rerun()
     
     with btn_action_col3:
         if st.button("🗑️ LIMPIAR TODO", use_container_width=True, key="btn_limpiar_todo"):
