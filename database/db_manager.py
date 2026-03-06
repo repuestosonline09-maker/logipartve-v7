@@ -371,6 +371,58 @@ class DBManager:
         except Exception as e:
             print(f"⚠️ Migración de columnas en 'quote_items': {e}")
         
+        # ── Migración: Columnas financieras en quote_items (IVA, utilidad, diferencial) ──
+        try:
+            if is_postgres:
+                cursor.execute("""
+                    SELECT column_name
+                    FROM information_schema.columns
+                    WHERE table_name='quote_items'
+                    AND column_name IN (
+                        'aplicar_iva', 'iva_porcentaje', 'iva_valor',
+                        'utilidad_valor', 'diferencial_porcentaje', 'diferencial_valor',
+                        'fob_total', 'precio_usd', 'precio_bs'
+                    )
+                """)
+                existing_iva_cols = [row['column_name'] for row in cursor.fetchall()]
+                new_cols = [
+                    ('aplicar_iva',           'BOOLEAN DEFAULT FALSE'),
+                    ('iva_porcentaje',         'REAL DEFAULT 0'),
+                    ('iva_valor',              'REAL DEFAULT 0'),
+                    ('utilidad_valor',         'REAL DEFAULT 0'),
+                    ('diferencial_porcentaje', 'REAL DEFAULT 0'),
+                    ('diferencial_valor',      'REAL DEFAULT 0'),
+                    ('fob_total',              'REAL DEFAULT 0'),
+                    ('precio_usd',             'REAL DEFAULT 0'),
+                    ('precio_bs',              'REAL DEFAULT 0'),
+                ]
+                for col, col_type in new_cols:
+                    if col not in existing_iva_cols:
+                        cursor.execute(f"ALTER TABLE quote_items ADD COLUMN {col} {col_type}")
+                conn.commit()
+                print('✅ Migración: Columnas IVA/financieras agregadas a quote_items')
+            else:
+                cursor.execute("PRAGMA table_info(quote_items)")
+                existing_iva_cols = [row[1] for row in cursor.fetchall()]
+                new_cols = [
+                    ('aplicar_iva',           'INTEGER DEFAULT 0'),
+                    ('iva_porcentaje',         'REAL DEFAULT 0'),
+                    ('iva_valor',              'REAL DEFAULT 0'),
+                    ('utilidad_valor',         'REAL DEFAULT 0'),
+                    ('diferencial_porcentaje', 'REAL DEFAULT 0'),
+                    ('diferencial_valor',      'REAL DEFAULT 0'),
+                    ('fob_total',              'REAL DEFAULT 0'),
+                    ('precio_usd',             'REAL DEFAULT 0'),
+                    ('precio_bs',              'REAL DEFAULT 0'),
+                ]
+                for col, col_type in new_cols:
+                    if col not in existing_iva_cols:
+                        cursor.execute(f"ALTER TABLE quote_items ADD COLUMN {col} {col_type}")
+                conn.commit()
+                print('✅ Migración: Columnas IVA/financieras agregadas a quote_items')
+        except Exception as e:
+            print(f'⚠️ Migración IVA en quote_items: {e}')
+
         # ── Migración: Tabla email_config (Fase 5 — Envío de Órdenes Aprobadas) ──
         try:
             cursor.execute("""
@@ -2176,29 +2228,50 @@ class DBManager:
             # Insertar nuevos ítems
             for item in items:
                 # Obtener costos internos
-                costo_fob = item.get('costo_fob', 0.0)
-                costo_handling = item.get('costo_handling', 0.0)
-                costo_manejo = item.get('costo_manejo', 0.0)
-                costo_envio = item.get('costo_envio', 0.0)
+                costo_fob           = item.get('costo_fob', 0.0)
+                costo_handling      = item.get('costo_handling', 0.0)
+                costo_manejo        = item.get('costo_manejo', 0.0)
+                costo_envio         = item.get('costo_envio', 0.0)
                 impuesto_porcentaje = item.get('impuesto_porcentaje', 0.0)
-                factor_utilidad = item.get('factor_utilidad', 1.0)
-                
+                factor_utilidad     = item.get('factor_utilidad', 1.0)
+
+                # Campos financieros derivados (IVA, utilidad, diferencial)
+                aplicar_iva           = bool(item.get('aplicar_iva', False))
+                iva_porcentaje        = float(item.get('iva_porcentaje', 16.0))
+                utilidad_valor        = float(item.get('utilidad_valor', 0.0))
+                diferencial_porcentaje = float(item.get('diferencial_porcentaje', 0.0))
+                diferencial_valor     = float(item.get('diferencial_valor', 0.0))
+                fob_total             = float(item.get('fob_total', 0.0))
+                precio_usd_item       = float(item.get('precio_usd', 0.0) or item.get('total') or item.get('total_cost', 0.0))
+                precio_bs_item        = float(item.get('precio_bs', 0.0))
+
+                # Calcular iva_valor si no viene calculado pero aplicar_iva=True
+                iva_valor = float(item.get('iva_valor', 0.0))
+                if aplicar_iva and iva_valor == 0.0 and precio_usd_item > 0:
+                    iva_valor = round(precio_usd_item * (iva_porcentaje / 100), 2)
+
                 cursor.execute("""
                     INSERT INTO quote_items (
                         quote_id, description, part_number, marca, garantia,
                         quantity, unit_cost, total_cost, envio_tipo, origen,
                         fabricacion, tiempo_entrega, page_url,
                         international_handling, national_handling, shipping_cost,
-                        tax_percentage, profit_factor
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        tax_percentage, profit_factor,
+                        aplicar_iva, iva_porcentaje, iva_valor,
+                        utilidad_valor, diferencial_porcentaje, diferencial_valor,
+                        fob_total, precio_usd, precio_bs
+                    ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 """ if is_postgres else """
                     INSERT INTO quote_items (
                         quote_id, description, part_number, marca, garantia,
                         quantity, unit_cost, total_cost, envio_tipo, origen,
                         fabricacion, tiempo_entrega, page_url,
                         international_handling, national_handling, shipping_cost,
-                        tax_percentage, profit_factor
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        tax_percentage, profit_factor,
+                        aplicar_iva, iva_porcentaje, iva_valor,
+                        utilidad_valor, diferencial_porcentaje, diferencial_valor,
+                        fob_total, precio_usd, precio_bs
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """, (
                     quote_id,
                     item.get('descripcion') or item.get('description', ''),
@@ -2207,7 +2280,7 @@ class DBManager:
                     item.get('garantia', ''),
                     item.get('cantidad') or item.get('quantity', 1),
                     costo_fob if costo_fob > 0 else (item.get('unit') or item.get('unit_cost', 0)),
-                    item.get('precio_usd', 0) or (item.get('total') or item.get('total_cost', 0)),
+                    precio_usd_item,
                     item.get('envio_tipo', ''),
                     item.get('origen', ''),
                     item.get('fabricacion', ''),
@@ -2217,7 +2290,16 @@ class DBManager:
                     costo_manejo,
                     costo_envio,
                     impuesto_porcentaje,
-                    factor_utilidad
+                    factor_utilidad,
+                    aplicar_iva,
+                    iva_porcentaje,
+                    iva_valor,
+                    utilidad_valor,
+                    diferencial_porcentaje,
+                    diferencial_valor,
+                    fob_total,
+                    precio_usd_item,
+                    precio_bs_item,
                 ))
             
             # Registrar cambio en el historial
@@ -2972,7 +3054,13 @@ class DBManager:
 
                 # IVA (solo si el ítem lo tiene activado)
                 if item.get('aplicar_iva', False):
-                    recalc_iva_total += item.get('iva_valor', 0)
+                    iva_val = item.get('iva_valor', 0.0)
+                    # Si iva_valor no está calculado, calcularlo desde precio_usd
+                    if not iva_val:
+                        precio_item = item.get('precio_usd', 0.0) or item.get('total', 0.0) or item.get('total_cost', 0.0)
+                        iva_pct     = item.get('iva_porcentaje', 16.0)
+                        iva_val     = round(float(precio_item) * (float(iva_pct) / 100), 2)
+                    recalc_iva_total += iva_val
 
                 # Abona Ya: costos base × (1 + diferencial%)
                 costos_base = (
