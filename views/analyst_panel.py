@@ -294,32 +294,69 @@ def render_analyst_panel():
             'vin': editing_quote_data.get('client_vin', '')
         }
         
-        # Cargar ítems con TODOS los campos
+        # Cargar ítems con TODOS los campos (incluyendo financieros y de IVA)
         items = editing_quote_data.get('items', [])
         st.session_state.cotizacion_items = []
         for item in items:
+            # Reconstruir campos financieros desde los costos guardados en BD
+            _costo_fob      = float(item.get('unit_cost', 0) or 0)
+            _costo_handling = float(item.get('international_handling', 0) or 0)
+            _costo_manejo   = float(item.get('national_handling', 0) or 0)
+            _costo_envio    = float(item.get('shipping_cost', 0) or 0)
+            _impuesto_pct   = float(item.get('tax_percentage', 0) or 0)
+            _factor_util    = float(item.get('profit_factor', 1.0) or 1.0)
+            _cantidad       = int(item.get('quantity', 1) or 1)
+            _total_cost     = float(item.get('total_cost', 0) or 0)
+
+            # Reconstruir valores derivados que el recalculador de totales necesita
+            _fob_total      = _costo_fob * _cantidad
+            _costo_impuesto = _fob_total * (_impuesto_pct / 100)
+            _utilidad_base  = _fob_total + _costo_handling + _costo_manejo + _costo_impuesto
+            _utilidad_valor = _utilidad_base * (_factor_util - 1.0)
+
+            # IVA: recuperar de los campos extendidos si existen en BD
+            _aplicar_iva    = bool(item.get('aplicar_iva', False))
+            _iva_porcentaje = float(item.get('iva_porcentaje', 16.0) or 16.0)
+            _iva_valor      = float(item.get('iva_valor', 0) or 0)
+            _precio_bs      = float(item.get('precio_bs', _total_cost) or _total_cost)
+            _precio_usd     = float(item.get('precio_usd', _total_cost) or _total_cost)
+
             st.session_state.cotizacion_items.append({
-                'descripcion': item.get('description', ''),
-                'parte': item.get('part_number', ''),
-                'marca': item.get('marca', ''),
-                'garantia': item.get('garantia', ''),
-                'cantidad': item.get('quantity', 1),
-                'origen': item.get('origen', ''),
-                'envio_tipo': item.get('envio_tipo', ''),
-                'tiempo_entrega': item.get('tiempo_entrega', ''),
-                'fabricacion': item.get('fabricacion', ''),
-                'link': item.get('page_url', ''),
-                'costo_fob': item.get('unit_cost', 0),
-                'costo_handling': item.get('international_handling', 0),
-                'costo_manejo': item.get('national_handling', 0),
-                'costo_envio': item.get('shipping_cost', 0),
-                'impuesto_porcentaje': item.get('tax_percentage', 0),
-                'factor_utilidad': item.get('profit_factor', 1.0),
-                'costo_unitario': item.get('unit_cost', 0),
-                'costo_total': item.get('total_cost', 0),
-                'costo_total_bs': item.get('total_cost', 0),  # Evita $0 en Dashboard al editar
-                'precio_usd': item.get('unit_cost', 0),
-                'precio_bs': item.get('total_cost', 0)
+                'descripcion':          item.get('description', ''),
+                'parte':                item.get('part_number', ''),
+                'marca':                item.get('marca', ''),
+                'garantia':             item.get('garantia', ''),
+                'cantidad':             _cantidad,
+                'origen':               item.get('origen', ''),
+                'envio_tipo':           item.get('envio_tipo', ''),
+                'tiempo_entrega':       item.get('tiempo_entrega', ''),
+                'fabricacion':          item.get('fabricacion', ''),
+                'link':                 item.get('page_url', ''),
+                # Costos base
+                'costo_fob':            _costo_fob,
+                'costo_handling':       _costo_handling,
+                'costo_manejo':         _costo_manejo,
+                'costo_envio':          _costo_envio,
+                'impuesto_porcentaje':  _impuesto_pct,
+                'factor_utilidad':      _factor_util,
+                # Campos derivados que usa el recalculador de totales
+                'fob_total':            _fob_total,
+                'costo_impuesto':       _costo_impuesto,
+                'utilidad_valor':       _utilidad_valor,
+                'diferencial_valor':    float(item.get('diferencial_valor', 0) or 0),
+                'diferencial_porcentaje': float(item.get('diferencial_porcentaje', 0) or 0),
+                'costo_tax':            float(item.get('costo_tax', 0) or 0),
+                # IVA — CAMPOS CRÍTICOS que antes no se cargaban
+                'aplicar_iva':          _aplicar_iva,
+                'iva_porcentaje':       _iva_porcentaje,
+                'iva_valor':            _iva_valor,
+                # Precios finales
+                'costo_unitario':       _costo_fob,
+                'costo_total':          _total_cost,
+                'costo_total_bs':       _precio_bs,
+                'precio_usd':           _precio_usd,
+                'precio_bs':            _precio_bs,
+                'precio_usd_total':     _precio_usd,
             })
         
         # Marcar como cargado
@@ -899,12 +936,18 @@ def render_analyst_panel():
     
     iva_col1, iva_col2 = st.columns(2)
     with iva_col1:
+        # Pre-cargar el radio con el valor del ítem que se está editando
+        # Si editing_item=True, usar el valor guardado en editing_item_data
+        # Si editing_mode=True (edición de cotización completa), usar el primer ítem
+        _iva_default_index = 0  # "NO" por defecto
+        if editing_item and editing_item_data.get('aplicar_iva', False):
+            _iva_default_index = 1  # "SÍ"
         aplicar_iva = st.radio(
             "¿Aplicar IVA a esta cotización?",
             options=["NO", "SÍ"],
-            index=0,
+            index=_iva_default_index,
             horizontal=True,
-            key="aplicar_iva"
+            key=f"aplicar_iva_{reset_key}"
         )
     
     st.markdown("---")
