@@ -765,77 +765,109 @@ class DBManager:
     def delete_user(user_id: int) -> bool:
         """
         Elimina un usuario y todos sus registros dependientes.
-        Usa SAVEPOINTs en PostgreSQL para que errores en tablas opcionales
-        no envenenen la transacción principal.
+        Estrategia: conexión con autocommit=False, eliminación en cascada manual
+        y uso de SAVEPOINTs para tablas opcionales.
         """
         conn = None
-        cursor = None
         try:
             conn = DBManager.get_connection()
-            cursor = conn.cursor()
             is_postgres = DBManager.USE_POSTGRES
             ph = '%s' if is_postgres else '?'
 
-            def _safe_exec(sql, params=()):
-                """Ejecuta SQL usando SAVEPOINT en Postgres para aislar errores."""
-                if is_postgres:
-                    try:
-                        cursor.execute("SAVEPOINT sp_del_user")
-                        cursor.execute(sql, params)
-                        cursor.execute("RELEASE SAVEPOINT sp_del_user")
-                    except Exception as _e:
-                        cursor.execute("ROLLBACK TO SAVEPOINT sp_del_user")
-                        print(f"[delete_user] SAVEPOINT rollback: {_e}")
-                else:
-                    try:
-                        cursor.execute(sql, params)
-                    except Exception as _e:
-                        print(f"[delete_user] SQLite skip: {_e}")
+            # Asegurar modo transacción explícito
+            if is_postgres:
+                conn.autocommit = False
 
-            # 1. Obtener IDs de cotizaciones del usuario
+            cursor = conn.cursor()
+
+            # ── Paso 1: Obtener IDs de cotizaciones del usuario ──
             cursor.execute(f"SELECT id FROM quotes WHERE analyst_id = {ph}", (user_id,))
             rows = cursor.fetchall()
             quote_ids = [row['id'] if isinstance(row, dict) else row[0] for row in rows]
+            print(f"[delete_user] Usuario {user_id} tiene {len(quote_ids)} cotizaciones: {quote_ids}")
 
-            # 2. Eliminar registros dependientes de cada cotización
+            # ── Paso 2: Eliminar ítems, historial y dependientes de cada cotización ──
             if quote_ids:
                 placeholders = ','.join([ph] * len(quote_ids))
-                for tbl in ('quote_notifications', 'quote_history', 'quote_items',
+                for tbl in ('quote_items', 'quote_history', 'quote_notifications',
                             'quote_attachments', 'quote_comments'):
-                    _safe_exec(
-                        f"DELETE FROM {tbl} WHERE quote_id IN ({placeholders})",
-                        tuple(quote_ids)
-                    )
+                    try:
+                        if is_postgres:
+                            cursor.execute("SAVEPOINT sp_dep")
+                        cursor.execute(
+                            f"DELETE FROM {tbl} WHERE quote_id IN ({placeholders})",
+                            tuple(quote_ids)
+                        )
+                        if is_postgres:
+                            cursor.execute("RELEASE SAVEPOINT sp_dep")
+                        print(f"[delete_user] Eliminado de {tbl}: OK")
+                    except Exception as _e:
+                        if is_postgres:
+                            cursor.execute("ROLLBACK TO SAVEPOINT sp_dep")
+                        print(f"[delete_user] Skip {tbl}: {_e}")
 
-            # 3. Eliminar las cotizaciones del usuario
+            # ── Paso 3: Eliminar cotizaciones del usuario ──
             cursor.execute(f"DELETE FROM quotes WHERE analyst_id = {ph}", (user_id,))
+            deleted_quotes = cursor.rowcount
+            print(f"[delete_user] Cotizaciones eliminadas: {deleted_quotes}")
 
-            # 4. Limpiar referencias en tablas que usan user_id
+            # ── Paso 4: Limpiar tablas opcionales con user_id ──
             for tbl, col in [
-                ('activity_logs', 'user_id'),
+                ('activity_logs',         'user_id'),
                 ('password_reset_tokens', 'user_id'),
-                ('password_history', 'user_id'),
+                ('password_history',      'user_id'),
             ]:
-                _safe_exec(f"DELETE FROM {tbl} WHERE {col} = {ph}", (user_id,))
+                try:
+                    if is_postgres:
+                        cursor.execute("SAVEPOINT sp_opt")
+                    cursor.execute(f"DELETE FROM {tbl} WHERE {col} = {ph}", (user_id,))
+                    if is_postgres:
+                        cursor.execute("RELEASE SAVEPOINT sp_opt")
+                except Exception as _e:
+                    if is_postgres:
+                        cursor.execute("ROLLBACK TO SAVEPOINT sp_opt")
+                    print(f"[delete_user] Skip {tbl}: {_e}")
 
-            # 5. Poner NULL en referencias updated_by / edited_by / created_by
+            # ── Paso 5: Poner NULL en referencias opcionales ──
             for tbl, col in [
-                ('system_config', 'updated_by'),
-                ('freight_rates', 'updated_by'),
-                ('quote_history', 'edited_by'),
+                ('system_config',       'updated_by'),
+                ('freight_rates',       'updated_by'),
+                ('quote_history',       'edited_by'),
                 ('quote_notifications', 'created_by'),
             ]:
-                _safe_exec(f"UPDATE {tbl} SET {col} = NULL WHERE {col} = {ph}", (user_id,))
+                try:
+                    if is_postgres:
+                        cursor.execute("SAVEPOINT sp_null")
+                    cursor.execute(
+                        f"UPDATE {tbl} SET {col} = NULL WHERE {col} = {ph}", (user_id,)
+                    )
+                    if is_postgres:
+                        cursor.execute("RELEASE SAVEPOINT sp_null")
+                except Exception as _e:
+                    if is_postgres:
+                        cursor.execute("ROLLBACK TO SAVEPOINT sp_null")
+                    print(f"[delete_user] Skip UPDATE {tbl}.{col}: {_e}")
 
-            # 6. Eliminar el usuario principal
+            # ── Paso 6: Eliminar el usuario principal ──
             cursor.execute(f"DELETE FROM users WHERE id = {ph}", (user_id,))
+            deleted_user = cursor.rowcount
+            print(f"[delete_user] Filas de users eliminadas: {deleted_user}")
+
+            if deleted_user == 0:
+                conn.rollback()
+                print(f"[delete_user] ADVERTENCIA: No se encontró el usuario {user_id}")
+                return False
 
             conn.commit()
             cursor.close()
             conn.close()
+            print(f"[delete_user] ✅ Usuario {user_id} eliminado correctamente")
             return True
+
         except Exception as e:
-            print(f"[delete_user] ERROR DETALLADO: {type(e).__name__}: {e}")
+            print(f"[delete_user] ❌ ERROR DETALLADO: {type(e).__name__}: {e}")
+            import traceback
+            traceback.print_exc()
             try:
                 if conn:
                     conn.rollback()
