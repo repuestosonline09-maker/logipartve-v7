@@ -929,26 +929,43 @@ def render_analyst_panel():
     st.markdown("---")
     
     # ==========================================
-    # SECCIÓN 5: PREGUNTA IVA VENEZUELA
+    # SECCIÓN 5: IVA VENEZUELA — CONTROL A NIVEL DE COTIZACIÓN COMPLETA
+    # El IVA es un atributo de la cotización, NO de cada ítem individual.
+    # Al activarlo, TODOS los ítems (existentes y futuros) lo heredan.
     # ==========================================
     st.markdown("### 🇻🇪 IVA Venezuela")
-    st.warning(f"⚠️ **¿APLICAR IVA ({iva_porcentaje}%)?** - El IVA solo se aplica al precio en Bolívares")
     
-    iva_col1, iva_col2 = st.columns(2)
+    # Inicializar el estado de IVA de la cotización si no existe
+    # En modo edición, detectar si alguno de los ítems ya tiene IVA activo
+    if 'cotizacion_aplica_iva' not in st.session_state:
+        if editing_mode and st.session_state.get('cotizacion_items'):
+            # Heredar el valor del primer ítem que tenga IVA definido
+            _iva_heredado = any(
+                item.get('aplicar_iva', False)
+                for item in st.session_state.cotizacion_items
+            )
+            st.session_state.cotizacion_aplica_iva = _iva_heredado
+        else:
+            st.session_state.cotizacion_aplica_iva = False
+    
+    iva_col1, iva_col2 = st.columns([2, 3])
     with iva_col1:
-        # Pre-cargar el radio con el valor del ítem que se está editando
-        # Si editing_item=True, usar el valor guardado en editing_item_data
-        # Si editing_mode=True (edición de cotización completa), usar el primer ítem
-        _iva_default_index = 0  # "NO" por defecto
-        if editing_item and editing_item_data.get('aplicar_iva', False):
-            _iva_default_index = 1  # "SÍ"
-        aplicar_iva = st.radio(
-            "¿Aplicar IVA a esta cotización?",
+        _iva_toggle_index = 1 if st.session_state.cotizacion_aplica_iva else 0
+        _iva_seleccion = st.radio(
+            f"⚠️ ¿Aplicar IVA ({iva_porcentaje}%) a TODA la cotización?",
             options=["NO", "SÍ"],
-            index=_iva_default_index,
+            index=_iva_toggle_index,
             horizontal=True,
-            key=f"aplicar_iva_{reset_key}"
+            key=f"iva_cotizacion_radio"
         )
+        # Actualizar el estado global de IVA
+        st.session_state.cotizacion_aplica_iva = (_iva_seleccion == "SÍ")
+        aplicar_iva = _iva_seleccion  # Compatibilidad con el código existente
+    with iva_col2:
+        if st.session_state.cotizacion_aplica_iva:
+            st.success(f"✅ IVA {iva_porcentaje}% activo para TODOS los ítems de esta cotización")
+        else:
+            st.info("ℹ️ IVA desactivado. Activálo si la venta está sujeta a IVA.")
     
     st.markdown("---")
     
@@ -1137,14 +1154,32 @@ def render_analyst_panel():
                         st.session_state.cotizacion_items = []
                     
                     if editing_item:
-                        # ACTUALIZAR ítem existente
+                        # ACTUALIZAR ítem existente en session_state
                         st.session_state.cotizacion_items[editing_item_index] = nuevo_item
-                        st.session_state.item_agregado_msg = f"✅ Ítem #{editing_item_index + 1} actualizado correctamente."
                         # Limpiar estado de edición
                         if 'editing_item_index' in st.session_state:
                             del st.session_state.editing_item_index
                         if 'editing_item_data' in st.session_state:
                             del st.session_state.editing_item_data
+                        
+                        # ── GUARDADO AUTOMÁTICO EN BD (modo edición de cotización) ──────────
+                        # Si estamos editando una cotización existente, guardar en BD
+                        # automáticamente sin necesidad de presionar GUARDAR CAMBIOS.
+                        if editing_mode and editing_quote_id:
+                            _cliente = st.session_state.get('cliente_datos', {})
+                            _items_actualizados = st.session_state.cotizacion_items
+                            _ok = DBManager.update_quote_complete(
+                                editing_quote_id,
+                                _cliente,
+                                _items_actualizados,
+                                username
+                            )
+                            if _ok:
+                                st.session_state.item_agregado_msg = f"✅ Ítem #{editing_item_index + 1} actualizado y cotización guardada automáticamente."
+                            else:
+                                st.session_state.item_agregado_msg = f"✅ Ítem #{editing_item_index + 1} actualizado en pantalla. (Guarda manualmente con GUARDAR CAMBIOS)"
+                        else:
+                            st.session_state.item_agregado_msg = f"✅ Ítem #{editing_item_index + 1} actualizado correctamente."
                     else:
                         # AGREGAR nuevo ítem
                         if not hasattr(st.session_state.cotizacion_items, 'append'):
