@@ -1319,17 +1319,26 @@ def render_analyst_panel():
                             # Modo creación normal → siempre agregar
                             st.session_state.cotizacion_items.append(nuevo_item)
 
-                    # Guardar datos del cliente (solo campos con datos)
+                    # Guardar datos del cliente limpiando caracteres de control
+                    def _clean(v):
+                        import unicodedata
+                        if v is None:
+                            return ''
+                        return ''.join(
+                            ch for ch in str(v)
+                            if unicodedata.category(ch) not in ('Cc', 'Cf') and ord(ch) >= 32
+                        ).strip()
+
                     st.session_state.cliente_datos = {
-                        "nombre": cliente_nombre,
-                        "telefono": cliente_telefono,
-                        "email": cliente_email,
-                        "vehiculo": cliente_vehiculo,
-                        "cilindrada": cliente_cilindrada,
-                        "ano": cliente_ano,
-                        "vin": cliente_vin,
-                        "direccion": cliente_direccion,
-                        "ci_rif": cliente_ci_rif
+                        "nombre":    _clean(cliente_nombre),
+                        "telefono":  _clean(cliente_telefono),
+                        "email":     _clean(cliente_email),
+                        "vehiculo":  _clean(cliente_vehiculo),
+                        "cilindrada":_clean(cliente_cilindrada),
+                        "ano":       _clean(cliente_ano),
+                        "vin":       _clean(cliente_vin),
+                        "direccion": _clean(cliente_direccion),
+                        "ci_rif":    _clean(cliente_ci_rif)
                     }
                     
                     # Si estamos en modo edición, actualizar en BD

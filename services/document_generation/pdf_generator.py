@@ -14,6 +14,24 @@ import os
 from pathlib import Path
 
 
+def clean_text(value) -> str:
+    """
+    Elimina caracteres de control y no imprimibles de un valor de texto.
+    Esto evita que aparezcan cuadros negros en el PDF/PNG generado.
+    """
+    import unicodedata
+    if value is None:
+        return ''
+    text = str(value)
+    # Eliminar caracteres de control (U+0000–U+001F, U+007F, U+0080–U+009F)
+    # y caracteres invisibles como zero-width space, soft hyphen, etc.
+    cleaned = ''.join(
+        ch for ch in text
+        if unicodedata.category(ch) not in ('Cc', 'Cf') and ord(ch) >= 32
+    )
+    return cleaned.strip()
+
+
 def find_logo_path(logo_filename):
     """
     Busca el logo en diferentes ubicaciones posibles
@@ -403,17 +421,27 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
     if cilindrada:
         vehiculo_completo = f"{vehiculo_completo} {cilindrada}"
     
+    # Limpiar todos los campos del cliente para eliminar caracteres de control
+    c_nombre    = clean_text(cliente.get('nombre', ''))
+    c_ci_rif    = clean_text(cliente.get('ci_rif', ''))
+    c_telefono  = clean_text(cliente.get('telefono', ''))
+    c_email     = clean_text(cliente.get('email', ''))
+    c_direccion = clean_text(cliente.get('direccion', ''))
+    c_vehiculo  = clean_text(vehiculo_completo)
+    c_año       = clean_text(cliente.get('año', ''))
+    c_vin       = clean_text(cliente.get('vin', ''))
+
     cliente_data = [[
-        Paragraph(f"<b>NOMBRE:</b> {cliente.get('nombre', '')}", style_normal),
-        Paragraph(f"<b>CÉDULA O RIF:</b> {cliente.get('ci_rif', '')}", style_normal),
-        Paragraph(f"<b>TELÉFONO:</b> {cliente.get('telefono', '')}", style_normal),
+        Paragraph(f"<b>NOMBRE:</b> {c_nombre}", style_normal),
+        Paragraph(f"<b>CÉDULA O RIF:</b> {c_ci_rif}", style_normal),
+        Paragraph(f"<b>TELÉFONO:</b> {c_telefono}", style_normal),
     ], [
-        Paragraph(f"<b>EMAIL:</b> {cliente.get('email', '')}", style_normal),
-        Paragraph(f"<b>DIRECCIÓN:</b> {cliente.get('direccion', '')}", style_normal),
-        Paragraph(f"<b>VEHÍCULO:</b> {vehiculo_completo}", style_normal),
+        Paragraph(f"<b>EMAIL:</b> {c_email}", style_normal),
+        Paragraph(f"<b>DIRECCIÓN:</b> {c_direccion}", style_normal),
+        Paragraph(f"<b>VEHÍCULO:</b> {c_vehiculo}", style_normal),
     ], [
-        Paragraph(f"<b>AÑO:</b> {cliente.get('año', '')}", style_normal),
-        Paragraph(f"<b>VIN:</b> {cliente.get('vin', '')}", style_normal),
+        Paragraph(f"<b>AÑO:</b> {c_año}", style_normal),
+        Paragraph(f"<b>VIN:</b> {c_vin}", style_normal),
         Paragraph("", style_normal),  # Celda vacía
     ]]
     
