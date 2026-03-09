@@ -63,15 +63,12 @@ class QuoteNumberingService:
                 conn.close()
                 return False
             
-            # Rangos disponibles
-            base_ranges = [30000, 40000, 50000, 60000, 70000]
-            
-            if user_position >= len(base_ranges):
-                cursor.close()
-                conn.close()
-                return False  # No hay más rangos disponibles
-            
-            range_start = base_ranges[user_position]
+            # Rangos dinámicos: cada usuario recibe un bloque de 10000 números
+            # Usuario en posición 0 → 30000-39999
+            # Usuario en posición 1 → 40000-49999
+            # Usuario en posición 2 → 50000-59999
+            # ... y así sucesivamente sin límite de usuarios
+            range_start = 30000 + (user_position * 10000)
             range_end = range_start + 9999
             
             # Asignar rango
