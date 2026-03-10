@@ -6,7 +6,7 @@ Estilo: Documento de carga aérea internacional
 from reportlab.lib.pagesizes import landscape, letter
 from reportlab.lib import colors
 from reportlab.lib.units import inch
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image, KeepTogether, PageBreak
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from reportlab.pdfgen import canvas
@@ -562,6 +562,13 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
     
     story.append(tabla_items)
     story.append(Spacer(1, 0.12*inch))
+
+    # ── Paginación automática de la sección inferior ─────────────────────────────────
+    # KeepTogether garantiza que la sección inferior (términos + totales + pie)
+    # NUNCA se parta entre páginas. Si no cabe en la página actual, ReportLab
+    # la mueve automáticamente a la siguiente página completa.
+    # Esto funciona correctamente tanto con 1 ítem como con 20+.
+    # ─────────────────────────────────────────────────────────────────────────────
     
     # ==========================================
     # 4TO Y 5TO BLOQUE: TÉRMINOS (IZQ) + FINANCIAL SUMMARY (DER)
@@ -640,8 +647,10 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
         ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
     ]))
     
-    story.append(tabla_2col)
-    story.append(Spacer(1, 0.15*inch))
+    # Envolver la sección inferior en KeepTogether: si no cabe en la página actual,
+    # ReportLab la mueve automáticamente a la siguiente página completa.
+    seccion_inferior = [tabla_2col, Spacer(1, 0.15*inch)]
+    story.append(KeepTogether(seccion_inferior))
     
     # Bloque de TÉRMINOS Y CONDICIONES eliminado (ahora está en layout de 2 columnas arriba)
     
