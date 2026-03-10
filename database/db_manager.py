@@ -532,6 +532,57 @@ class DBManager:
             except Exception:
                 pass
 
+        # ── Migración: Tablas de numeración automática de cotizaciones ──
+        try:
+            id_type_local = "SERIAL PRIMARY KEY" if is_postgres else "INTEGER PRIMARY KEY AUTOINCREMENT"
+            # Crear tabla de rangos por usuario
+            cursor.execute(f"""
+                CREATE TABLE IF NOT EXISTS user_quote_ranges (
+                    id {id_type_local},
+                    user_id INTEGER UNIQUE NOT NULL,
+                    range_start INTEGER NOT NULL,
+                    range_end INTEGER NOT NULL,
+                    assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users(id)
+                )
+            """)
+            # Crear tabla de secuencias por usuario y año
+            cursor.execute(f"""
+                CREATE TABLE IF NOT EXISTS quote_sequences (
+                    id {id_type_local},
+                    user_id INTEGER NOT NULL,
+                    year INTEGER NOT NULL,
+                    last_number INTEGER NOT NULL,
+                    UNIQUE(user_id, year),
+                    FOREIGN KEY (user_id) REFERENCES users(id)
+                )
+            """)
+            conn.commit()
+            # Asignar rangos a usuarios que aún no tienen uno
+            cursor.execute("SELECT id FROM users ORDER BY id ASC")
+            all_user_ids = [row['id'] if is_postgres else row[0] for row in cursor.fetchall()]
+            for position, uid in enumerate(all_user_ids):
+                ph = '%s' if is_postgres else '?'
+                cursor.execute(f"SELECT COUNT(*) FROM user_quote_ranges WHERE user_id = {ph}", (uid,))
+                res = cursor.fetchone()
+                cnt = res['count'] if is_postgres else res[0]
+                if cnt == 0:
+                    rng_start = 30000 + (position * 10000)
+                    rng_end   = rng_start + 9999
+                    cursor.execute(f"""
+                        INSERT INTO user_quote_ranges (user_id, range_start, range_end)
+                        VALUES ({ph}, {ph}, {ph})
+                    """, (uid, rng_start, rng_end))
+                    print(f'✅ Rango {rng_start}-{rng_end} asignado al usuario ID={uid}')
+            conn.commit()
+            print('✅ Migración: Tablas de numeración de cotizaciones listas')
+        except Exception as e:
+            print(f'⚠️ Migración tablas numeración: {e}')
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+
         # Crear usuario admin por defecto si no existe
         cursor.execute("SELECT COUNT(*) FROM users WHERE username = 'admin'")
         result = cursor.fetchone()
