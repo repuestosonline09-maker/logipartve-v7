@@ -1186,11 +1186,14 @@ def render_analyst_panel():
                         else:
                             st.session_state.item_agregado_msg = f"✅ Ítem #{editing_item_index + 1} actualizado correctamente."
                     else:
-                        # AGREGAR nuevo ítem
+                        # AGREGAR nuevo ítem — máximo 5 por cotización
                         if not hasattr(st.session_state.cotizacion_items, 'append'):
                             st.session_state.cotizacion_items = []
-                        st.session_state.cotizacion_items.append(nuevo_item)
-                        st.session_state.item_agregado_msg = f"✅ Ítem #{len(st.session_state.cotizacion_items)} agregado. Puede agregar otro."
+                        if len(st.session_state.cotizacion_items) >= 5:
+                            st.session_state.item_agregado_msg = "⛔ Límite alcanzado: máximo 5 ítems por cotización."
+                        else:
+                            st.session_state.cotizacion_items.append(nuevo_item)
+                            st.session_state.item_agregado_msg = f"✅ Ítem #{len(st.session_state.cotizacion_items)} agregado. Puede agregar otro."
                     
                     # Limpiar campos del ítem para el siguiente (mantener datos del cliente)
                     st.session_state.limpiar_campos_item = True

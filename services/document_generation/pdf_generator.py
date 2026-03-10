@@ -508,20 +508,40 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
     # Anchos de columna optimizados (12 columnas) - Ajustados para alineación perfecta con DATOS DEL CLIENTE (9.48 inches total)
     col_widths = [0.4*inch, 1.7*inch, 0.95*inch, 0.85*inch, 0.6*inch, 0.4*inch, 0.6*inch, 0.7*inch, 0.78*inch, 0.5*inch, 1.0*inch, 1.0*inch]
     
-    # ── OPCIÓN A: Ajuste dinámico de fuente y padding según número de ítems ──────────
-    # Garantiza que todo el contenido (tabla + sección inferior) quepa en una sola página.
-    # Con <= 4 ítems: tamaños normales. Con 5-7: reducidos. Con 8+: mínimos.
-    num_items = len(items) 
-    if num_items <= 4:
-        _font_header  = 6
+    # ── Compresión calibrada para máximo 5 ítems en UNA SOLA HOJA ──────────────────────
+    # El sistema acepta máximo 5 ítems por cotización.
+    # La compresión aumenta progresivamente para garantizar que todo quede en una página.
+    #
+    # Lógica: se calcula un "score de densidad" combinando cantidad de ítems
+    # y longitud máxima de texto en las columnas más anchas (descripción y origen).
+    # Esto garantiza que ítems con texto largo (ej. 'Emiratos Árabes Unidos') también
+    # se compriman correctamente aunque sean pocos ítems.
+    num_items = len(items)
+
+    # Calcular longitud máxima de texto en columnas críticas (descripción + origen)
+    _max_text_len = 0
+    for item in items:
+        desc = str(item.get('descripcion', '') or item.get('descripcion_repuesto', ''))
+        orig = str(item.get('origen', ''))
+        _max_text_len = max(_max_text_len, len(desc), len(orig))
+
+    # Score de densidad: combina ítems y longitud de texto
+    # Texto > 15 chars en columnas críticas equivale a +1 ítem de densidad
+    _density = num_items + (1 if _max_text_len > 15 else 0) + (1 if _max_text_len > 25 else 0)
+
+    if _density <= 2:          # 1-2 ítems con texto corto
+        _font_header  = 6.5
+        _font_content = 7.0
+        _pad_v        = 5
+    elif _density <= 3:        # 3 ítems o texto moderado
+        _font_header  = 6.0
         _font_content = 6.5
-        _pad_v        = 4    # padding vertical (top y bottom) por celda
-    elif num_items <= 7:
+        _pad_v        = 4
+    elif _density <= 4:        # 4 ítems o texto largo
         _font_header  = 5.5
         _font_content = 6.0
         _pad_v        = 2
-    else:
-        # 8 o más ítems: tamaño mínimo legible
+    else:                      # 5 ítems o texto muy largo (máximo del sistema)
         _font_header  = 5.0
         _font_content = 5.5
         _pad_v        = 1
@@ -563,11 +583,9 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
     story.append(tabla_items)
     story.append(Spacer(1, 0.12*inch))
 
-    # ── Paginación automática de la sección inferior ─────────────────────────────────
-    # KeepTogether garantiza que la sección inferior (términos + totales + pie)
-    # NUNCA se parta entre páginas. Si no cabe en la página actual, ReportLab
-    # la mueve automáticamente a la siguiente página completa.
-    # Esto funciona correctamente tanto con 1 ítem como con 20+.
+    # ── Una sola hoja garantizada ────────────────────────────────────────────────────
+    # Con máximo 5 ítems y la compresión calibrada arriba, todo cabe en una página.
+    # No se usa KeepTogether ni PageBreak: el PDF siempre es de una sola hoja.
     # ─────────────────────────────────────────────────────────────────────────────
     
     # ==========================================
@@ -647,10 +665,8 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
         ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
     ]))
     
-    # Envolver la sección inferior en KeepTogether: si no cabe en la página actual,
-    # ReportLab la mueve automáticamente a la siguiente página completa.
-    seccion_inferior = [tabla_2col, Spacer(1, 0.15*inch)]
-    story.append(KeepTogether(seccion_inferior))
+    story.append(tabla_2col)
+    story.append(Spacer(1, 0.15*inch))
     
     # Bloque de TÉRMINOS Y CONDICIONES eliminado (ahora está en layout de 2 columnas arriba)
     
