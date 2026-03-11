@@ -1777,24 +1777,27 @@ def render_analyst_panel():
             if st.button("📅 GENERAR PDF", use_container_width=True, type="secondary", key="btn_generar_pdf"):
                 if st.session_state.get('saved_quote_number'):
                     try:
-                        from services.document_generation import PDFQuoteGenerator
+                        from services.document_generation import PDFQuoteGenerator, clean_text
                         import os
                         
                         # Preparar datos para PDF
+                        # clean_text elimina caracteres de control y espacios Unicode especiales
+                        # (U+00A0, U+2002-U+200A, U+202F, etc.) que WhatsApp/celular insertan
+                        # al copiar números de teléfono y que ReportLab muestra como cuadros negros
                         cliente = st.session_state.get('cliente_datos', {})
                         quote_data = {
                             'quote_number': st.session_state.saved_quote_number,
                             'analyst_name': st.session_state.full_name,
                             'client': {
-                                'nombre': cliente.get('nombre', ''),
-                                'telefono': cliente.get('telefono', ''),
-                                'email': cliente.get('email', ''),
-                                'vehiculo': cliente.get('vehiculo', ''),
-                                'motor': cliente.get('cilindrada', ''),
-                                'año': cliente.get('ano', ''),
-                                'vin': cliente.get('vin', ''),
-                                'direccion': cliente.get('direccion', ''),
-                                'ci_rif': cliente.get('ci_rif', '')
+                                'nombre': clean_text(cliente.get('nombre', '')),
+                                'telefono': clean_text(cliente.get('telefono', '')),
+                                'email': clean_text(cliente.get('email', '')),
+                                'vehiculo': clean_text(cliente.get('vehiculo', '')),
+                                'motor': clean_text(cliente.get('cilindrada', '')),
+                                'año': clean_text(cliente.get('ano', '')),
+                                'vin': clean_text(cliente.get('vin', '')),
+                                'direccion': clean_text(cliente.get('direccion', '')),
+                                'ci_rif': clean_text(cliente.get('ci_rif', ''))
                             },
                             'items': items,
                             'sub_total': sub_total,
@@ -1863,24 +1866,25 @@ def render_analyst_panel():
             if st.button("🖼️ GENERAR PNG", use_container_width=True, type="secondary", key="btn_generar_png"):
                 if st.session_state.get('saved_quote_number'):
                     try:
-                        from services.document_generation import PNGQuoteGenerator
+                        from services.document_generation import PNGQuoteGenerator, clean_text
                         import os
                         
                         # Preparar datos para PNG
+                        # clean_text elimina caracteres de control y espacios Unicode especiales
                         cliente = st.session_state.get('cliente_datos', {})
                         quote_data = {
                             'quote_number': st.session_state.saved_quote_number,
                             'analyst_name': st.session_state.full_name,
                             'client': {
-                                'nombre': cliente.get('nombre', ''),
-                                'telefono': cliente.get('telefono', ''),
-                                'email': cliente.get('email', ''),
-                                'vehiculo': cliente.get('vehiculo', ''),
-                                'motor': cliente.get('cilindrada', ''),
-                                'año': cliente.get('ano', ''),
-                                'vin': cliente.get('vin', ''),
-                                'direccion': cliente.get('direccion', ''),
-                                'ci_rif': cliente.get('ci_rif', '')
+                                'nombre': clean_text(cliente.get('nombre', '')),
+                                'telefono': clean_text(cliente.get('telefono', '')),
+                                'email': clean_text(cliente.get('email', '')),
+                                'vehiculo': clean_text(cliente.get('vehiculo', '')),
+                                'motor': clean_text(cliente.get('cilindrada', '')),
+                                'año': clean_text(cliente.get('ano', '')),
+                                'vin': clean_text(cliente.get('vin', '')),
+                                'direccion': clean_text(cliente.get('direccion', '')),
+                                'ci_rif': clean_text(cliente.get('ci_rif', ''))
                             },
                             'items': items,
                             'sub_total': sub_total,
