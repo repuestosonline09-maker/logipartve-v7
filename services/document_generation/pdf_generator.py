@@ -18,16 +18,29 @@ def clean_text(value) -> str:
     """
     Elimina caracteres de control y no imprimibles de un valor de texto.
     Esto evita que aparezcan cuadros negros en el PDF/PNG generado.
+
+    Categorias Unicode eliminadas:
+    - Cc: Caracteres de control (U+0000-U+001F, U+007F, U+0080-U+009F)
+    - Cf: Caracteres de formato invisibles (zero-width space, BOM, etc.)
+    - Zs: Espacios Unicode especiales (no-break space U+00A0, em space, en space,
+          thin space, hair space, narrow no-break space, etc.) que WhatsApp y
+          los contactos del celular insertan al copiar numeros de telefono.
+          ReportLab no puede renderizarlos y los muestra como cuadros negros.
+    - Zl: Separador de linea (U+2028)
+    - Zp: Separador de parrafo (U+2029)
+
+    Los espacios normales ASCII (U+0020) se conservan.
     """
     import unicodedata
     if value is None:
         return ''
     text = str(value)
-    # Eliminar caracteres de control (U+0000–U+001F, U+007F, U+0080–U+009F)
-    # y caracteres invisibles como zero-width space, soft hyphen, etc.
+    # Categorias problematicas para ReportLab
+    _BAD_CATEGORIES = {'Cc', 'Cf', 'Zs', 'Zl', 'Zp'}
     cleaned = ''.join(
+        ch if ch == ' ' else  # Preservar espacio ASCII normal
         ch for ch in text
-        if unicodedata.category(ch) not in ('Cc', 'Cf') and ord(ch) >= 32
+        if ch == ' ' or (unicodedata.category(ch) not in _BAD_CATEGORIES and ord(ch) >= 32)
     )
     return cleaned.strip()
 
