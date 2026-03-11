@@ -130,7 +130,18 @@ def cargar_configuraciones():
 
 def render_analyst_panel():
     """Renderiza el panel de analista para crear cotizaciones"""
-    
+
+    # ==========================================
+    # SCROLL AUTOMÁTICO AL TOPE
+    # Si se activó el flag (ej: al pulsar NUEVA COTIZACIÓN), inyectar JS de scroll
+    # ==========================================
+    if st.session_state.pop('scroll_to_top', False):
+        import streamlit.components.v1 as _components
+        _components.html(
+            "<script>window.parent.document.querySelector('section.main').scrollTo({top: 0, behavior: 'smooth'});</script>",
+            height=0
+        )
+
     # Cargar configuraciones desde BD
     config = cargar_configuraciones()
     
@@ -1982,6 +1993,8 @@ def render_analyst_panel():
                         st.session_state.item_reset_counter = 0
                     st.session_state.cliente_reset_counter += 1
                     st.session_state.item_reset_counter += 1
+                    # Activar scroll automático al tope en el siguiente render
+                    st.session_state.scroll_to_top = True
                     st.rerun()
                 except Exception as e:
                     st.error(f"❌ Error al crear nueva cotización: {str(e)}")
