@@ -399,12 +399,13 @@ def show_admin_dashboard():
         except Exception:
             pass
 
-    total_quotes    = stats_global.get('total_quotes', 0)
-    total_amount    = stats_global.get('total_amount', 0.0)
-    active_analysts = stats_global.get('active_analysts', 0)
-    by_status       = stats_global.get('quotes_by_status', {})
-    approved_count  = by_status.get('approved', 0)
-    draft_count     = by_status.get('draft', 0)
+    total_quotes     = stats_global.get('total_quotes', 0)
+    total_amount     = stats_global.get('total_amount', 0.0)
+    active_analysts  = stats_global.get('active_analysts', 0)
+    by_status        = stats_global.get('quotes_by_status', {})
+    approved_count   = by_status.get('approved', 0)
+    draft_count      = by_status.get('draft', 0)
+    approved_amount  = stats_global.get('approved_amount', 0.0)
 
     # ── BLOQUE GLOBAL ─────────────────────────────────────────────────────
     st.markdown("### 📊 Resumen General")
@@ -442,6 +443,7 @@ def show_admin_dashboard():
         <div class="dash-card dash-card-green">
             <div class="dash-card-value">{approved_count}</div>
             <div class="dash-card-label">✅ Aprobadas</div>
+            <div class="dash-card-sublabel" style="color:#27ae60;font-size:1.05rem;font-weight:600;margin-top:4px;">${approved_amount:,.0f} USD</div>
         </div>""", unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
@@ -658,11 +660,12 @@ def show_analyst_dashboard():
             st.error(f"❌ Error al cargar métricas: {e}")
             return
 
-    total_quotes   = stats.get('total_quotes', 0)
-    total_amount   = stats.get('total_amount', 0.0)
-    by_status      = stats.get('quotes_by_status', {})
-    draft_count    = by_status.get('draft', 0)
-    approved_count = by_status.get('approved', 0)
+    total_quotes    = stats.get('total_quotes', 0)
+    total_amount    = stats.get('total_amount', 0.0)
+    by_status       = stats.get('quotes_by_status', {})
+    draft_count     = by_status.get('draft', 0)
+    approved_count  = by_status.get('approved', 0)
+    approved_amount = stats.get('approved_amount', 0.0)
 
     # ── Resumen General ─────────────────────────────────────────────────────
     st.markdown("### 📊 Resumen General")
@@ -696,6 +699,7 @@ def show_analyst_dashboard():
         <div class="dash-card dash-card-green">
             <div class="dash-card-value">{approved_count}</div>
             <div class="dash-card-label">✅ Aprobadas</div>
+            <div class="dash-card-sublabel" style="color:#27ae60;font-size:1.05rem;font-weight:600;margin-top:4px;">${approved_amount:,.0f} USD</div>
         </div>""", unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)

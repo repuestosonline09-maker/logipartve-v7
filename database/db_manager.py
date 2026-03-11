@@ -3267,6 +3267,23 @@ class DBManager:
                 count  = row['count']  if is_postgres else row[1]
                 quotes_by_status[status] = count
 
+            # Monto total de cotizaciones APROBADAS
+            if analyst_id is not None:
+                where_approved = f"WHERE q.analyst_id = {ph} AND DATE(q.created_at) >= {ph} AND DATE(q.created_at) <= {ph} AND q.status = 'approved'"
+                params_approved = (analyst_id, fecha_desde, fecha_hasta)
+            else:
+                where_approved = f"WHERE DATE(q.created_at) >= {ph} AND DATE(q.created_at) <= {ph} AND q.status = 'approved'"
+                params_approved = (fecha_desde, fecha_hasta)
+
+            cursor.execute(f"""
+                SELECT COALESCE(SUM(qi.total_cost), 0) as total
+                FROM quote_items qi
+                JOIN quotes q ON q.id = qi.quote_id
+                {where_approved}
+            """, params_approved)
+            row = cursor.fetchone()
+            approved_amount = float(row['total'] if is_postgres else row[0])
+
             # Analistas activos (solo para vista global)
             active_analysts = 0
             if analyst_id is None:
@@ -3278,10 +3295,11 @@ class DBManager:
             conn.close()
 
             return {
-                'total_quotes':    total_quotes,
-                'total_amount':    total_amount,
+                'total_quotes':     total_quotes,
+                'total_amount':     total_amount,
                 'quotes_by_status': quotes_by_status,
-                'active_analysts': active_analysts,
+                'active_analysts':  active_analysts,
+                'approved_amount':  approved_amount,
             }
 
         except Exception as e:
