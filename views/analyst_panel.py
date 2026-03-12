@@ -142,24 +142,19 @@ def render_analyst_panel():
             <script>
             (function() {
                 var doc = window.parent.document;
-                // Intentar todos los selectores posibles del contenedor principal de Streamlit
-                var selectors = [
-                    '.main .block-container',
-                    '.main',
-                    'section.main',
-                    '[data-testid="stAppViewContainer"]',
-                    '[data-testid="block-container"]',
-                    'html',
-                    'body'
-                ];
-                for (var i = 0; i < selectors.length; i++) {
-                    var el = doc.querySelector(selectors[i]);
-                    if (el) {
-                        el.scrollTop = 0;
+                // El contenedor scrollable real de Streamlit es section.stMain
+                // Verificado inspeccionando el DOM en produccion
+                var el = doc.querySelector('section.stMain');
+                if (el) {
+                    el.scrollTo({top: 0, behavior: 'smooth'});
+                } else {
+                    // Fallback: intentar otros selectores conocidos
+                    var fallbacks = ['section.main', '.stMain', '[data-testid="stAppViewContainer"]'];
+                    for (var i = 0; i < fallbacks.length; i++) {
+                        var fb = doc.querySelector(fallbacks[i]);
+                        if (fb) { fb.scrollTo({top: 0, behavior: 'smooth'}); break; }
                     }
                 }
-                // También hacer scroll en window.parent por si acaso
-                window.parent.scrollTo({top: 0, behavior: 'smooth'});
             })();
             </script>
             """,
