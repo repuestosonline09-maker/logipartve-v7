@@ -138,7 +138,31 @@ def render_analyst_panel():
     if st.session_state.pop('scroll_to_top', False):
         import streamlit.components.v1 as _components
         _components.html(
-            "<script>window.parent.document.querySelector('section.main').scrollTo({top: 0, behavior: 'smooth'});</script>",
+            """
+            <script>
+            (function() {
+                var doc = window.parent.document;
+                // Intentar todos los selectores posibles del contenedor principal de Streamlit
+                var selectors = [
+                    '.main .block-container',
+                    '.main',
+                    'section.main',
+                    '[data-testid="stAppViewContainer"]',
+                    '[data-testid="block-container"]',
+                    'html',
+                    'body'
+                ];
+                for (var i = 0; i < selectors.length; i++) {
+                    var el = doc.querySelector(selectors[i]);
+                    if (el) {
+                        el.scrollTop = 0;
+                    }
+                }
+                // También hacer scroll en window.parent por si acaso
+                window.parent.scrollTo({top: 0, behavior: 'smooth'});
+            })();
+            </script>
+            """,
             height=0
         )
 
