@@ -1,7 +1,13 @@
 # services/session_manager.py
 # Gestor de sesión persistente para evitar cierres automáticos en Railway
+#
+# CORRECCIÓN v2: El keep-alive ahora usa components.html() en lugar de
+# st.markdown(). Los scripts en st.markdown() NO se ejecutan en Streamlit
+# porque el framework sanitiza el HTML. components.html() sí ejecuta scripts
+# porque renderiza en un iframe independiente.
 
 import streamlit as st
+import streamlit.components.v1 as components
 import time
 from datetime import datetime
 
@@ -72,6 +78,10 @@ class SessionManager:
           1. websocketPingInterval en config.toml  → Streamlit hace ping cada 25 s
           2. JavaScript fetch al health endpoint   → mantiene el proxy vivo
           3. Detección de actividad del usuario    → actualiza last_activity
+
+        IMPORTANTE: Usa components.html() (no st.markdown()) porque los scripts
+        en st.markdown() NO se ejecutan — Streamlit los sanitiza. components.html()
+        renderiza en un iframe donde los scripts sí se ejecutan correctamente.
         """
         # Actualizar actividad en cada rerun
         SessionManager.update_activity()
@@ -79,56 +89,73 @@ class SessionManager:
         if not st.session_state.get('logged_in', False):
             return
 
-        # Inyectar keep-alive JavaScript (solo una vez por sesión de navegador)
-        st.markdown("""
-            <script>
-            (function() {
-                // Evitar inicializar múltiples veces
-                if (window.__logipartveKA) return;
-                window.__logipartveKA = true;
+        # Inyectar keep-alive JavaScript usando components.html()
+        # Solo se inyecta una vez por sesión de navegador (controlado por window.__logipartveKA)
+        # El height=0 hace que el iframe sea invisible
+        keep_alive_html = """
+        <script>
+        (function() {
+            // Evitar inicializar múltiples veces en el mismo contexto
+            if (window.__logipartveKA) return;
+            window.__logipartveKA = true;
 
-                // ── Capa 1: Ping HTTP al servidor cada 20 segundos ──────────
-                // Usa fetch con keepalive para que el proxy no cierre la conexión
-                function pingServer() {
+            // ── Capa 1: Ping HTTP al servidor cada 20 segundos ──────────────
+            // Usa fetch con keepalive para que el proxy no cierre la conexión
+            function pingServer() {
+                try {
+                    // Hacer ping al servidor padre (no al iframe)
+                    var targetUrl = window.parent.location.href;
+                    window.parent.fetch(targetUrl, {
+                        method: 'GET',
+                        keepalive: true,
+                        cache: 'no-store'
+                    }).catch(function() {});
+                } catch(e) {
+                    // Si no podemos acceder al padre, hacer ping al propio iframe
                     try {
                         fetch(window.location.href, {
                             method: 'GET',
                             keepalive: true,
                             cache: 'no-store'
                         }).catch(function() {});
-                    } catch(e) {}
+                    } catch(e2) {}
                 }
-                setInterval(pingServer, 20000);
+            }
+            setInterval(pingServer, 20000);
 
-                // ── Capa 2: Detectar actividad del usuario ──────────────────
+            // ── Capa 2: Detectar actividad del usuario ──────────────────────
+            // Registrar eventos en el documento padre
+            try {
+                var parentDoc = window.parent.document;
                 var activityEvents = ['mousedown', 'mousemove', 'keypress',
                                       'scroll', 'touchstart', 'click', 'input'];
                 activityEvents.forEach(function(evt) {
-                    document.addEventListener(evt, function() {
+                    parentDoc.addEventListener(evt, function() {
                         sessionStorage.setItem('lp_lastActivity', Date.now());
                     }, { passive: true, capture: true });
                 });
+            } catch(e) {}
 
-                // ── Capa 3: Reconexión automática si el WebSocket cae ───────
-                // Streamlit expone window.streamlitConfig; si el WS se cierra
-                // y el usuario hace cualquier acción, forzamos un reload suave.
-                var wsCheckInterval = setInterval(function() {
-                    // Verificar si Streamlit sigue conectado
-                    var stRoot = document.querySelector('[data-testid="stApp"]');
+            // ── Capa 3: Reconexión automática si el WebSocket cae ───────────
+            var wsCheckInterval = setInterval(function() {
+                try {
+                    var stRoot = window.parent.document.querySelector('[data-testid="stApp"]');
                     var offline = stRoot && stRoot.classList.contains('stApp--offline');
                     if (offline) {
                         // Esperar 3 segundos y recargar para reconectar
                         setTimeout(function() {
-                            window.location.reload();
+                            window.parent.location.reload();
                         }, 3000);
                         clearInterval(wsCheckInterval);
                     }
-                }, 10000);
+                } catch(e) {}
+            }, 10000);
 
-                console.log('[LogiPartVE] Sistema keep-alive iniciado (ping cada 20s)');
-            })();
-            </script>
-        """, unsafe_allow_html=True)
+            console.log('[LogiPartVE] Keep-alive iniciado (ping cada 20s)');
+        })();
+        </script>
+        """
+        components.html(keep_alive_html, height=0, scrolling=False)
 
     @staticmethod
     def keep_alive():

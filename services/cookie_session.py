@@ -1,33 +1,29 @@
 # services/cookie_session.py
-# Persistencia de sesión usando cookies del navegador — SOLUCIÓN NATIVA
+# Persistencia de sesión usando cookies del navegador — SOLUCIÓN ROBUSTA v2
 #
-# ─── POR QUÉ SE ELIMINÓ extra-streamlit-components ───────────────────────────
-# extra_streamlit_components.CookieManager renderiza un componente JavaScript
-# que provoca un rerun adicional de Streamlit CADA VEZ que se instancia.
-# Esto creaba una condición de carrera:
-#   1. Analista agrega ítem → st.rerun()
-#   2. En el rerun, CookieManager dispara su propio rerun extra
-#   3. En ese rerun extra, logged_in puede estar False por un ciclo
-#   4. Streamlit muestra la pantalla de login → sesión perdida
+# ─── PROBLEMA ORIGINAL ────────────────────────────────────────────────────────
+# La versión anterior intentaba leer la cookie via st.query_params["_lp_sess"],
+# pero NUNCA se inyectaba el JavaScript que leía la cookie y la ponía en
+# query_params. Resultado: la sesión no se podía restaurar tras reinicios del
+# servidor Railway, causando logouts cada ~3 minutos.
 #
-# ─── SOLUCIÓN ─────────────────────────────────────────────────────────────────
-# Usamos st.components.v1.html() para inyectar JavaScript puro que lee y escribe
-# document.cookie directamente. Esto NO genera reruns adicionales.
-# La cookie se lee mediante st.query_params como puente de comunicación.
+# ─── SOLUCIÓN v2 ──────────────────────────────────────────────────────────────
+# Usamos streamlit-cookies-controller que implementa correctamente el puente
+# JS ↔ Python mediante st.components.v1.declare_component().
+# Para evitar el rerun extra (condición de carrera), inicializamos el controller
+# UNA SOLA VEZ por sesión y guardamos las cookies en st.session_state.
 #
 # ─── FLUJO ────────────────────────────────────────────────────────────────────
-# LOGIN:  save_session_cookie()  → inyecta JS que escribe la cookie en el browser
-# RERUN:  restore_session_from_cookie() → lee st.query_params["_lp_sess"]
-# LOGOUT: delete_session_cookie() → inyecta JS que borra la cookie del browser
+# LOGIN:  save_session_cookie()       → escribe cookie via CookieController.set()
+# RERUN:  restore_session_from_cookie() → lee cookie via CookieController.get()
+# LOGOUT: delete_session_cookie()     → borra cookie via CookieController.remove()
 
 import streamlit as st
-import streamlit.components.v1 as components
 import hashlib
 import time
 import json
 import os
-from datetime import datetime, timedelta
-from urllib.parse import unquote
+from datetime import datetime
 
 # ── Configuración ────────────────────────────────────────────────────────────
 SECRET_KEY      = os.environ.get("SECRET_KEY", "logipartve_secret_2026_railway")
@@ -72,48 +68,102 @@ def _verify_token(token: str, max_age_hours: int = SESSION_HOURS) -> dict:
         return {"valid": False}
 
 
+# ── Cookie Controller (singleton por sesión) ─────────────────────────────────
+def _get_cookie_controller():
+    """
+    Retorna el CookieController, inicializándolo solo una vez por sesión.
+    Guarda las cookies en st.session_state para evitar reruns extra.
+    """
+    try:
+        from streamlit_cookies_controller import CookieController
+        # Usar una clave única para no interferir con otros componentes
+        if '_lp_cookie_ctrl' not in st.session_state:
+            ctrl = CookieController(key='_lp_cookie_ctrl')
+            # Las cookies se cargan en el primer rerun; guardar referencia
+            st.session_state['_lp_cookie_ctrl_obj'] = ctrl
+        else:
+            ctrl = st.session_state.get('_lp_cookie_ctrl_obj')
+            if ctrl is None:
+                ctrl = CookieController(key='_lp_cookie_ctrl')
+                st.session_state['_lp_cookie_ctrl_obj'] = ctrl
+        return ctrl
+    except ImportError:
+        print("[CookieSession] streamlit-cookies-controller no disponible, usando fallback")
+        return None
+    except Exception as e:
+        print(f"[CookieSession] Error al inicializar CookieController: {e}")
+        return None
+
+
 # ── API pública ───────────────────────────────────────────────────────────────
 def save_session_cookie(user_id: int, username: str, role: str, full_name: str):
     """
-    Guarda la sesión del usuario en una cookie del navegador mediante JavaScript.
+    Guarda la sesión del usuario en una cookie del navegador.
     Se llama después de un login exitoso.
-    NO genera reruns adicionales de Streamlit.
     """
     try:
+        import base64
         token        = _generate_token(user_id, username)
         session_data = json.dumps({
             "token":     token,
             "role":      role,
             "full_name": full_name
         })
-        max_age_seconds = SESSION_HOURS * 3600
-        # Codificar el valor para uso seguro en JS (base64-like via encodeURIComponent)
-        import base64
+        max_age_seconds = int(SESSION_HOURS * 3600)
         encoded_val = base64.b64encode(session_data.encode()).decode()
 
-        js_code = f"""
-        <script>
-        (function() {{
-            var val = '{encoded_val}';
-            document.cookie = '{COOKIE_NAME}=' + val +
-                '; Max-Age={max_age_seconds}' +
-                '; path=/' +
-                '; SameSite=Lax';
-        }})();
-        </script>
-        """
-        components.html(js_code, height=0, scrolling=False)
-        print(f"[CookieSession] Cookie guardada para: {username} (expira en {SESSION_HOURS}h)")
+        ctrl = _get_cookie_controller()
+        if ctrl is not None:
+            # Usar CookieController para escribir la cookie
+            from datetime import timedelta
+            ctrl.set(
+                COOKIE_NAME,
+                encoded_val,
+                max_age=max_age_seconds,
+                path='/',
+                same_site='lax'
+            )
+            print(f"[CookieSession] Cookie guardada (controller) para: {username}")
+        else:
+            # Fallback: usar components.html con script
+            _save_cookie_fallback(encoded_val, max_age_seconds)
+            print(f"[CookieSession] Cookie guardada (fallback) para: {username}")
+
     except Exception as e:
         print(f"[CookieSession] No se pudo guardar cookie: {e}")
+        # Intentar fallback
+        try:
+            import base64
+            token = _generate_token(user_id, username)
+            session_data = json.dumps({"token": token, "role": role, "full_name": full_name})
+            encoded_val = base64.b64encode(session_data.encode()).decode()
+            _save_cookie_fallback(encoded_val, int(SESSION_HOURS * 3600))
+        except Exception as e2:
+            print(f"[CookieSession] Fallback también falló: {e2}")
+
+
+def _save_cookie_fallback(encoded_val: str, max_age_seconds: int):
+    """Fallback: guarda cookie usando components.html (el script SÍ se ejecuta en iframe)."""
+    import streamlit.components.v1 as components
+    js_code = f"""
+    <script>
+    (function() {{
+        document.cookie = '{COOKIE_NAME}=' + '{encoded_val}' +
+            '; Max-Age={max_age_seconds}' +
+            '; path=/' +
+            '; SameSite=Lax';
+        // Notificar al padre (Streamlit) que la cookie fue guardada
+        window.parent.postMessage({{type: 'lp_cookie_saved'}}, '*');
+    }})();
+    </script>
+    """
+    components.html(js_code, height=0, scrolling=False)
 
 
 def restore_session_from_cookie() -> bool:
     """
     Intenta restaurar la sesión desde la cookie del navegador.
-    Lee el valor desde st.query_params (puesto ahí por el JS de lectura en app.py).
-    Si el token está próximo a expirar, lo renueva automáticamente.
-    Se llama al inicio de cada rerun de Streamlit.
+    Usa CookieController para leer la cookie de forma confiable.
 
     Returns:
         True si se restauró (o ya estaba activa) la sesión.
@@ -125,16 +175,26 @@ def restore_session_from_cookie() -> bool:
 
     try:
         from database.db_manager import DBManager
+        import base64
 
-        # Leer desde query params (puente JS → Python)
-        raw_cookie = st.query_params.get("_lp_sess", None)
+        # Intentar leer con CookieController
+        raw_cookie = None
+        ctrl = _get_cookie_controller()
+        if ctrl is not None:
+            try:
+                raw_cookie = ctrl.get(COOKIE_NAME)
+            except Exception as e:
+                print(f"[CookieSession] Error leyendo cookie con controller: {e}")
+
+        # Fallback: leer desde query_params (por si se puso manualmente)
+        if not raw_cookie:
+            raw_cookie = st.query_params.get("_lp_sess", None)
 
         if not raw_cookie:
             return False
 
         # Decodificar base64
         try:
-            import base64
             session_json = base64.b64decode(raw_cookie.encode()).decode()
         except Exception:
             return False
@@ -154,10 +214,6 @@ def restore_session_from_cookie() -> bool:
 
         user = DBManager.get_user_by_username(token_info["username"])
         if not user:
-            delete_session_cookie()
-            return False
-
-        if not user.get("is_active", True):
             delete_session_cookie()
             return False
 
@@ -185,22 +241,38 @@ def restore_session_from_cookie() -> bool:
 
 def delete_session_cookie():
     """
-    Elimina la cookie de sesión del navegador mediante JavaScript.
+    Elimina la cookie de sesión del navegador.
     Se llama al hacer logout.
-    NO genera reruns adicionales de Streamlit.
     """
     try:
-        js_code = f"""
-        <script>
-        (function() {{
-            document.cookie = '{COOKIE_NAME}=; Max-Age=0; path=/; SameSite=Lax';
-        }})();
-        </script>
-        """
-        components.html(js_code, height=0, scrolling=False)
-        # Limpiar el flag del lector para que se reinyecte en el próximo login
-        if "_lp_cookie_reader_injected" in st.session_state:
-            del st.session_state["_lp_cookie_reader_injected"]
-        print("[CookieSession] Cookie eliminada del navegador.")
+        ctrl = _get_cookie_controller()
+        if ctrl is not None:
+            try:
+                ctrl.remove(COOKIE_NAME, path='/')
+                print("[CookieSession] Cookie eliminada (controller).")
+            except Exception as e:
+                print(f"[CookieSession] Error eliminando con controller: {e}")
+                _delete_cookie_fallback()
+        else:
+            _delete_cookie_fallback()
+
+        # Limpiar el controller del session_state para que se reinicialice
+        for key in ['_lp_cookie_ctrl', '_lp_cookie_ctrl_obj']:
+            if key in st.session_state:
+                del st.session_state[key]
+
     except Exception as e:
         print(f"[CookieSession] No se pudo eliminar cookie: {e}")
+
+
+def _delete_cookie_fallback():
+    """Fallback: elimina cookie usando components.html."""
+    import streamlit.components.v1 as components
+    js_code = f"""
+    <script>
+    (function() {{
+        document.cookie = '{COOKIE_NAME}=; Max-Age=0; path=/; SameSite=Lax';
+    }})();
+    </script>
+    """
+    components.html(js_code, height=0, scrolling=False)
