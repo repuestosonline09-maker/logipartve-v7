@@ -100,6 +100,87 @@ def show_diagnostics():
         
         st.write(f"\n**Total de variables de entorno:** {len(env_vars)}")
     
+    # ─── HERRAMIENTA DE REPARACIÓN DE IVA ───────────────────────────────────────
+    st.markdown("---")
+    st.subheader("🔧 Herramienta de Reparación de IVA")
+    st.info("Esta herramienta permite aplicar el IVA 16% a los ítems de una cotización que fue guardada sin IVA por un bug anterior.")
+
+    quote_number_fix = st.text_input("Número de cotización a reparar (ej: 2026-30093-A):", key="fix_iva_quote")
+    iva_pct_fix = st.number_input("Porcentaje de IVA a aplicar:", min_value=0.0, max_value=100.0, value=16.0, step=0.5, key="fix_iva_pct")
+
+    if st.button("🔧 Aplicar IVA a la cotización", key="btn_fix_iva"):
+        if not quote_number_fix.strip():
+            st.error("Ingresa el número de cotización.")
+        else:
+            try:
+                conn = DBManager.get_connection()
+                cursor = conn.cursor()
+
+                # Obtener los ítems actuales
+                if DBManager.USE_POSTGRES:
+                    cursor.execute("""
+                        SELECT id, precio_unitario, cantidad, precio_total
+                        FROM quote_items
+                        WHERE quote_number = %s
+                    """, (quote_number_fix.strip(),))
+                else:
+                    cursor.execute("""
+                        SELECT id, precio_unitario, cantidad, precio_total
+                        FROM quote_items
+                        WHERE quote_number = ?
+                    """, (quote_number_fix.strip(),))
+
+                items = cursor.fetchall()
+
+                if not items:
+                    st.error(f"No se encontraron ítems para la cotización {quote_number_fix}")
+                else:
+                    updated = 0
+                    total_iva = 0.0
+                    details = []
+
+                    for item in items:
+                        item_id = item[0]
+                        precio_unit = float(item[1])
+                        cantidad = int(item[2])
+                        precio_total = float(item[3])
+
+                        # Calcular IVA: el precio_total ya es el precio sin IVA
+                        iva_valor = round(precio_total * (iva_pct_fix / 100.0), 2)
+                        total_iva += iva_valor
+
+                        if DBManager.USE_POSTGRES:
+                            cursor.execute("""
+                                UPDATE quote_items
+                                SET aplicar_iva = TRUE,
+                                    iva_porcentaje = %s,
+                                    iva_valor = %s
+                                WHERE id = %s
+                            """, (iva_pct_fix, iva_valor, item_id))
+                        else:
+                            cursor.execute("""
+                                UPDATE quote_items
+                                SET aplicar_iva = 1,
+                                    iva_porcentaje = ?,
+                                    iva_valor = ?
+                                WHERE id = ?
+                            """, (iva_pct_fix, iva_valor, item_id))
+
+                        details.append(f"  Ítem ID {item_id}: precio_total=${precio_total:.2f} → IVA={iva_pct_fix}% = ${iva_valor:.2f}")
+                        updated += 1
+
+                    conn.commit()
+                    cursor.close()
+                    conn.close()
+
+                    st.success(f"✅ Se actualizaron {updated} ítems con IVA {iva_pct_fix}%.")
+                    st.info(f"💰 IVA total calculado: **${total_iva:.2f}**")
+                    for d in details:
+                        st.code(d)
+
+            except Exception as e:
+                st.error(f"❌ Error al reparar IVA: {str(e)}")
+
     # Información del sistema
     st.markdown("---")
     st.subheader("💻 Información del Sistema")
