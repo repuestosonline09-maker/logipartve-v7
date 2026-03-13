@@ -16,7 +16,7 @@ st.set_page_config(
 from database.db_manager import DBManager
 from services.auth_manager import AuthManager
 from services.session_manager import SessionManager
-from services.cookie_session import restore_session_from_cookie, save_session_cookie, delete_session_cookie, inject_session_listener
+from services.cookie_session import restore_session_from_cookie, save_session_cookie, delete_session_cookie
 import os
 import sys
 from datetime import datetime, timedelta, timezone
@@ -107,35 +107,6 @@ st.markdown("""
     };
     function scrollToTop() { window.scrollTo({top: 0, behavior: 'smooth'}); }
 
-    // ── Listener para restauración de sesión desde iframe sandboxed ──────────
-    // El iframe de components.html() no puede navegar el padre directamente
-    // (está sandboxed sin allow-top-navigation). Por eso el iframe envía
-    // un postMessage y este listener hace la navegación desde el padre.
-    (function() {
-        if (window.__lpSessionListenerActive) return;
-        window.__lpSessionListenerActive = true;
-
-        window.addEventListener('message', function(event) {
-            // Verificar que el mensaje es de nuestro iframe (mismo origen)
-            if (!event.data || event.data.type !== 'lp_restore_session') return;
-
-            var cookieVal = event.data.cookieVal;
-            var paramName = event.data.paramName || '_lp_sess';
-
-            if (!cookieVal) return;
-
-            // Verificar que no estamos ya en un loop
-            var currentUrl = new URL(window.location.href);
-            if (currentUrl.searchParams.get(paramName)) return;
-
-            // Navegar con el parámetro de sesión
-            currentUrl.searchParams.set(paramName, cookieVal);
-            console.log('[LogiPartVE] Restaurando sesión desde postMessage...');
-            window.location.href = currentUrl.toString();
-        });
-
-        console.log('[LogiPartVE] Listener de restauración de sesión activo');
-    })();
     </script>
     <button class="scroll-top" onclick="scrollToTop()">↑</button>
 """, unsafe_allow_html=True)
@@ -191,11 +162,6 @@ def main():
         except Exception as e:
             print(f"Migración países: {e}")
         st.session_state.countries_migration_executed = True
-
-    # Inyectar el listener de postMessage en el padre (para restaurar sesión desde iframe)
-    # Debe ir ANTES de restore_session_from_cookie() para que el listener esté activo
-    # cuando el iframe envíe el postMessage
-    inject_session_listener()
 
     if not AuthManager.is_logged_in():
         restore_session_from_cookie()
