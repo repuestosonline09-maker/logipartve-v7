@@ -79,14 +79,16 @@ def _verify_token(token: str, max_age_hours: int = SESSION_HOURS) -> dict:
 
 def _get_controller():
     """
-    Obtiene o crea el CookieController.
-    El controlador se guarda en session_state para reutilizarlo.
+    Crea un nuevo CookieController en cada llamada.
+    
+    IMPORTANTE: NO cachear el controlador en session_state.
+    El CookieController necesita crearse en cada rerun para que
+    dispare el rerun automático cuando carga las cookies del browser.
+    Si se cachea, el segundo rerun no ocurre y las cookies no se leen.
     """
     try:
         from streamlit_cookies_controller import CookieController
-        if "_lp_cookie_ctrl" not in st.session_state:
-            st.session_state["_lp_cookie_ctrl"] = CookieController(key="_lp_cookies")
-        return st.session_state["_lp_cookie_ctrl"]
+        return CookieController(key="_lp_cookies")
     except ImportError:
         print("[CookieSession] streamlit-cookies-controller no disponible")
         return None
