@@ -317,13 +317,16 @@ def inject_session_listener():
     js_code = """
     <script>
     // Inyectar el listener en el padre (window.parent)
+    // El listener se registra en window.parent (el padre de este iframe)
+    // Cuando recibe el mensaje, usa window.top para navegar (top-level window)
     (function() {
-        var parent = window.parent;
-        if (!parent) return;
-        if (parent.__lpSessionListenerActive) return;
-        parent.__lpSessionListenerActive = true;
+        var parentWin = window.parent;
+        if (!parentWin) return;
+        if (parentWin.__lpSessionListenerActive) return;
+        parentWin.__lpSessionListenerActive = true;
 
-        parent.addEventListener('message', function(event) {
+        // El listener se registra en el padre
+        parentWin.addEventListener('message', function(event) {
             if (!event.data || event.data.type !== 'lp_restore_session') return;
 
             var cookieVal = event.data.cookieVal;
@@ -331,14 +334,21 @@ def inject_session_listener():
 
             if (!cookieVal) return;
 
-            // Evitar loop: si ya está en la URL, no redirigir
-            var currentUrl = new URL(parent.location.href);
-            if (currentUrl.searchParams.get(paramName)) return;
+            // Usar window.top para navegar (el top-level window tiene permisos)
+            var topWin = parentWin.top || parentWin;
 
-            // Navegar con el parámetro de sesión
-            currentUrl.searchParams.set(paramName, cookieVal);
-            console.log('[LogiPartVE] Listener: restaurando sesión...');
-            parent.location.href = currentUrl.toString();
+            // Evitar loop: si ya está en la URL, no redirigir
+            try {
+                var currentUrl = new URL(topWin.location.href);
+                if (currentUrl.searchParams.get(paramName)) return;
+
+                // Navegar con el parámetro de sesión
+                currentUrl.searchParams.set(paramName, cookieVal);
+                console.log('[LogiPartVE] Listener: restaurando sesión via top...');
+                topWin.location.href = currentUrl.toString();
+            } catch(e) {
+                console.log('[LogiPartVE] Error en listener:', e.message);
+            }
         });
 
         console.log('[LogiPartVE] Listener de restauración de sesión inyectado en padre');
