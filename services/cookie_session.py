@@ -133,14 +133,10 @@ def inject_cookie_reader():
     DEBE llamarse ANTES de mostrar cualquier vista, cuando no hay sesión activa.
     Solo se inyecta una vez por ciclo (controlado por session_state).
     """
-    # Solo inyectar si no se ha hecho ya en este ciclo
-    if st.session_state.get("_lp_reader_injected_cycle", 0) == st.session_state.get("_lp_cycle", 0):
+    # Solo inyectar una vez por sesión de Streamlit (no repetir en reruns)
+    if st.session_state.get("_lp_reader_injected", False):
         return
-
-    # Marcar que ya se inyectó en este ciclo
-    cycle = st.session_state.get("_lp_cycle", 0) + 1
-    st.session_state["_lp_cycle"] = cycle
-    st.session_state["_lp_reader_injected_cycle"] = cycle
+    st.session_state["_lp_reader_injected"] = True
 
     js_code = f"""
     <script>
@@ -303,7 +299,7 @@ def delete_session_cookie():
         """
         components.html(js_code, height=0, scrolling=False)
         # Limpiar el estado del lector
-        for key in ['_lp_cycle', '_lp_reader_injected_cycle']:
+        for key in ['_lp_cycle', '_lp_reader_injected_cycle', '_lp_reader_injected']:
             if key in st.session_state:
                 del st.session_state[key]
         print("[CookieSession] Cookie eliminada del navegador.")
