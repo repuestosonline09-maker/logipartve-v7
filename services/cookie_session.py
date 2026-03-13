@@ -144,7 +144,7 @@ def inject_cookie_reader():
         var cookieName = '{COOKIE_NAME}';
         var paramName = '_lp_sess';
 
-        // Leer la cookie del documento padre
+        // Leer la cookie del documento padre (mismo origen)
         function getCookie(name) {{
             try {{
                 var cookies = window.parent.document.cookie;
@@ -156,7 +156,7 @@ def inject_cookie_reader():
                     }}
                 }}
             }} catch(e) {{
-                // Si no podemos acceder al padre, intentar con el documento local
+                // Fallback: leer del documento local
                 var cookies = document.cookie;
                 var parts = cookies.split(';');
                 for (var i = 0; i < parts.length; i++) {{
@@ -175,21 +175,25 @@ def inject_cookie_reader():
             return;
         }}
 
-        // Verificar si ya está en los query params (evitar loop)
+        // Verificar si ya está en los query params del padre (evitar loop)
         try {{
             var parentUrl = new URL(window.parent.location.href);
             if (parentUrl.searchParams.get(paramName)) {{
                 console.log('[LogiPartVE] Ya hay _lp_sess en URL, no redirigir');
                 return;
             }}
-
-            // Agregar el parámetro a la URL y recargar
-            parentUrl.searchParams.set(paramName, cookieVal);
-            console.log('[LogiPartVE] Redirigiendo con cookie...');
-            window.parent.location.href = parentUrl.toString();
         }} catch(e) {{
-            console.log('[LogiPartVE] Error al redirigir:', e.message);
+            // No podemos leer la URL del padre, continuar igual
         }}
+
+        // El iframe está sandboxed sin allow-top-navigation.
+        // Usamos postMessage para que el padre (que NO está sandboxed) haga la navegación.
+        console.log('[LogiPartVE] Enviando cookie al padre via postMessage...');
+        window.parent.postMessage({{
+            type: 'lp_restore_session',
+            cookieVal: cookieVal,
+            paramName: paramName
+        }}, '*');
     }})();
     </script>
     """
