@@ -475,6 +475,7 @@ def show_admin_dashboard():
             bs_a  = stats_a.get('quotes_by_status', {})
             dr_a  = bs_a.get('draft', 0)
             ap_a  = bs_a.get('approved', 0)
+            ap_monto_a = stats_a.get('approved_amount', 0.0)
 
             st.markdown(f"#### 📌 {analista_sel}")
             st.caption(f"Período: {periodo_label}")
@@ -506,6 +507,7 @@ def show_admin_dashboard():
                 <div class="dash-card dash-card-green">
                     <div class="dash-card-value">{ap_a}</div>
                     <div class="dash-card-label">✅ Aprobadas</div>
+                    <div class="dash-card-sub" style="color:#1a7a3c;font-size:1.05rem;font-weight:700;margin-top:4px;">${ap_monto_a:,.0f} USD</div>
                 </div>""", unsafe_allow_html=True)
 
             st.markdown("<br>", unsafe_allow_html=True)
