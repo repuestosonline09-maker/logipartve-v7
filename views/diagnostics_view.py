@@ -118,13 +118,20 @@ def show_diagnostics():
                 cursor = conn.cursor()
 
                 # Verificar columnas disponibles en quote_items
+                cols = []
                 if DBManager.USE_POSTGRES:
                     cursor.execute("""
                         SELECT column_name FROM information_schema.columns
                         WHERE table_name = 'quote_items'
                         ORDER BY ordinal_position
                     """)
-                    cols = [r[0] for r in cursor.fetchall()]
+                    raw_cols = cursor.fetchall()
+                    # psycopg2 puede devolver dicts o tuplas según el cursor
+                    for r in raw_cols:
+                        if isinstance(r, dict):
+                            cols.append(r.get('column_name', r.get(list(r.keys())[0])))
+                        else:
+                            cols.append(r[0])
                     st.info(f"Columnas en quote_items: {cols}")
 
                 # Obtener el quote_id desde la tabla quotes
@@ -151,8 +158,14 @@ def show_diagnostics():
                     conn.close()
                     st.stop()
 
-                quote_id_val = quote_row[0]
-                st.info(f"Cotización encontrada: ID={quote_id_val}, número='{quote_row[1]}'")
+                # Soporte para dicts y tuplas en quote_row
+                if isinstance(quote_row, dict):
+                    quote_id_val = quote_row.get('id')
+                    quote_num_found = quote_row.get('quote_number')
+                else:
+                    quote_id_val = quote_row[0]
+                    quote_num_found = quote_row[1]
+                st.info(f"Cotización encontrada: ID={quote_id_val}, número='{quote_num_found}'")
 
                 if DBManager.USE_POSTGRES:
                     cursor.execute("""
@@ -176,13 +189,20 @@ def show_diagnostics():
                     total_iva = 0.0
                     details = []
 
-                    has_iva_cols = 'aplicar_iva' in cols if DBManager.USE_POSTGRES else True
+                    has_iva_cols = 'aplicar_iva' in cols if (DBManager.USE_POSTGRES and cols) else True
 
                     for item in items:
-                        item_id = item[0]
-                        unit_cost_val = float(item[1]) if item[1] else 0.0
-                        cantidad = int(item[2]) if item[2] else 1
-                        total_cost_val = float(item[3]) if item[3] else 0.0
+                        # Soporte para dicts y tuplas
+                        if isinstance(item, dict):
+                            item_id = item['id']
+                            unit_cost_val = float(item.get('unit_cost') or 0)
+                            cantidad = int(item.get('quantity') or 1)
+                            total_cost_val = float(item.get('total_cost') or 0)
+                        else:
+                            item_id = item[0]
+                            unit_cost_val = float(item[1]) if item[1] else 0.0
+                            cantidad = int(item[2]) if item[2] else 1
+                            total_cost_val = float(item[3]) if item[3] else 0.0
 
                         # Calcular IVA: el total_cost ya es el precio sin IVA
                         iva_valor = round(total_cost_val * (iva_pct_fix / 100.0), 2)
