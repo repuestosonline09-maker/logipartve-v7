@@ -16,7 +16,7 @@ st.set_page_config(
 from database.db_manager import DBManager
 from services.auth_manager import AuthManager
 from services.session_manager import SessionManager
-from services.cookie_session import restore_session_from_cookie, save_session_cookie, delete_session_cookie
+from services.cookie_session import restore_session_from_cookie, save_session_cookie, delete_session_cookie, inject_session_listener
 import os
 import sys
 from datetime import datetime, timedelta, timezone
@@ -191,6 +191,11 @@ def main():
         except Exception as e:
             print(f"Migración países: {e}")
         st.session_state.countries_migration_executed = True
+
+    # Inyectar el listener de postMessage en el padre (para restaurar sesión desde iframe)
+    # Debe ir ANTES de restore_session_from_cookie() para que el listener esté activo
+    # cuando el iframe envíe el postMessage
+    inject_session_listener()
 
     if not AuthManager.is_logged_in():
         restore_session_from_cookie()

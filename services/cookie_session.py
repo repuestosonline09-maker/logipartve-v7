@@ -281,6 +281,53 @@ def restore_session_from_cookie() -> bool:
         return False
 
 
+def inject_session_listener():
+    """
+    Inyecta en el padre (via iframe components.html) un listener de postMessage
+    que recibe la cookie del iframe sandboxed y hace la navegación a /?_lp_sess=...
+
+    DEBE llamarse siempre al inicio de la app, antes de restore_session_from_cookie().
+    Solo se inyecta una vez por sesión de Streamlit.
+    """
+    if st.session_state.get("_lp_listener_injected", False):
+        return
+    st.session_state["_lp_listener_injected"] = True
+
+    js_code = """
+    <script>
+    // Inyectar el listener en el padre (window.parent)
+    (function() {
+        var parent = window.parent;
+        if (!parent) return;
+        if (parent.__lpSessionListenerActive) return;
+        parent.__lpSessionListenerActive = true;
+
+        parent.addEventListener('message', function(event) {
+            if (!event.data || event.data.type !== 'lp_restore_session') return;
+
+            var cookieVal = event.data.cookieVal;
+            var paramName = event.data.paramName || '_lp_sess';
+
+            if (!cookieVal) return;
+
+            // Evitar loop: si ya está en la URL, no redirigir
+            var currentUrl = new URL(parent.location.href);
+            if (currentUrl.searchParams.get(paramName)) return;
+
+            // Navegar con el parámetro de sesión
+            currentUrl.searchParams.set(paramName, cookieVal);
+            console.log('[LogiPartVE] Listener: restaurando sesión...');
+            parent.location.href = currentUrl.toString();
+        });
+
+        console.log('[LogiPartVE] Listener de restauración de sesión inyectado en padre');
+    })();
+    </script>
+    """
+    components.html(js_code, height=0, scrolling=False)
+    print("[CookieSession] Listener de sesión inyectado en padre")
+
+
 def delete_session_cookie():
     """
     Elimina la cookie de sesión del navegador mediante JavaScript.
