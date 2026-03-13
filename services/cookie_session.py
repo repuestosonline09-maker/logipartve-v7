@@ -188,12 +188,33 @@ def inject_cookie_reader():
 
         // El iframe está sandboxed sin allow-top-navigation.
         // Usamos postMessage para que el padre (que NO está sandboxed) haga la navegación.
-        console.log('[LogiPartVE] Enviando cookie al padre via postMessage...');
-        window.parent.postMessage({{
-            type: 'lp_restore_session',
-            cookieVal: cookieVal,
-            paramName: paramName
-        }}, '*');
+        // IMPORTANTE: Esperamos 600ms para que el SESSION-LISTENER esté registrado en el padre.
+        // Los iframes se cargan asíncronamente y el listener puede no estar listo aún.
+        function sendRestoreMessage() {{
+            console.log('[LogiPartVE] Enviando cookie al padre via postMessage...');
+            window.parent.postMessage({{
+                type: 'lp_restore_session',
+                cookieVal: cookieVal,
+                paramName: paramName
+            }}, '*');
+        }}
+
+        // Verificar si el listener ya está activo; si no, esperar y reintentar
+        function tryRestore(attempts) {{
+            if (attempts <= 0) {{
+                console.log('[LogiPartVE] Listener no disponible después de esperar, enviando de todas formas...');
+                sendRestoreMessage();
+                return;
+            }}
+            if (window.parent.__lpSessionListenerActive) {{
+                sendRestoreMessage();
+            }} else {{
+                setTimeout(function() {{ tryRestore(attempts - 1); }}, 200);
+            }}
+        }}
+
+        // Intentar hasta 10 veces con 200ms de intervalo (máx 2 segundos)
+        setTimeout(function() {{ tryRestore(10); }}, 100);
     }})();
     </script>
     """
