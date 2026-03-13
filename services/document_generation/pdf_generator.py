@@ -131,10 +131,10 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
     doc = SimpleDocTemplate(
         output_path,
         pagesize=landscape(letter),
-        rightMargin=0.4*inch,
-        leftMargin=0.4*inch,
-        topMargin=0.3*inch,
-        bottomMargin=0.3*inch
+        rightMargin=0.3*inch,
+        leftMargin=0.3*inch,
+        topMargin=0.2*inch,
+        bottomMargin=0.2*inch
     )
     
     # Colores del tema
@@ -313,10 +313,10 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
     # Crear columna izquierda (Logo JDAE + RIF)
     columna_izq_data = []
     if logo_jdae_path:
-        columna_izq_data.append([Image(logo_jdae_path, width=1.5*inch, height=1.5*inch)])
+        columna_izq_data.append([Image(logo_jdae_path, width=1.2*inch, height=1.2*inch)])
     columna_izq_data.append([Paragraph("<b>J-5072639-5</b>", style_rif_representantes)])
     
-    tabla_izq = Table(columna_izq_data, colWidths=[1.5*inch])
+    tabla_izq = Table(columna_izq_data, colWidths=[1.2*inch])
     tabla_izq.setStyle(TableStyle([
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
@@ -327,10 +327,10 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
     # Crear columna derecha (Logo AOP + Representantes)
     columna_der_data = []
     if logo_aop_path:
-        columna_der_data.append([Image(logo_aop_path, width=1.2*inch, height=1.2*inch)])
+        columna_der_data.append([Image(logo_aop_path, width=1.0*inch, height=1.0*inch)])
     columna_der_data.append([Paragraph("<b>REPRESENTANTES EXCLUSIVOS<br/>PARA VENEZUELA</b>", style_rif_representantes)])
     
-    tabla_der = Table(columna_der_data, colWidths=[1.8*inch])
+    tabla_der = Table(columna_der_data, colWidths=[1.5*inch])
     tabla_der.setStyle(TableStyle([
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
@@ -339,7 +339,7 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
     ]))
     
     # Ensamblar header completo (3 columnas)
-    header_completo = Table([[tabla_izq, tabla_bloque_central, tabla_der]], colWidths=[2*inch, 3.5*inch, 2*inch])
+    header_completo = Table([[tabla_izq, tabla_bloque_central, tabla_der]], colWidths=[1.7*inch, 3.5*inch, 1.8*inch])
     header_completo.setStyle(TableStyle([
         ('ALIGN', (0, 0), (0, 0), 'CENTER'),
         ('ALIGN', (1, 0), (1, 0), 'CENTER'),
@@ -350,7 +350,7 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
     ]))
     
     story.append(header_completo)
-    story.append(Spacer(1, 0.02*inch))
+    story.append(Spacer(1, 0.01*inch))
     
     # ==========================================
     # INFORMACIÓN DEL DOCUMENTO
@@ -406,13 +406,13 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
         ('BACKGROUND', (0, 0), (-1, -1), COLOR_GRIS_CLARO),
         ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('TOPPADDING', (0, 0), (-1, -1), 6),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
         ('LEFTPADDING', (0, 0), (-1, -1), 10),
     ]))
     
     story.append(tabla_info_doc)
-    story.append(Spacer(1, 0.15*inch))
+    story.append(Spacer(1, 0.08*inch))
     
     # ==========================================
     # DATOS DEL CLIENTE
@@ -460,13 +460,13 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
         ('INNERGRID', (0, 0), (-1, -1), 0.5, COLOR_GRIS_CLARO),
         ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('TOPPADDING', (0, 0), (-1, -1), 6),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-        ('LEFTPADDING', (0, 0), (-1, -1), 10),
+        ('TOPPADDING', (0, 0), (-1, -1), 3),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+        ('LEFTPADDING', (0, 0), (-1, -1), 8),
     ]))
     
     story.append(tabla_cliente)
-    story.append(Spacer(1, 0.08*inch))  # Espacio reducido (antes 0.15)
+    story.append(Spacer(1, 0.05*inch))  # Espacio reducido
     
     # ==========================================
     # TABLA DE ITEMS (SIN TÍTULO)
@@ -541,18 +541,22 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
     if _density <= 2:          # 1-2 ítems con texto corto
         _font_header  = 6.5
         _font_content = 7.0
-        _pad_v        = 5
+        _pad_v        = 4
     elif _density <= 3:        # 3 ítems o texto moderado
         _font_header  = 6.0
         _font_content = 6.5
-        _pad_v        = 4
+        _pad_v        = 3
     elif _density <= 4:        # 4 ítems o texto largo
         _font_header  = 5.5
         _font_content = 6.0
         _pad_v        = 2
-    else:                      # 5 ítems o texto muy largo (máximo del sistema)
+    elif _density <= 6:        # 5 ítems con texto largo
         _font_header  = 5.0
         _font_content = 5.5
+        _pad_v        = 1
+    else:                      # Máxima densidad
+        _font_header  = 4.5
+        _font_content = 5.0
         _pad_v        = 1
     # ─────────────────────────────────────────────────────────────────────────────────
 
@@ -590,7 +594,7 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
     ]))
     
     story.append(tabla_items)
-    story.append(Spacer(1, 0.12*inch))
+    story.append(Spacer(1, 0.08*inch))
 
     # ── Una sola hoja garantizada ────────────────────────────────────────────────────
     # Con máximo 5 ítems y la compresión calibrada arriba, todo cabe en una página.
@@ -625,10 +629,10 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
     tabla_col_izq.setStyle(TableStyle([
         ('BOX', (0, 1), (-1, -1), 1.5, COLOR_AZUL_AVIACION),
         ('BACKGROUND', (0, 1), (-1, -1), colors.white),
-        ('TOPPADDING', (0, 1), (-1, -1), 10),
-        ('BOTTOMPADDING', (0, 1), (-1, -1), 10),
-        ('LEFTPADDING', (0, 1), (-1, -1), 12),
-        ('RIGHTPADDING', (0, 1), (-1, -1), 12),
+        ('TOPPADDING', (0, 1), (-1, -1), 5),
+        ('BOTTOMPADDING', (0, 1), (-1, -1), 5),
+        ('LEFTPADDING', (0, 1), (-1, -1), 8),
+        ('RIGHTPADDING', (0, 1), (-1, -1), 8),
         ('VALIGN', (0, 1), (-1, -1), 'TOP'),
         ('TOPPADDING', (0, 0), (0, 0), 0),
         ('BOTTOMPADDING', (0, 0), (0, 0), 5),
@@ -675,7 +679,7 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
     ]))
     
     story.append(tabla_2col)
-    story.append(Spacer(1, 0.15*inch))
+    story.append(Spacer(1, 0.08*inch))
     
     # Bloque de TÉRMINOS Y CONDICIONES eliminado (ahora está en layout de 2 columnas arriba)
     
