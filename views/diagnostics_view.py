@@ -117,18 +117,37 @@ def show_diagnostics():
                 cursor = conn.cursor()
 
                 # Obtener los ítems actuales
+                # Primero obtener el quote_id desde la tabla quotes
                 if DBManager.USE_POSTGRES:
                     cursor.execute("""
-                        SELECT id, precio_unitario, cantidad, precio_total
-                        FROM quote_items
-                        WHERE quote_number = %s
+                        SELECT id FROM quotes WHERE quote_number = %s
                     """, (quote_number_fix.strip(),))
                 else:
                     cursor.execute("""
-                        SELECT id, precio_unitario, cantidad, precio_total
-                        FROM quote_items
-                        WHERE quote_number = ?
+                        SELECT id FROM quotes WHERE quote_number = ?
                     """, (quote_number_fix.strip(),))
+
+                quote_row = cursor.fetchone()
+                if not quote_row:
+                    st.error(f"No se encontró la cotización {quote_number_fix} en la tabla quotes")
+                    cursor.close()
+                    conn.close()
+                    st.stop()
+
+                quote_id_val = quote_row[0]
+
+                if DBManager.USE_POSTGRES:
+                    cursor.execute("""
+                        SELECT id, unit_cost, quantity, total_cost
+                        FROM quote_items
+                        WHERE quote_id = %s
+                    """, (quote_id_val,))
+                else:
+                    cursor.execute("""
+                        SELECT id, unit_cost, quantity, total_cost
+                        FROM quote_items
+                        WHERE quote_id = ?
+                    """, (quote_id_val,))
 
                 items = cursor.fetchall()
 
@@ -141,12 +160,12 @@ def show_diagnostics():
 
                     for item in items:
                         item_id = item[0]
-                        precio_unit = float(item[1])
+                        unit_cost_val = float(item[1])
                         cantidad = int(item[2])
-                        precio_total = float(item[3])
+                        total_cost_val = float(item[3])
 
-                        # Calcular IVA: el precio_total ya es el precio sin IVA
-                        iva_valor = round(precio_total * (iva_pct_fix / 100.0), 2)
+                        # Calcular IVA: el total_cost ya es el precio sin IVA
+                        iva_valor = round(total_cost_val * (iva_pct_fix / 100.0), 2)
                         total_iva += iva_valor
 
                         if DBManager.USE_POSTGRES:
@@ -166,7 +185,7 @@ def show_diagnostics():
                                 WHERE id = ?
                             """, (iva_pct_fix, iva_valor, item_id))
 
-                        details.append(f"  Ítem ID {item_id}: precio_total=${precio_total:.2f} → IVA={iva_pct_fix}% = ${iva_valor:.2f}")
+                        details.append(f"  Ítem ID {item_id}: total_cost=${total_cost_val:.2f} → IVA={iva_pct_fix}% = ${iva_valor:.2f}")
                         updated += 1
 
                     conn.commit()
