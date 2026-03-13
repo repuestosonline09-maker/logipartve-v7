@@ -103,8 +103,15 @@ def _adaptar_quote_para_generadores(qd: dict) -> dict:
         dif_val   = precio_usd * (dif_pct / 100)
         precio_bs = precio_usd + dif_val
 
+        # Recuperar campos IVA guardados en la BD
+        _aplicar_iva  = bool(item.get('aplicar_iva', False))
+        _iva_pct      = float(item.get('iva_porcentaje', 16.0) or 16.0)
+        _iva_val      = float(item.get('iva_valor', 0.0) or 0.0)
+
         # Acumuladores para totales
         sub_total += precio_bs
+        if _aplicar_iva:
+            iva_total += _iva_val
         abona_ya  += precio_usd
         total_usd += precio_usd
         total_bs  += precio_bs
@@ -136,9 +143,9 @@ def _adaptar_quote_para_generadores(qd: dict) -> dict:
             'tax_porcentaje':      tax_pct,
             'diferencial_valor':   dif_val,
             'diferencial_porcentaje': dif_pct,
-            'iva_porcentaje':      16.0,
-            'iva_valor':           0.0,
-            'aplicar_iva':         False,
+            'iva_porcentaje':      _iva_pct,
+            'iva_valor':           _iva_val,
+            'aplicar_iva':         _aplicar_iva,
             'costo_unitario':      precio_usd,
             'costo_total':         precio_usd,
             'costo_total_bs':      precio_bs,

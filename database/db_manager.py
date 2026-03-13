@@ -1789,6 +1789,11 @@ class DBManager:
                 impuesto_porcentaje = item.get('impuesto_porcentaje', 0.0)
                 factor_utilidad = item.get('factor_utilidad', 1.0)
                 
+                # Campos IVA
+                aplicar_iva = bool(item.get('aplicar_iva', False))
+                iva_porcentaje = float(item.get('iva_porcentaje', 0.0) or 0.0)
+                iva_valor = float(item.get('iva_valor', 0.0) or 0.0)
+                
                 if is_postgres:
                     cursor.execute("""
                         INSERT INTO quote_items (
@@ -1796,14 +1801,16 @@ class DBManager:
                             quantity, unit_cost, total_cost, envio_tipo, origen,
                             fabricacion, tiempo_entrega, page_url,
                             international_handling, national_handling, shipping_cost,
-                            tax_percentage, profit_factor
-                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                            tax_percentage, profit_factor,
+                            aplicar_iva, iva_porcentaje, iva_valor
+                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """, (
                         quote_id, description, part_number, marca, garantia,
                         quantity, unit_cost, total_cost, envio_tipo, origen,
                         fabricacion, tiempo_entrega, page_url,
                         costo_handling, costo_manejo, costo_envio,
-                        impuesto_porcentaje, factor_utilidad
+                        impuesto_porcentaje, factor_utilidad,
+                        aplicar_iva, iva_porcentaje, iva_valor
                     ))
                 else:
                     cursor.execute("""
@@ -1812,14 +1819,16 @@ class DBManager:
                             quantity, unit_cost, total_cost, envio_tipo, origen,
                             fabricacion, tiempo_entrega, page_url,
                             international_handling, national_handling, shipping_cost,
-                            tax_percentage, profit_factor
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            tax_percentage, profit_factor,
+                            aplicar_iva, iva_porcentaje, iva_valor
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
                         quote_id, description, part_number, marca, garantia,
                         quantity, unit_cost, total_cost, envio_tipo, origen,
                         fabricacion, tiempo_entrega, page_url,
                         costo_handling, costo_manejo, costo_envio,
-                        impuesto_porcentaje, factor_utilidad
+                        impuesto_porcentaje, factor_utilidad,
+                        aplicar_iva, iva_porcentaje, iva_valor
                     ))
             
             conn.commit()
