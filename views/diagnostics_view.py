@@ -113,28 +113,46 @@ def show_diagnostics():
             st.error("Ingresa el número de cotización.")
         else:
             try:
+                import traceback
                 conn = DBManager.get_connection()
                 cursor = conn.cursor()
 
-                # Obtener los ítems actuales
-                # Primero obtener el quote_id desde la tabla quotes
+                # Verificar columnas disponibles en quote_items
                 if DBManager.USE_POSTGRES:
                     cursor.execute("""
-                        SELECT id FROM quotes WHERE quote_number = %s
-                    """, (quote_number_fix.strip(),))
+                        SELECT column_name FROM information_schema.columns
+                        WHERE table_name = 'quote_items'
+                        ORDER BY ordinal_position
+                    """)
+                    cols = [r[0] for r in cursor.fetchall()]
+                    st.info(f"Columnas en quote_items: {cols}")
+
+                # Obtener el quote_id desde la tabla quotes
+                if DBManager.USE_POSTGRES:
+                    cursor.execute("""
+                        SELECT id, quote_number FROM quotes 
+                        WHERE quote_number ILIKE %s OR quote_number = %s
+                    """, (quote_number_fix.strip(), quote_number_fix.strip()))
                 else:
                     cursor.execute("""
-                        SELECT id FROM quotes WHERE quote_number = ?
+                        SELECT id, quote_number FROM quotes WHERE quote_number = ?
                     """, (quote_number_fix.strip(),))
 
                 quote_row = cursor.fetchone()
                 if not quote_row:
-                    st.error(f"No se encontró la cotización {quote_number_fix} en la tabla quotes")
+                    # Mostrar todas las cotizaciones recientes para debug
+                    if DBManager.USE_POSTGRES:
+                        cursor.execute("SELECT id, quote_number FROM quotes ORDER BY id DESC LIMIT 10")
+                    else:
+                        cursor.execute("SELECT id, quote_number FROM quotes ORDER BY id DESC LIMIT 10")
+                    recent = cursor.fetchall()
+                    st.error(f"No se encontró la cotización '{quote_number_fix}'. Cotizaciones recientes en BD: {recent}")
                     cursor.close()
                     conn.close()
                     st.stop()
 
                 quote_id_val = quote_row[0]
+                st.info(f"Cotización encontrada: ID={quote_id_val}, número='{quote_row[1]}'")
 
                 if DBManager.USE_POSTGRES:
                     cursor.execute("""
@@ -152,37 +170,53 @@ def show_diagnostics():
                 items = cursor.fetchall()
 
                 if not items:
-                    st.error(f"No se encontraron ítems para la cotización {quote_number_fix}")
+                    st.error(f"No se encontraron ítems para la cotización {quote_number_fix} (quote_id={quote_id_val})")
                 else:
                     updated = 0
                     total_iva = 0.0
                     details = []
 
+                    has_iva_cols = 'aplicar_iva' in cols if DBManager.USE_POSTGRES else True
+
                     for item in items:
                         item_id = item[0]
-                        unit_cost_val = float(item[1])
-                        cantidad = int(item[2])
-                        total_cost_val = float(item[3])
+                        unit_cost_val = float(item[1]) if item[1] else 0.0
+                        cantidad = int(item[2]) if item[2] else 1
+                        total_cost_val = float(item[3]) if item[3] else 0.0
 
                         # Calcular IVA: el total_cost ya es el precio sin IVA
                         iva_valor = round(total_cost_val * (iva_pct_fix / 100.0), 2)
                         total_iva += iva_valor
 
-                        if DBManager.USE_POSTGRES:
+                        if has_iva_cols:
+                            if DBManager.USE_POSTGRES:
+                                cursor.execute("""
+                                    UPDATE quote_items
+                                    SET aplicar_iva = TRUE,
+                                        iva_porcentaje = %s,
+                                        iva_valor = %s
+                                    WHERE id = %s
+                                """, (iva_pct_fix, iva_valor, item_id))
+                            else:
+                                cursor.execute("""
+                                    UPDATE quote_items
+                                    SET aplicar_iva = 1,
+                                        iva_porcentaje = ?,
+                                        iva_valor = ?
+                                    WHERE id = ?
+                                """, (iva_pct_fix, iva_valor, item_id))
+                        else:
+                            # Las columnas no existen, hay que crearlas primero
+                            st.warning("Las columnas de IVA no existen en la BD. Creándolas...")
+                            cursor.execute("ALTER TABLE quote_items ADD COLUMN IF NOT EXISTS aplicar_iva BOOLEAN DEFAULT FALSE")
+                            cursor.execute("ALTER TABLE quote_items ADD COLUMN IF NOT EXISTS iva_porcentaje FLOAT DEFAULT 0")
+                            cursor.execute("ALTER TABLE quote_items ADD COLUMN IF NOT EXISTS iva_valor FLOAT DEFAULT 0")
                             cursor.execute("""
                                 UPDATE quote_items
                                 SET aplicar_iva = TRUE,
                                     iva_porcentaje = %s,
                                     iva_valor = %s
                                 WHERE id = %s
-                            """, (iva_pct_fix, iva_valor, item_id))
-                        else:
-                            cursor.execute("""
-                                UPDATE quote_items
-                                SET aplicar_iva = 1,
-                                    iva_porcentaje = ?,
-                                    iva_valor = ?
-                                WHERE id = ?
                             """, (iva_pct_fix, iva_valor, item_id))
 
                         details.append(f"  Ítem ID {item_id}: total_cost=${total_cost_val:.2f} → IVA={iva_pct_fix}% = ${iva_valor:.2f}")
@@ -199,6 +233,7 @@ def show_diagnostics():
 
             except Exception as e:
                 st.error(f"❌ Error al reparar IVA: {str(e)}")
+                st.code(traceback.format_exc())
 
     # Información del sistema
     st.markdown("---")
