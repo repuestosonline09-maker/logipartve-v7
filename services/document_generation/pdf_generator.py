@@ -492,6 +492,8 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
     items = datos_cotizacion.get('items', [])
     for idx, item in enumerate(items, 1):
         # Calcular precio unitario y total
+        # precio_bs ya viene SIN IVA desde _adaptar_quote_para_generadores()
+        # El IVA se muestra solo en el resumen de totales (FINANCIAL SUMMARY)
         cantidad = item.get('cantidad', 1)
         precio_total = item.get('precio_bs', 0)
         precio_unitario = precio_total / cantidad if cantidad > 0 else 0

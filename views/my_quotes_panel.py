@@ -106,7 +106,12 @@ def _adaptar_quote_para_generadores(qd: dict) -> dict:
         # Recuperar campos IVA guardados en la BD
         _aplicar_iva  = bool(item.get('aplicar_iva', False))
         _iva_pct      = float(item.get('iva_porcentaje', 16.0) or 16.0)
-        _iva_val      = float(item.get('iva_valor', 0.0) or 0.0)
+        # Recalcular iva_valor desde precio_bs (sin IVA) para garantizar consistencia
+        # independientemente de cómo fue guardado originalmente en la BD
+        if _aplicar_iva:
+            _iva_val = round(precio_bs * (_iva_pct / 100), 2)
+        else:
+            _iva_val = 0.0
 
         # Acumuladores para totales
         sub_total += precio_bs
