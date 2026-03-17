@@ -121,7 +121,11 @@ def _adaptar_quote_para_generadores(qd: dict) -> dict:
         sub_total += precio_bs
         if _aplicar_iva:
             iva_total += _iva_val
-        abona_ya  += precio_usd
+        # ABONA YA = precio_bs SIN el costo de envío con diferencial
+        # Igual que Excel P34: (FOB+Handling+Manejo+Impuesto+Utilidad+Tax) × (1+diferencial)
+        # P34 excluye AE (envío) y su diferencial → abona_ya = precio_bs - envio×(1+dif%)
+        envio_con_dif = envio * (1 + dif_pct / 100)
+        abona_ya  += precio_bs - envio_con_dif
         total_usd += precio_usd
         total_bs  += precio_bs
 
