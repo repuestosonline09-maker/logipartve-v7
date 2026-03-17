@@ -96,25 +96,27 @@ def _adaptar_quote_para_generadores(qd: dict) -> dict:
         costo_tax = base_tax * (tax_pct / 100)
 
         # Precio USD final (lo que ya está guardado en total_cost)
+        # Este es el precio base SIN diferencial y SIN IVA — es lo que se muestra en la tabla
         precio_usd = float(item.get('total_cost', 0) or 0)
         if precio_usd == 0:
             precio_usd = base_tax + costo_tax
 
         dif_val   = precio_usd * (dif_pct / 100)
-        precio_bs = precio_usd + dif_val
+        precio_bs = precio_usd + dif_val  # precio con diferencial, sin IVA (uso interno)
 
         # Recuperar campos IVA guardados en la BD
         _aplicar_iva  = bool(item.get('aplicar_iva', False))
         _iva_pct      = float(item.get('iva_porcentaje', 16.0) or 16.0)
-        # Recalcular iva_valor desde precio_bs (sin IVA) para garantizar consistencia
-        # independientemente de cómo fue guardado originalmente en la BD
+        # IVA se calcula sobre precio_usd (base sin diferencial, sin IVA)
+        # La tabla muestra precio_usd; el IVA aparece solo en el resumen de totales
         if _aplicar_iva:
-            _iva_val = round(precio_bs * (_iva_pct / 100), 2)
+            _iva_val = round(precio_usd * (_iva_pct / 100), 2)
         else:
             _iva_val = 0.0
 
-        # Acumuladores para totales
-        sub_total += precio_bs
+        # Acumuladores para totales del resumen
+        # sub_total = suma de precios USD (sin IVA, sin diferencial)
+        sub_total += precio_usd
         if _aplicar_iva:
             iva_total += _iva_val
         abona_ya  += precio_usd
@@ -123,6 +125,7 @@ def _adaptar_quote_para_generadores(qd: dict) -> dict:
 
         items_adaptados.append({
             # Campos que usa el PDF generator
+            # precio_bs se usa para la columna UNIT y TOTAL de la tabla → debe ser precio_usd
             'descripcion':         item.get('description', 'N/A'),
             'parte':               item.get('part_number', ''),
             'marca':               item.get('marca', ''),
@@ -132,7 +135,7 @@ def _adaptar_quote_para_generadores(qd: dict) -> dict:
             'origen':              item.get('origen', ''),
             'fabricacion':         item.get('fabricacion', ''),
             'tiempo_entrega':      item.get('tiempo_entrega', ''),
-            'precio_bs':           precio_bs,
+            'precio_bs':           precio_usd,   # tabla muestra precio USD (sin diferencial, sin IVA)
             'precio_usd':          precio_usd,
             # Campos internos para cálculos
             'costo_fob':           costo_fob,
