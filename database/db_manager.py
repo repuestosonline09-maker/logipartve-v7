@@ -5,6 +5,8 @@ import os
 import sqlite3
 import psycopg2
 from psycopg2.extras import RealDictCursor
+from psycopg2 import pool as pg_pool
+import threading
 from datetime import datetime
 from pathlib import Path
 import sys
@@ -39,20 +41,77 @@ class DBManager:
     
     # Detección simple y segura
     USE_POSTGRES = _database_url is not None
-    
+
+    # ── Pool de conexiones PostgreSQL ──────────────────────────────────────────
+    # Se crea una sola vez al iniciar el proceso y se reutiliza en cada operación.
+    # Esto evita el agotamiento de conexiones cuando múltiples analistas trabajan
+    # simultáneamente, que era la causa de los reinicios de Railway y cierres de sesión.
+    _pg_pool: Optional[Any] = None
+    _pg_pool_lock = threading.Lock()
+
+    @classmethod
+    def _get_pg_pool(cls):
+        """Retorna el pool de conexiones PostgreSQL, creándolo si no existe."""
+        if cls._pg_pool is None or cls._pg_pool.closed:
+            with cls._pg_pool_lock:
+                if cls._pg_pool is None or cls._pg_pool.closed:
+                    database_url = os.getenv("DATABASE_URL")
+                    try:
+                        cls._pg_pool = pg_pool.ThreadedConnectionPool(
+                            minconn=1,    # Mínimo 1 conexión siempre activa
+                            maxconn=10,   # Máximo 10 conexiones simultáneas
+                            dsn=database_url,
+                            cursor_factory=RealDictCursor,
+                            connect_timeout=5,
+                            keepalives=1,
+                            keepalives_idle=30,
+                            keepalives_interval=10,
+                            keepalives_count=5,
+                        )
+                        print("[DBManager] Pool de conexiones PostgreSQL creado (min=1, max=10)")
+                    except Exception as e:
+                        print(f"[DBManager] Error creando pool: {e}")
+                        raise
+        return cls._pg_pool
+
     @staticmethod
     def get_connection():
-        """Crea y retorna una conexión a la base de datos (SQLite o PostgreSQL)."""
+        """Obtiene una conexión del pool (PostgreSQL) o crea una nueva (SQLite)."""
         if DBManager.USE_POSTGRES:
-            # Producción: PostgreSQL en Railway
-            database_url = os.getenv("DATABASE_URL")
-            conn = psycopg2.connect(database_url, cursor_factory=RealDictCursor)
-            return conn
+            try:
+                conn = DBManager._get_pg_pool().getconn()
+                if conn is None or conn.closed:
+                    # Conexión cerrada — descartarla y pedir una nueva
+                    try:
+                        DBManager._get_pg_pool().putconn(conn, close=True)
+                    except Exception:
+                        pass
+                    conn = DBManager._get_pg_pool().getconn()
+                conn.autocommit = False
+                return conn
+            except Exception as e:
+                print(f"[DBManager] Pool no disponible, conexión directa: {e}")
+                # Fallback: conexión directa si el pool está agotado
+                database_url = os.getenv("DATABASE_URL")
+                return psycopg2.connect(database_url, cursor_factory=RealDictCursor,
+                                        connect_timeout=5)
         else:
             # Desarrollo: SQLite local
             conn = sqlite3.connect(str(DBManager.DB_PATH))
             conn.row_factory = sqlite3.Row
             return conn
+
+    @staticmethod
+    def release_connection(conn):
+        """Devuelve una conexión al pool. Llamar después de cada operación."""
+        if DBManager.USE_POSTGRES and DBManager._pg_pool is not None:
+            try:
+                DBManager._get_pg_pool().putconn(conn)
+            except Exception:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
     
     @staticmethod
     def init_database():
