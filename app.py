@@ -518,13 +518,37 @@ def show_admin_dashboard():
             for a in analistas:
                 s = DBManager.get_stats_by_date_range(fecha_desde_str, fecha_hasta_str, analyst_id=a['id'])
                 filas.append({
-                    "Analista":         a['full_name'],
-                    "Cotizaciones":     s.get('total_quotes', 0),
-                    "Monto USD":        f"${s.get('total_amount', 0.0):,.0f}",
-                    "Borradores":       s.get('quotes_by_status', {}).get('draft', 0),
-                    "Aprobadas":        s.get('quotes_by_status', {}).get('approved', 0),
+                    "Analista":           a['full_name'],
+                    "Cotizaciones":       s.get('total_quotes', 0),
+                    "_monto_num":         s.get('total_amount', 0.0),
+                    "Monto USD":          f"${s.get('total_amount', 0.0):,.0f}",
+                    "Borradores":         s.get('quotes_by_status', {}).get('draft', 0),
+                    "Aprobadas":          s.get('quotes_by_status', {}).get('approved', 0),
+                    "_monto_aprobado_num": s.get('approved_amount', 0.0),
+                    "Monto Aprobado":     f"${s.get('approved_amount', 0.0):,.0f}",
                 })
-            df_analistas = pd.DataFrame(filas).sort_values("Cotizaciones", ascending=False).reset_index(drop=True)
+
+            # Selector de ordenamiento
+            orden_opciones = {
+                "📊 Cantidad de Cotizaciones":  "Cotizaciones",
+                "💵 Monto USD Total":           "_monto_num",
+                "✅ Cantidad Aprobadas":         "Aprobadas",
+                "🏆 Monto Aprobado Total":       "_monto_aprobado_num",
+            }
+            orden_sel = st.selectbox(
+                "Ordenar por:",
+                list(orden_opciones.keys()),
+                index=0,
+                key="orden_tabla_analistas"
+            )
+            col_orden = orden_opciones[orden_sel]
+
+            df_analistas = (
+                pd.DataFrame(filas)
+                .sort_values(col_orden, ascending=False)
+                .reset_index(drop=True)
+                [["Analista", "Cotizaciones", "Monto USD", "Borradores", "Aprobadas", "Monto Aprobado"]]
+            )
             st.dataframe(df_analistas, use_container_width=True, hide_index=True)
         else:
             st.info("No hay analistas registrados aún.")
