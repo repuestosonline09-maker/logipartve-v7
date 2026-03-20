@@ -524,7 +524,7 @@ def show_admin_dashboard():
                     "Borradores":       s.get('quotes_by_status', {}).get('draft', 0),
                     "Aprobadas":        s.get('quotes_by_status', {}).get('approved', 0),
                 })
-            df_analistas = pd.DataFrame(filas)
+            df_analistas = pd.DataFrame(filas).sort_values("Cotizaciones", ascending=False).reset_index(drop=True)
             st.dataframe(df_analistas, use_container_width=True, hide_index=True)
         else:
             st.info("No hay analistas registrados aún.")
