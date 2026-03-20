@@ -964,14 +964,31 @@ class DBManager:
             cursor.execute(f"DELETE FROM quotes WHERE analyst_id = {ph}", (user_id,))
             print(f"[delete_user] quotes: {cursor.rowcount} filas")
 
-            # Paso 4: Limpiar tablas opcionales del usuario
+            # Paso 4: Limpiar TODAS las tablas con FK referenciando users
+            # Incluye tablas directas de usuario y tablas con referencias indirectas
             for tbl, col in [
                 ('activity_logs',         'user_id'),
                 ('password_reset_tokens', 'user_id'),
                 ('password_history',      'user_id'),
+                ('user_quote_ranges',     'user_id'),
+                ('quote_sequences',       'user_id'),
+                ('quote_history',         'edited_by'),
+                ('quote_notifications',   'created_by'),
             ]:
                 try:
                     cursor.execute(f"DELETE FROM {tbl} WHERE {col} = {ph}", (user_id,))
+                    print(f"[delete_user] {tbl} ({col}): {cursor.rowcount} filas")
+                except Exception as _e:
+                    print(f"[delete_user] {tbl} skip: {_e}")
+
+            # Paso 4b: Limpiar referencias en tablas de configuración (updated_by)
+            for tbl, col in [
+                ('system_config',  'updated_by'),
+                ('freight_rates',  'updated_by'),
+            ]:
+                try:
+                    cursor.execute(f"UPDATE {tbl} SET {col} = NULL WHERE {col} = {ph}", (user_id,))
+                    print(f"[delete_user] {tbl} ({col}) nulled: {cursor.rowcount} filas")
                 except Exception as _e:
                     print(f"[delete_user] {tbl} skip: {_e}")
 
