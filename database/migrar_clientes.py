@@ -51,30 +51,54 @@ def migrar_clientes_desde_quotes() -> dict:
         conn = DBManager.get_connection()
         cursor = conn.cursor()
 
-        # ── PASO 2: Leer cotizaciones con los 4 campos completos ──────────────
+        # ── PASO 2: Detectar qué columnas opcionales existen en quotes ───────────
+        # Esto hace el script resistente a BD con esquemas distintos
         if is_postgres:
             cursor.execute("""
-                SELECT id, client_name, client_phone, client_address,
-                       client_cedula, created_at
-                FROM quotes
-                WHERE client_name    IS NOT NULL AND TRIM(client_name)    != ''
-                  AND client_phone   IS NOT NULL AND TRIM(client_phone)   != ''
-                  AND client_address IS NOT NULL AND TRIM(client_address) != ''
-                  AND client_cedula  IS NOT NULL AND TRIM(client_cedula)  != ''
-                ORDER BY created_at ASC
+                SELECT column_name FROM information_schema.columns
+                WHERE table_name = 'quotes'
             """)
+            columnas_existentes = {row[0] for row in cursor.fetchall()}
         else:
-            cursor.execute("""
-                SELECT id, client_name, client_phone, client_address,
-                       client_cedula, created_at
-                FROM quotes
-                WHERE client_name    IS NOT NULL AND TRIM(client_name)    != ''
-                  AND client_phone   IS NOT NULL AND TRIM(client_phone)   != ''
-                  AND client_address IS NOT NULL AND TRIM(client_address) != ''
-                  AND client_cedula  IS NOT NULL AND TRIM(client_cedula)  != ''
-                ORDER BY created_at ASC
-            """)
+            cursor.execute("PRAGMA table_info(quotes)")
+            columnas_existentes = {row[1] for row in cursor.fetchall()}
 
+        tiene_address = 'client_address' in columnas_existentes
+        tiene_cedula  = 'client_cedula'  in columnas_existentes
+
+        reporte['detalle'].append(
+            f"   Columnas detectadas → client_address: {tiene_address}, "
+            f"client_cedula: {tiene_cedula}"
+        )
+
+        # Construir SELECT dinámico según columnas disponibles
+        select_cols  = "id, client_name, client_phone"
+        where_extras = ""
+
+        if tiene_address:
+            select_cols  += ", client_address"
+            where_extras += " AND client_address IS NOT NULL AND TRIM(client_address) != ''"
+        else:
+            select_cols  += ", '' AS client_address"
+
+        if tiene_cedula:
+            select_cols  += ", client_cedula"
+            where_extras += " AND client_cedula IS NOT NULL AND TRIM(client_cedula) != ''"
+        else:
+            select_cols  += ", '' AS client_cedula"
+
+        select_cols += ", created_at"
+
+        sql_quotes = f"""
+            SELECT {select_cols}
+            FROM quotes
+            WHERE client_name  IS NOT NULL AND TRIM(client_name)  != ''
+              AND client_phone IS NOT NULL AND TRIM(client_phone) != ''
+              {where_extras}
+            ORDER BY created_at ASC
+        """
+
+        cursor.execute(sql_quotes)
         filas = cursor.fetchall()
         total_candidatos = len(filas)
         reporte['detalle'].append(
