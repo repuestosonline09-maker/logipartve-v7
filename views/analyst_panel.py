@@ -625,15 +625,19 @@ def render_analyst_panel():
                     st.session_state.ac_seleccionado = _cli
                     st.rerun()
 
-        # Alerta de duplicados si el nombre ya existe con datos distintos
-        if _nombre_actual and es_nombre_real(_nombre_actual):
-            _dups = detectar_duplicados()
-            if _dups:
-                _total_dups = sum(len(g) for g in _dups)
-                st.warning(
-                    f"⚠️ Se detectaron **{_total_dups} registros duplicados** en la base de datos "
-                    f"(misma cédula y teléfono). El administrador puede eliminarlos desde el panel."
-                )
+        # Alerta de duplicados — se verifica UNA sola vez por sesión (caché en session_state)
+        # para no consultar la BD en cada render del formulario
+        if 'ac_dups_cache' not in st.session_state:
+            try:
+                st.session_state.ac_dups_cache = detectar_duplicados()
+            except Exception:
+                st.session_state.ac_dups_cache = []
+        if st.session_state.ac_dups_cache:
+            _total_dups = sum(len(g) for g in st.session_state.ac_dups_cache)
+            st.warning(
+                f"⚠️ Se detectaron **{_total_dups} registros duplicados** en la base de datos "
+                f"(misma cédula y teléfono). El administrador puede eliminarlos desde el panel."
+            )
 
         cliente_telefono = st.text_input("Teléfono", value=default_telefono, key=f"cliente_telefono_{reset_key}")
     with col2:
