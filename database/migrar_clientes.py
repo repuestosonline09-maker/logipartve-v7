@@ -59,7 +59,7 @@ def migrar_clientes_desde_quotes() -> dict:
                 SELECT column_name FROM information_schema.columns
                 WHERE table_name = 'quotes'
             """)
-            columnas_existentes = {row[0] for row in cursor.fetchall()}
+            columnas_existentes = {row['column_name'] for row in cursor.fetchall()}
         else:
             cursor.execute("PRAGMA table_info(quotes)")
             columnas_existentes = {row[1] for row in cursor.fetchall()}
@@ -111,9 +111,20 @@ def migrar_clientes_desde_quotes() -> dict:
         grupos = {}
 
         for fila in filas:
-            quote_id, nombre, telefono, direccion, ci_rif, created_at = (
-                fila[0], fila[1], fila[2], fila[3], fila[4], fila[5]
-            )
+            # Acceso por nombre de columna para compatibilidad con PostgreSQL (RealDictRow)
+            # y SQLite (Row/tuple). Usamos dict() para normalizar ambos.
+            if not isinstance(fila, dict):
+                fila = dict(zip(
+                    ['id', 'client_name', 'client_phone', 'client_address',
+                     'client_cedula', 'created_at'],
+                    fila
+                ))
+            quote_id  = fila.get('id')
+            nombre    = fila.get('client_name', '')
+            telefono  = fila.get('client_phone', '')
+            direccion = fila.get('client_address', '')
+            ci_rif    = fila.get('client_cedula', '')
+            created_at = fila.get('created_at')
 
             nombre = (nombre or '').strip()
             telefono  = (telefono  or '').strip()
@@ -149,7 +160,10 @@ def migrar_clientes_desde_quotes() -> dict:
             "SELECT nombre FROM clientes"
         )
         existentes_rows = cursor.fetchall()
-        existentes_norm = {normalizar(r[0] or '') for r in existentes_rows}
+        existentes_norm = {
+            normalizar((r['nombre'] if isinstance(r, dict) else r[0]) or '')
+            for r in existentes_rows
+        }
 
         # ── PASO 5: Insertar los que no existen aún ───────────────────────────
         for nombre_norm, datos in grupos.items():
