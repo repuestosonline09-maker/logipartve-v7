@@ -877,27 +877,54 @@ def _show_aprobar_orden(quote_id: int):
     st.markdown("---")
     paso = st.session_state.get('mq_aprobar_paso', 1)
 
-    # ── PASO 1: CONFIRMACIÓN ──────────────────────────────────────────────────
+    # ── PASO 1: VALIDACIÓN DE DATOS OBLIGATORIOS + CONFIRMACIÓN ──────────────
     if paso == 1:
-        st.warning(
-            f"⚠️ **¿Desea enviar la Orden de Compra #{quote.get('quote_number')} "
-            f"como APROBADA al equipo administrativo?**\n\n"
-            "Esta acción enviará un correo con los documentos adjuntos y cambiará "
-            "el estado de la cotización a **APROBADA**. Una vez aprobada, "
-            "**no podrá editarse ni eliminarse.**"
-        )
-        c1, c2 = st.columns(2)
-        with c1:
-            if st.button("❌ CANCELAR", use_container_width=True,
-                         key="apr_cancel_1"):
+        # ── VALIDAR DATOS OBLIGATORIOS DEL CLIENTE ANTES DE CONTINUAR ──────────
+        _campos_obligatorios = [
+            ('client_name',    'Nombre del Cliente'),
+            ('client_phone',   'Teléfono'),
+            ('client_address', 'Dirección'),
+            ('client_cedula',  'C.I. / RIF'),
+        ]
+        _faltantes = [
+            label for campo, label in _campos_obligatorios
+            if not str(quote.get(campo) or '').strip()
+        ]
+
+        if _faltantes:
+            # Bloquear: mostrar error con campos faltantes
+            _lista_faltantes = ', '.join(f'**{f}**' for f in _faltantes)
+            st.error(
+                f"❌ **No se puede aprobar la orden.**\n\n"
+                f"Faltan los siguientes datos del cliente: {_lista_faltantes}.\n\n"
+                f"Por favor, edita la cotización, completa los datos faltantes, "
+                f"guarda los cambios y vuelve a intentar aprobar la orden."
+            )
+            if st.button("← VOLVER", use_container_width=True, key="apr_volver_validacion"):
                 st.session_state.pop('mq_aprobar_id', None)
                 st.session_state.pop('mq_aprobar_paso', None)
                 st.rerun()
-        with c2:
-            if st.button("➡️ CONTINUAR — VER VISTA PREVIA", use_container_width=True,
-                         type="primary", key="apr_continuar_1"):
-                st.session_state.mq_aprobar_paso = 2
-                st.rerun()
+        else:
+            # Datos completos: mostrar confirmación normal
+            st.warning(
+                f"⚠️ **¿Desea enviar la Orden de Compra #{quote.get('quote_number')} "
+                f"como APROBADA al equipo administrativo?**\n\n"
+                "Esta acción enviará un correo con los documentos adjuntos y cambiará "
+                "el estado de la cotización a **APROBADA**. Una vez aprobada, "
+                "**no podrá editarse ni eliminarse.**"
+            )
+            c1, c2 = st.columns(2)
+            with c1:
+                if st.button("❌ CANCELAR", use_container_width=True,
+                             key="apr_cancel_1"):
+                    st.session_state.pop('mq_aprobar_id', None)
+                    st.session_state.pop('mq_aprobar_paso', None)
+                    st.rerun()
+            with c2:
+                if st.button("➡️ CONTINUAR — VER VISTA PREVIA", use_container_width=True,
+                             type="primary", key="apr_continuar_1"):
+                    st.session_state.mq_aprobar_paso = 2
+                    st.rerun()
 
     # ── PASO 2: VISTA PREVIA ──────────────────────────────────────────────────
     elif paso == 2:

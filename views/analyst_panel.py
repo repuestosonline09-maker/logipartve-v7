@@ -12,6 +12,10 @@ from database.db_manager import DBManager
 from database.config_helpers import ConfigHelpers
 from services.auth_manager import AuthManager
 from services.quote_numbering import QuoteNumberingService
+from database.cliente_manager import (
+    init_clientes_table, buscar_clientes, guardar_o_actualizar,
+    es_nombre_real, detectar_duplicados
+)
 try:
     from services.timezone_utils import now_caracas_naive
 except ImportError:
@@ -173,6 +177,17 @@ def render_analyst_panel():
         st.session_state.cotizacion_items = []
     if 'cliente_datos' not in st.session_state:
         st.session_state.cliente_datos = {}
+    # Inicializar tabla de clientes (crea si no existe, operación idempotente)
+    if 'clientes_table_init' not in st.session_state:
+        init_clientes_table()
+        st.session_state.clientes_table_init = True
+    # Estado para el autocompletado de clientes
+    if 'ac_query' not in st.session_state:
+        st.session_state.ac_query = ''
+    if 'ac_resultados' not in st.session_state:
+        st.session_state.ac_resultados = []
+    if 'ac_seleccionado' not in st.session_state:
+        st.session_state.ac_seleccionado = None
     # Siempre recargar tarifas desde la BD para reflejar cambios del admin
     _mia_a = DBManager.get_freight_rate('Miami', 'Aéreo')
     _mia_m = DBManager.get_freight_rate('Miami', 'Marítimo')
@@ -547,26 +562,84 @@ def render_analyst_panel():
     
     # Formulario de datos del cliente
     st.markdown("### 👤 Datos del Cliente")
-    
-    # Obtener valores por defecto en modo edición
-    default_nombre = st.session_state.cliente_datos.get('nombre', '') if editing_mode else ''
-    default_telefono = st.session_state.cliente_datos.get('telefono', '') if editing_mode else ''
-    default_email = st.session_state.cliente_datos.get('email', '') if editing_mode else ''
-    default_vehiculo = st.session_state.cliente_datos.get('vehiculo', '') if editing_mode else ''
-    default_cilindrada = st.session_state.cliente_datos.get('cilindrada', '') if editing_mode else ''
-    default_ano = st.session_state.cliente_datos.get('year', '') if editing_mode else ''
-    default_vin = st.session_state.cliente_datos.get('vin', '') if editing_mode else ''
+
+    # ── AUTOCOMPLETADO: valores por defecto ──────────────────────────────────
+    # En modo edición, cargar desde cliente_datos. En modo normal, vacío.
+    default_nombre    = st.session_state.cliente_datos.get('nombre', '')    if editing_mode else ''
+    default_telefono  = st.session_state.cliente_datos.get('telefono', '')  if editing_mode else ''
+    default_email     = st.session_state.cliente_datos.get('email', '')     if editing_mode else ''
+    default_vehiculo  = st.session_state.cliente_datos.get('vehiculo', '')  if editing_mode else ''
+    default_cilindrada= st.session_state.cliente_datos.get('cilindrada', '') if editing_mode else ''
+    default_ano       = st.session_state.cliente_datos.get('year', '')      if editing_mode else ''
+    default_vin       = st.session_state.cliente_datos.get('vin', '')       if editing_mode else ''
     default_direccion = st.session_state.cliente_datos.get('direccion', '') if editing_mode else ''
-    default_ci_rif = st.session_state.cliente_datos.get('cedula', '') if editing_mode else ''
-    
+    default_ci_rif    = st.session_state.cliente_datos.get('cedula', '')    if editing_mode else ''
+
+    # Si hay un cliente autocompletado pendiente, sobreescribir los defaults
+    if st.session_state.get('ac_seleccionado'):
+        _ac = st.session_state.ac_seleccionado
+        default_nombre    = _ac.get('nombre', default_nombre)
+        default_telefono  = _ac.get('telefono', default_telefono)
+        default_direccion = _ac.get('direccion', default_direccion)
+        default_ci_rif    = _ac.get('ci_rif', default_ci_rif)
+        # Incrementar reset_key para forzar re-render de los widgets con nuevos valores
+        st.session_state.cliente_reset_counter += 1
+        reset_key = st.session_state.cliente_reset_counter
+        st.session_state.ac_seleccionado = None
+        st.session_state.ac_resultados = []
+        st.session_state.ac_query = ''
+
+    # ── CAMPO NOMBRE CON BÚSQUEDA EN TIEMPO REAL ─────────────────────────────
     col1, col2 = st.columns(2)
     with col1:
-        cliente_nombre = st.text_input("Nombre del Cliente", value=default_nombre, key=f"cliente_nombre_{reset_key}")
+        cliente_nombre = st.text_input(
+            "Nombre del Cliente",
+            value=default_nombre,
+            key=f"cliente_nombre_{reset_key}",
+            placeholder="Escribe nombre o apellido para buscar..."
+        )
+        # Detectar si el analista está escribiendo un nombre nuevo (no edición)
+        _nombre_actual = cliente_nombre.strip()
+        if len(_nombre_actual) >= 3 and _nombre_actual != st.session_state.get('ac_query', ''):
+            st.session_state.ac_query = _nombre_actual
+            st.session_state.ac_resultados = buscar_clientes(_nombre_actual, limite=8)
+        elif len(_nombre_actual) < 3:
+            st.session_state.ac_resultados = []
+            st.session_state.ac_query = ''
+
+        # Mostrar sugerencias si hay resultados
+        _resultados_ac = st.session_state.get('ac_resultados', [])
+        if _resultados_ac and len(_nombre_actual) >= 3:
+            st.caption("💡 Clientes encontrados — selecciona para autocompletar:")
+            for _cli in _resultados_ac:
+                _label = f"{_cli['nombre']}"
+                if _cli.get('telefono'):
+                    _label += f" | Tel: {_cli['telefono']}"
+                if _cli.get('ci_rif'):
+                    _label += f" | C.I.: {_cli['ci_rif']}"
+                if st.button(
+                    _label,
+                    key=f"ac_btn_{_cli['id']}_{reset_key}",
+                    use_container_width=True
+                ):
+                    st.session_state.ac_seleccionado = _cli
+                    st.rerun()
+
+        # Alerta de duplicados si el nombre ya existe con datos distintos
+        if _nombre_actual and es_nombre_real(_nombre_actual):
+            _dups = detectar_duplicados()
+            if _dups:
+                _total_dups = sum(len(g) for g in _dups)
+                st.warning(
+                    f"⚠️ Se detectaron **{_total_dups} registros duplicados** en la base de datos "
+                    f"(misma cédula y teléfono). El administrador puede eliminarlos desde el panel."
+                )
+
         cliente_telefono = st.text_input("Teléfono", value=default_telefono, key=f"cliente_telefono_{reset_key}")
     with col2:
         cliente_email = st.text_input("Email (opcional)", value=default_email, key=f"cliente_email_{reset_key}")
         cliente_vehiculo = st.text_input("Vehículo", value=default_vehiculo, placeholder="Ej: Hyundai Santa Fe 2006", key=f"cliente_vehiculo_{reset_key}")
-    
+
     col3, col4, col5 = st.columns(3)
     with col3:
         cliente_cilindrada = st.text_input("Cilindrada/Motor", value=default_cilindrada, placeholder="Ej: V6 3.5L", key=f"cliente_cilindrada_{reset_key}")
@@ -574,8 +647,8 @@ def render_analyst_panel():
         cliente_ano = st.text_input("Año del Vehículo", value=default_ano, key=f"cliente_ano_{reset_key}")
     with col5:
         cliente_vin = st.text_input("Nro. VIN (opcional)", value=default_vin, key=f"cliente_vin_{reset_key}")
-    
-    # Nuevos campos opcionales: Dirección y C.I./RIF
+
+    # Dirección y C.I./RIF
     col7, col8 = st.columns(2)
     with col7:
         cliente_direccion = st.text_input("Dirección (opcional)", value=default_direccion, key=f"cliente_direccion_{reset_key}")
@@ -1373,7 +1446,19 @@ def render_analyst_panel():
                         "direccion": _clean(cliente_direccion),
                         "ci_rif":    _clean(cliente_ci_rif)
                     }
-                    
+
+                    # ── GUARDAR / ACTUALIZAR CLIENTE EN BD ────────────────────────
+                    # Solo si el nombre es real (letras, no números ni alias)
+                    try:
+                        _resultado_cliente = guardar_o_actualizar(st.session_state.cliente_datos)
+                        if _resultado_cliente['accion'] == 'creado':
+                            print(f"✅ Cliente nuevo registrado: {st.session_state.cliente_datos.get('nombre')}")
+                        elif _resultado_cliente['accion'] == 'actualizado':
+                            print(f"✅ Cliente actualizado: {st.session_state.cliente_datos.get('nombre')}")
+                    except Exception as _e_cli:
+                        print(f"⚠️ No se pudo guardar cliente en BD: {_e_cli}")
+                    # ──────────────────────────────────────────────────────────────
+
                     # Si estamos en modo edición, actualizar en BD
                     if editing_mode:
                         editing_quote_id = st.session_state.get('editing_quote_id')

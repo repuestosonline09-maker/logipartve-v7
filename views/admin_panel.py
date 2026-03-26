@@ -5,6 +5,10 @@ import streamlit as st
 from database.db_manager import DBManager
 from services.auth_manager import AuthManager
 from datetime import datetime, timedelta
+from database.cliente_manager import (
+    init_clientes_table, get_todos_los_clientes, get_cliente_por_id,
+    actualizar_cliente, eliminar_cliente, detectar_duplicados
+)
 
 def show_admin_panel():
     """
@@ -64,33 +68,38 @@ def show_admin_panel():
     st.title("🔧 Panel de Administración")
     
     # Tabs para organizar las secciones
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "👤 Mi Perfil",
         "👥 Gestión de Usuarios",
         "⚙️ Configuración del Sistema",
         "📊 Reportes y Estadísticas",
-        "📧 Configuración de Correos"
+        "📧 Configuración de Correos",
+        "👨‍💼 Clientes"
     ])
-    
+
     # TAB 1: MI PERFIL
     with tab1:
         show_my_profile()
-    
+
     # TAB 2: GESTIÓN DE USUARIOS
     with tab2:
         show_user_management()
-    
+
     # TAB 3: CONFIGURACIÓN DEL SISTEMA
     with tab3:
         show_system_configuration()
-    
+
     # TAB 4: REPORTES Y ESTADÍSTICAS
     with tab4:
         show_reports_and_stats()
 
-    # TAB 5: CONFIGURACIÓN DE CORREOS (FASE 5)
+    # TAB 5: CONFIGURACIÓN DE CORREOS
     with tab5:
         show_email_configuration()
+
+    # TAB 6: GESTIÓN DE CLIENTES
+    with tab6:
+        show_clientes_management()
 
 
 def show_my_profile():
@@ -1236,3 +1245,177 @@ def show_email_configuration():
     )
 
     st.markdown('</div>', unsafe_allow_html=True)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TAB 6: GESTIÓN DE CLIENTES
+# ─────────────────────────────────────────────────────────────────────────────
+def show_clientes_management():
+    """
+    Panel de gestión de la base de datos de clientes.
+    Permite ver, buscar, editar y eliminar clientes.
+    También muestra alertas de registros duplicados.
+    """
+    # Asegurar que la tabla existe
+    init_clientes_table()
+
+    st.markdown("### 👨‍💼 Base de Datos de Clientes")
+    st.info(
+        "Los clientes se registran automáticamente cuando un analista guarda una cotización "
+        "con un nombre real (sin números ni alias). Aquí puedes ver, editar y eliminar registros."
+    )
+
+    # ── BLOQUE 1: ALERTAS DE DUPLICADOS ──────────────────────────────────────
+    _dups = detectar_duplicados()
+    if _dups:
+        _total = sum(len(g) for g in _dups)
+        st.warning(
+            f"⚠️ **Se detectaron {_total} registros duplicados** "
+            f"({len(_dups)} grupos con misma cédula y teléfono). "
+            "Revisa la lista y elimina los sobrantes."
+        )
+        with st.expander("👁️ Ver duplicados detectados"):
+            for i, grupo in enumerate(_dups, 1):
+                st.markdown(f"**Grupo {i}** — {len(grupo)} registros con misma cédula y teléfono:")
+                for cli in grupo:
+                    st.write(
+                        f"  • ID {cli['id']} | **{cli['nombre']}** | "
+                        f"Tel: {cli['telefono']} | C.I.: {cli['ci_rif']} | "
+                        f"Dir: {cli['direccion'] or '—'}"
+                    )
+                st.markdown("---")
+
+    # ── BLOQUE 2: BUSCADOR Y TABLA DE CLIENTES ───────────────────────────────
+    st.markdown("#### 🔍 Buscar y Gestionar Clientes")
+
+    _busqueda = st.text_input(
+        "Buscar por nombre, apellido, teléfono o C.I./RIF",
+        placeholder="Escribe para filtrar...",
+        key="admin_cli_busqueda"
+    )
+
+    todos = get_todos_los_clientes()
+
+    # Filtrar según búsqueda
+    if _busqueda.strip():
+        _q = _busqueda.strip().lower()
+        todos = [
+            c for c in todos
+            if _q in (c['nombre'] or '').lower()
+            or _q in (c['telefono'] or '').lower()
+            or _q in (c['ci_rif'] or '').lower()
+            or _q in (c['direccion'] or '').lower()
+        ]
+
+    st.caption(f"**{len(todos)}** cliente(s) encontrado(s)")
+
+    if not todos:
+        st.info("No hay clientes registrados aún. Se irán agregando automáticamente al guardar cotizaciones.")
+        return
+
+    # ── BLOQUE 3: TABLA CON ACCIONES ─────────────────────────────────────────
+    # Inicializar estado de edición
+    if 'admin_cli_editando' not in st.session_state:
+        st.session_state.admin_cli_editando = None
+
+    for cliente in todos:
+        cid = cliente['id']
+        with st.expander(
+            f"👤 {cliente['nombre']} "
+            f"{'| Tel: ' + cliente['telefono'] if cliente['telefono'] else ''} "
+            f"{'| C.I.: ' + cliente['ci_rif'] if cliente['ci_rif'] else ''}",
+            expanded=(st.session_state.admin_cli_editando == cid)
+        ):
+            if st.session_state.admin_cli_editando == cid:
+                # ── MODO EDICIÓN ──────────────────────────────────────────────
+                st.markdown("**✏️ Editando cliente:**")
+                col_e1, col_e2 = st.columns(2)
+                with col_e1:
+                    nuevo_nombre = st.text_input(
+                        "Nombre completo", value=cliente['nombre'],
+                        key=f"cli_edit_nombre_{cid}"
+                    )
+                    nuevo_tel = st.text_input(
+                        "Teléfono", value=cliente['telefono'],
+                        key=f"cli_edit_tel_{cid}"
+                    )
+                with col_e2:
+                    nuevo_ci = st.text_input(
+                        "C.I. / RIF", value=cliente['ci_rif'],
+                        key=f"cli_edit_ci_{cid}"
+                    )
+                    nueva_dir = st.text_input(
+                        "Dirección", value=cliente['direccion'],
+                        key=f"cli_edit_dir_{cid}"
+                    )
+
+                btn_g1, btn_g2 = st.columns(2)
+                with btn_g1:
+                    if st.button("💾 GUARDAR CAMBIOS", use_container_width=True,
+                                 type="primary", key=f"cli_guardar_{cid}"):
+                        ok = actualizar_cliente(cid, {
+                            'nombre':    nuevo_nombre,
+                            'telefono':  nuevo_tel,
+                            'ci_rif':    nuevo_ci,
+                            'direccion': nueva_dir,
+                        })
+                        if ok:
+                            st.success("✅ Cliente actualizado correctamente.")
+                            st.session_state.admin_cli_editando = None
+                            st.rerun()
+                        else:
+                            st.error("❌ Error al actualizar. Intenta de nuevo.")
+                with btn_g2:
+                    if st.button("❌ CANCELAR", use_container_width=True,
+                                 key=f"cli_cancelar_{cid}"):
+                        st.session_state.admin_cli_editando = None
+                        st.rerun()
+            else:
+                # ── MODO VISTA ────────────────────────────────────────────────
+                col_v1, col_v2 = st.columns(2)
+                with col_v1:
+                    st.write(f"**Nombre:** {cliente['nombre'] or '—'}")
+                    st.write(f"**Teléfono:** {cliente['telefono'] or '—'}")
+                with col_v2:
+                    st.write(f"**C.I. / RIF:** {cliente['ci_rif'] or '—'}")
+                    st.write(f"**Dirección:** {cliente['direccion'] or '—'}")
+
+                if cliente.get('actualizado_en'):
+                    try:
+                        _fecha = cliente['actualizado_en'].strftime('%d/%m/%Y %H:%M')
+                    except Exception:
+                        _fecha = str(cliente['actualizado_en'])
+                    st.caption(f"Última actualización: {_fecha}")
+
+                btn_a1, btn_a2 = st.columns(2)
+                with btn_a1:
+                    if st.button("✏️ EDITAR", use_container_width=True,
+                                 key=f"cli_editar_{cid}"):
+                        st.session_state.admin_cli_editando = cid
+                        st.rerun()
+                with btn_a2:
+                    # Confirmación de eliminación en dos pasos
+                    _confirm_key = f"cli_confirm_del_{cid}"
+                    if st.session_state.get(_confirm_key):
+                        st.error(f"¿Confirmar eliminación de **{cliente['nombre']}**?")
+                        bc1, bc2 = st.columns(2)
+                        with bc1:
+                            if st.button("✅ SÍ, ELIMINAR", use_container_width=True,
+                                         type="primary", key=f"cli_del_confirm_{cid}"):
+                                ok = eliminar_cliente(cid)
+                                if ok:
+                                    st.success("✅ Cliente eliminado.")
+                                    st.session_state[_confirm_key] = False
+                                    st.rerun()
+                                else:
+                                    st.error("❌ Error al eliminar.")
+                        with bc2:
+                            if st.button("❌ CANCELAR", use_container_width=True,
+                                         key=f"cli_del_cancel_{cid}"):
+                                st.session_state[_confirm_key] = False
+                                st.rerun()
+                    else:
+                        if st.button("🗑️ ELIMINAR", use_container_width=True,
+                                     key=f"cli_eliminar_{cid}"):
+                            st.session_state[_confirm_key] = True
+                            st.rerun()
