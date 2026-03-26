@@ -188,6 +188,13 @@ def render_analyst_panel():
         st.session_state.ac_resultados = []
     if 'ac_seleccionado' not in st.session_state:
         st.session_state.ac_seleccionado = None
+    # Estado para el panel de alerta de cliente existente
+    if 'ac_alerta_cliente' not in st.session_state:
+        st.session_state.ac_alerta_cliente = None   # dict del cliente encontrado
+    if 'ac_alerta_modo' not in st.session_state:
+        st.session_state.ac_alerta_modo = None      # None | 'alerta' | 'actualizar'
+    if 'ac_alerta_nombre_trigger' not in st.session_state:
+        st.session_state.ac_alerta_nombre_trigger = ''  # nombre que disparó la alerta
     # Siempre recargar tarifas desde la BD para reflejar cambios del admin
     _mia_a = DBManager.get_freight_rate('Miami', 'Aéreo')
     _mia_m = DBManager.get_freight_rate('Miami', 'Marítimo')
@@ -589,7 +596,7 @@ def render_analyst_panel():
         st.session_state.ac_resultados = []
         st.session_state.ac_query = ''
 
-    # ── CAMPO NOMBRE CON BÚSQUEDA EN TIEMPO REAL ─────────────────────────────
+    # ── CAMPO NOMBRE CON BÚSQUEDA Y ALERTA DE CLIENTE EXISTENTE ─────────────
     col1, col2 = st.columns(2)
     with col1:
         cliente_nombre = st.text_input(
@@ -598,35 +605,170 @@ def render_analyst_panel():
             key=f"cliente_nombre_{reset_key}",
             placeholder="Escribe nombre o apellido para buscar..."
         )
-        # Detectar si el analista está escribiendo un nombre nuevo (no edición)
         _nombre_actual = cliente_nombre.strip()
+
+        # ── Lógica de búsqueda y alerta ──────────────────────────────────────
+        # Solo buscar si el nombre cambió y tiene al menos 3 caracteres
         if len(_nombre_actual) >= 3 and _nombre_actual != st.session_state.get('ac_query', ''):
             st.session_state.ac_query = _nombre_actual
-            st.session_state.ac_resultados = buscar_clientes(_nombre_actual, limite=8)
+            _encontrados = buscar_clientes(_nombre_actual, limite=8)
+            st.session_state.ac_resultados = _encontrados
+
+            # Si hay coincidencias exactas (nombre normalizado igual), disparar alerta
+            from database.cliente_manager import normalizar as _norm
+            _nombre_norm = _norm(_nombre_actual)
+            _coincidencia_exacta = None
+            for _c in _encontrados:
+                if _norm(_c.get('nombre', '')) == _nombre_norm:
+                    _coincidencia_exacta = _c
+                    break
+
+            if _coincidencia_exacta and st.session_state.ac_alerta_nombre_trigger != _nombre_actual:
+                st.session_state.ac_alerta_cliente = _coincidencia_exacta
+                st.session_state.ac_alerta_modo = 'alerta'
+                st.session_state.ac_alerta_nombre_trigger = _nombre_actual
+
         elif len(_nombre_actual) < 3:
             st.session_state.ac_resultados = []
             st.session_state.ac_query = ''
+            st.session_state.ac_alerta_modo = None
+            st.session_state.ac_alerta_cliente = None
+            st.session_state.ac_alerta_nombre_trigger = ''
 
-        # Mostrar sugerencias si hay resultados
-        _resultados_ac = st.session_state.get('ac_resultados', [])
-        if _resultados_ac and len(_nombre_actual) >= 3:
-            st.caption("💡 Clientes encontrados — selecciona para autocompletar:")
-            for _cli in _resultados_ac:
-                _label = f"{_cli['nombre']}"
-                if _cli.get('telefono'):
-                    _label += f" | Tel: {_cli['telefono']}"
-                if _cli.get('ci_rif'):
-                    _label += f" | C.I.: {_cli['ci_rif']}"
+        # ── Panel de alerta: cliente encontrado en BD ─────────────────────────
+        _modo_alerta = st.session_state.get('ac_alerta_modo')
+        _cli_alerta  = st.session_state.get('ac_alerta_cliente')
+
+        if _modo_alerta == 'alerta' and _cli_alerta:
+            st.markdown(
+                """
+                <div style='background:#fff8e1;border-left:4px solid #f9a825;
+                            padding:12px 16px;border-radius:6px;margin:8px 0;'>
+                <b>⚠️ Este cliente ya existe en la base de datos</b>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+            # Tabla con los datos actuales del cliente
+            _datos_bd = {
+                "Nombre":     _cli_alerta.get('nombre', '—'),
+                "Teléfono":   _cli_alerta.get('telefono', '—') or '—',
+                "Dirección":  _cli_alerta.get('direccion', '—') or '—',
+                "C.I. / RIF": _cli_alerta.get('ci_rif', '—') or '—',
+            }
+            for _campo, _valor in _datos_bd.items():
+                st.markdown(f"**{_campo}:** {_valor}")
+
+            st.markdown("**¿Qué deseas hacer?**")
+            _btn_col1, _btn_col2 = st.columns(2)
+            with _btn_col1:
                 if st.button(
-                    _label,
-                    key=f"ac_btn_{_cli['id']}_{reset_key}",
+                    "✅ Usar estos datos",
+                    key=f"ac_usar_{reset_key}",
+                    use_container_width=True,
+                    type="primary"
+                ):
+                    st.session_state.ac_seleccionado = _cli_alerta
+                    st.session_state.ac_alerta_modo = None
+                    st.session_state.ac_alerta_cliente = None
+                    st.session_state.ac_alerta_nombre_trigger = _nombre_actual
+                    st.rerun()
+            with _btn_col2:
+                if st.button(
+                    "✏️ Actualizar datos",
+                    key=f"ac_actualizar_{reset_key}",
                     use_container_width=True
                 ):
-                    st.session_state.ac_seleccionado = _cli
+                    st.session_state.ac_alerta_modo = 'actualizar'
                     st.rerun()
 
-        # Alerta de duplicados — se verifica UNA sola vez por sesión (caché en session_state)
-        # para no consultar la BD en cada render del formulario
+        elif _modo_alerta == 'actualizar' and _cli_alerta:
+            # ── Formulario de edición inline ──────────────────────────────────
+            st.markdown(
+                """
+                <div style='background:#e8f5e9;border-left:4px solid #43a047;
+                            padding:12px 16px;border-radius:6px;margin:8px 0;'>
+                <b>✏️ Actualizar datos del cliente</b>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+            _edit_tel = st.text_input(
+                "Teléfono",
+                value=_cli_alerta.get('telefono', ''),
+                key=f"ac_edit_tel_{reset_key}"
+            )
+            _edit_dir = st.text_input(
+                "Dirección",
+                value=_cli_alerta.get('direccion', ''),
+                key=f"ac_edit_dir_{reset_key}"
+            )
+            _edit_ci = st.text_input(
+                "C.I. / RIF",
+                value=_cli_alerta.get('ci_rif', ''),
+                key=f"ac_edit_ci_{reset_key}"
+            )
+            _save_col1, _save_col2 = st.columns(2)
+            with _save_col1:
+                if st.button(
+                    "💾 Guardar cambios",
+                    key=f"ac_guardar_edit_{reset_key}",
+                    use_container_width=True,
+                    type="primary"
+                ):
+                    from database.cliente_manager import actualizar_cliente as _actualizar
+                    _actualizar(
+                        _cli_alerta['id'],
+                        {
+                            'nombre':    _cli_alerta.get('nombre', ''),
+                            'telefono':  _edit_tel.strip(),
+                            'direccion': _edit_dir.strip(),
+                            'ci_rif':    _edit_ci.strip(),
+                        }
+                    )
+                    # Actualizar el dict local con los nuevos valores
+                    _cli_alerta_actualizado = {
+                        'id':        _cli_alerta['id'],
+                        'nombre':    _cli_alerta.get('nombre', ''),
+                        'telefono':  _edit_tel.strip(),
+                        'direccion': _edit_dir.strip(),
+                        'ci_rif':    _edit_ci.strip(),
+                    }
+                    st.session_state.ac_seleccionado = _cli_alerta_actualizado
+                    st.session_state.ac_alerta_modo = None
+                    st.session_state.ac_alerta_cliente = None
+                    st.session_state.ac_alerta_nombre_trigger = _nombre_actual
+                    st.success("✅ Datos actualizados correctamente.")
+                    st.rerun()
+            with _save_col2:
+                if st.button(
+                    "↩️ Cancelar",
+                    key=f"ac_cancelar_edit_{reset_key}",
+                    use_container_width=True
+                ):
+                    st.session_state.ac_alerta_modo = 'alerta'
+                    st.rerun()
+
+        else:
+            # ── Sin alerta activa: mostrar sugerencias parciales normales ─────
+            _resultados_ac = st.session_state.get('ac_resultados', [])
+            if _resultados_ac and len(_nombre_actual) >= 3:
+                st.caption("💡 Clientes encontrados — selecciona para autocompletar:")
+                for _cli in _resultados_ac:
+                    _label = f"{_cli['nombre']}"
+                    if _cli.get('telefono'):
+                        _label += f" | Tel: {_cli['telefono']}"
+                    if _cli.get('ci_rif'):
+                        _label += f" | C.I.: {_cli['ci_rif']}"
+                    if st.button(
+                        _label,
+                        key=f"ac_btn_{_cli['id']}_{reset_key}",
+                        use_container_width=True
+                    ):
+                        st.session_state.ac_seleccionado = _cli
+                        st.rerun()
+
+        # ── Alerta de duplicados (una sola vez por sesión) ────────────────────
         if 'ac_dups_cache' not in st.session_state:
             try:
                 st.session_state.ac_dups_cache = detectar_duplicados()
