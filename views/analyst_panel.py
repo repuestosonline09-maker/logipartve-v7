@@ -113,7 +113,7 @@ def cargar_configuraciones():
             "paises_origen": ["-- Seleccione --", "EEUU", "MIAMI", "ESPAÑA", "MADRID"],
             "tipos_envio": ["-- Seleccione --", "AEREO", "MARITIMO", "TERRESTRE"],
             "tiempos_entrega": ["-- Seleccione --", "02 A 05 DIAS", "08 A 12 DIAS", "12 A 15 DIAS"],
-            "garantias": ["-- Seleccione --", "15 DIAS", "30 DIAS", "45 DIAS", "3 MESES", "6 MESES"],
+            "garantias": ["-- Seleccione --", "NO APLICA", "15 DIAS", "30 DIAS", "45 DIAS", "3 MESES", "6 MESES", "1 AÑO"],
             "manejo_options": [0.0, 15.0, 23.0, 25.0],
             "impuesto_options": [0, 25, 30, 35, 40, 45, 50],
             "utilidad_factors": [1.4285, 1.35, 1.30, 1.25, 1.20, 1.15, 1.10, 0],
