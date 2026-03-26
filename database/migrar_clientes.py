@@ -16,6 +16,7 @@ Esta función es idempotente: si se llama más de una vez, no crea duplicados
 porque verifica si el cliente ya existe antes de insertar.
 """
 
+import traceback as _traceback
 from database.db_manager import DBManager
 from database.cliente_manager import (
     init_clientes_table, normalizar, es_nombre_real
@@ -204,7 +205,9 @@ def migrar_clientes_desde_quotes() -> dict:
 
     except Exception as e:
         reporte['errores'] += 1
+        tb_completo = _traceback.format_exc()
         reporte['detalle'].append(f"❌ Error general en migración: {e}")
+        reporte['detalle'].append(f"TRACEBACK:\n{tb_completo}")
         if conn:
             try:
                 conn.rollback()
