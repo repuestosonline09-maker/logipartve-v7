@@ -23,6 +23,30 @@ from database.db_manager import DBManager
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# BLOQUE 0: UTILIDAD INTERNA — Acceso a filas compatible PG + SQLite
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _row(row, key: str, index: int):
+    """
+    Accede a un campo de una fila de BD de forma compatible con:
+    - PostgreSQL (psycopg2 RealDictRow) → acceso por nombre: row[key]
+    - SQLite (sqlite3.Row / tuple)       → acceso por índice: row[index]
+
+    Uso: _row(row, 'nombre', 1)
+    """
+    try:
+        # Intenta acceso por nombre (PostgreSQL RealDictRow o sqlite3.Row con factory)
+        return row[key]
+    except (KeyError, TypeError, IndexError):
+        pass
+    try:
+        # Fallback: acceso por índice (tuple, list, sqlite3.Row sin factory)
+        return row[index]
+    except (IndexError, TypeError):
+        return None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # BLOQUE 1: INICIALIZACIÓN DE TABLA
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -100,36 +124,32 @@ def normalizar(texto: str) -> str:
     if not texto:
         return ''
     texto = texto.strip().lower()
+    # Descomponer caracteres Unicode y eliminar marcas diacríticas
     nfkd = unicodedata.normalize('NFKD', texto)
     return ''.join(c for c in nfkd if not unicodedata.combining(c))
 
 
 def es_nombre_real(texto: str) -> bool:
     """
-    Retorna True si el texto parece un nombre real (letras, espacios, guiones).
-    Retorna False si contiene números, @ u otros símbolos de alias o teléfonos.
+    Retorna True si el texto parece un nombre real (solo letras, espacios y
+    caracteres latinos). Retorna False si contiene números, @ u otros símbolos
+    que indiquen un alias, teléfono o identificador.
 
     Ejemplos:
-      'María González'  → True
-      '04121234567'     → False
-      '@instagram_user' → False
-      'Juan'            → True
+      'María González' → True
+      '04121234567'    → False
+      '@instagram_user'→ False
+      'Luis Cumana'    → True
     """
-    if not texto or not texto.strip():
+    if not texto or len(texto.strip()) < 2:
         return False
     texto = texto.strip()
-    if len(texto) < 3:
+    # Rechazar si contiene dígitos o símbolos típicos de alias/teléfono
+    if re.search(r'[\d@#$%&*_/\\|<>{}[\]()=+]', texto):
         return False
-    # Si contiene dígitos → no es nombre real
-    if re.search(r'\d', texto):
-        return False
-    # Si contiene @ o # → alias de red social
-    if '@' in texto or '#' in texto:
-        return False
-    # Debe contener al menos una letra
-    if not re.search(r'[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ]', texto):
-        return False
-    return True
+    # Debe tener al menos 2 letras
+    letras = re.findall(r'[a-záéíóúüñA-ZÁÉÍÓÚÜÑ]', texto)
+    return len(letras) >= 2
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -161,14 +181,15 @@ def buscar_clientes(query: str, limite: int = 10) -> list:
 
         resultados = []
         for row in rows:
-            nombre_norm = normalizar(row[1] or '')
+            nombre_val = _row(row, 'nombre', 1) or ''
+            nombre_norm = normalizar(nombre_val)
             if query_norm in nombre_norm:
                 resultados.append({
-                    'id':        row[0],
-                    'nombre':    row[1] or '',
-                    'telefono':  row[2] or '',
-                    'direccion': row[3] or '',
-                    'ci_rif':    row[4] or '',
+                    'id':        _row(row, 'id', 0),
+                    'nombre':    nombre_val,
+                    'telefono':  _row(row, 'telefono', 2) or '',
+                    'direccion': _row(row, 'direccion', 3) or '',
+                    'ci_rif':    _row(row, 'ci_rif', 4) or '',
                 })
             if len(resultados) >= limite:
                 break
@@ -233,13 +254,14 @@ def guardar_o_actualizar(datos: dict) -> dict:
 
         cliente_existente = None
         for row in rows:
-            if normalizar(row[1] or '') == nombre_norm:
+            nombre_bd = _row(row, 'nombre', 1) or ''
+            if normalizar(nombre_bd) == nombre_norm:
                 cliente_existente = {
-                    'id':        row[0],
-                    'nombre':    row[1] or '',
-                    'telefono':  row[2] or '',
-                    'direccion': row[3] or '',
-                    'ci_rif':    row[4] or '',
+                    'id':        _row(row, 'id', 0),
+                    'nombre':    nombre_bd,
+                    'telefono':  _row(row, 'telefono', 2) or '',
+                    'direccion': _row(row, 'direccion', 3) or '',
+                    'ci_rif':    _row(row, 'ci_rif', 4) or '',
                 }
                 break
 
@@ -290,7 +312,8 @@ def guardar_o_actualizar(datos: dict) -> dict:
                     """,
                     (nombre, telefono, direccion, ci_rif)
                 )
-                nuevo_id = cursor.fetchone()[0]
+                nuevo_id_row = cursor.fetchone()
+                nuevo_id = _row(nuevo_id_row, 'id', 0)
             else:
                 cursor.execute(
                     """
@@ -351,13 +374,13 @@ def get_todos_los_clientes() -> list:
         conn.close()
         return [
             {
-                'id':             row[0],
-                'nombre':         row[1] or '',
-                'telefono':       row[2] or '',
-                'direccion':      row[3] or '',
-                'ci_rif':         row[4] or '',
-                'creado_en':      row[5],
-                'actualizado_en': row[6],
+                'id':             _row(row, 'id', 0),
+                'nombre':         _row(row, 'nombre', 1) or '',
+                'telefono':       _row(row, 'telefono', 2) or '',
+                'direccion':      _row(row, 'direccion', 3) or '',
+                'ci_rif':         _row(row, 'ci_rif', 4) or '',
+                'creado_en':      _row(row, 'creado_en', 5),
+                'actualizado_en': _row(row, 'actualizado_en', 6),
             }
             for row in rows
         ]
@@ -393,11 +416,11 @@ def get_cliente_por_id(cliente_id: int) -> dict:
         conn.close()
         if row:
             return {
-                'id':        row[0],
-                'nombre':    row[1] or '',
-                'telefono':  row[2] or '',
-                'direccion': row[3] or '',
-                'ci_rif':    row[4] or '',
+                'id':        _row(row, 'id', 0),
+                'nombre':    _row(row, 'nombre', 1) or '',
+                'telefono':  _row(row, 'telefono', 2) or '',
+                'direccion': _row(row, 'direccion', 3) or '',
+                'ci_rif':    _row(row, 'ci_rif', 4) or '',
             }
         return {}
     except Exception as e:
@@ -528,15 +551,17 @@ def detectar_duplicados() -> list:
         # Agrupar por (ci_rif normalizado, telefono normalizado)
         grupos = {}
         for row in rows:
-            clave = (normalizar(row[4] or ''), normalizar(row[2] or ''))
+            ci_val  = _row(row, 'ci_rif', 4) or ''
+            tel_val = _row(row, 'telefono', 2) or ''
+            clave = (normalizar(ci_val), normalizar(tel_val))
             if clave not in grupos:
                 grupos[clave] = []
             grupos[clave].append({
-                'id':        row[0],
-                'nombre':    row[1] or '',
-                'telefono':  row[2] or '',
-                'direccion': row[3] or '',
-                'ci_rif':    row[4] or '',
+                'id':        _row(row, 'id', 0),
+                'nombre':    _row(row, 'nombre', 1) or '',
+                'telefono':  tel_val,
+                'direccion': _row(row, 'direccion', 3) or '',
+                'ci_rif':    ci_val,
             })
 
         # Solo retornar grupos con más de 1 cliente
