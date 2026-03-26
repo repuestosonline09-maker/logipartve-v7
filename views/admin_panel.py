@@ -9,6 +9,7 @@ from database.cliente_manager import (
     init_clientes_table, get_todos_los_clientes, get_cliente_por_id,
     actualizar_cliente, eliminar_cliente, detectar_duplicados
 )
+from database.migrar_clientes import migrar_clientes_desde_quotes
 
 def show_admin_panel():
     """
@@ -1264,6 +1265,65 @@ def show_clientes_management():
         "Los clientes se registran automáticamente cuando un analista guarda una cotización "
         "con un nombre real (sin números ni alias). Aquí puedes ver, editar y eliminar registros."
     )
+
+    # ── BLOQUE 0: MIGRACIÓN HISTÓRICA DESDE COTIZACIONES ────────────────────────
+    # Solo se muestra si la tabla está vacía o si el admin quiere re-ejecutarla
+    with st.expander("📦 Migración de Clientes Históricos", expanded=False):
+        st.markdown(
+            "**¿Qué hace esto?** Busca en todas las cotizaciones existentes los clientes que "
+            "tengan los 4 datos completos (Nombre, Teléfono, Dirección y C.I./RIF) y los "
+            "copia a la base de datos de clientes. Solo se migran nombres reales (sin números "
+            "ni alias). Si un cliente ya existe, no se duplica."
+        )
+        st.warning(
+            "⚠️ Esta operación es segura y puede ejecutarse más de una vez sin crear duplicados. "
+            "Se recomienda ejecutarla **una sola vez** al activar esta función por primera vez."
+        )
+
+        if 'migracion_reporte' not in st.session_state:
+            st.session_state.migracion_reporte = None
+
+        if st.button(
+            "🚀 EJECUTAR MIGRACIÓN DE CLIENTES HISTÓRICOS",
+            type="primary",
+            use_container_width=True,
+            key="btn_migrar_clientes"
+        ):
+            with st.spinner("Migrando clientes desde cotizaciones históricas..."):
+                try:
+                    reporte = migrar_clientes_desde_quotes()
+                    st.session_state.migracion_reporte = reporte
+                    # Limpiar caché de duplicados para que se recalcule
+                    if 'ac_dups_cache' in st.session_state:
+                        del st.session_state['ac_dups_cache']
+                except Exception as _e_mig:
+                    st.error(f"❌ Error inesperado en la migración: {_e_mig}")
+
+        if st.session_state.migracion_reporte:
+            _r = st.session_state.migracion_reporte
+            # Mostrar métricas del reporte
+            mc1, mc2, mc3, mc4 = st.columns(4)
+            mc1.metric("➕ Migrados",    _r['migrados'])
+            mc2.metric("✅ Ya existían", _r['ya_existian'])
+            mc3.metric("⏭️ Omitidos",    _r['omitidos'])
+            mc4.metric("❌ Errores",     _r['errores'])
+
+            if _r['migrados'] > 0:
+                st.success(
+                    f"✅ Migración completada. "
+                    f"{_r['migrados']} cliente(s) nuevo(s) agregado(s) a la base de datos."
+                )
+            elif _r['errores'] == 0:
+                st.info(
+                    "No se encontraron clientes nuevos para migrar. "
+                    "Todos los clientes ya existían o no había cotizaciones con datos completos."
+                )
+
+            with st.expander("📝 Ver detalle completo de la migración"):
+                for linea in _r['detalle']:
+                    st.text(linea)
+
+    st.markdown("---")
 
     # ── BLOQUE 1: ALERTAS DE DUPLICADOS ──────────────────────────────────────
     _dups = detectar_duplicados()
