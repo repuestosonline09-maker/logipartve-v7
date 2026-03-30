@@ -15,12 +15,13 @@ maxMessageSize = 500
 enableWebsocketCompression = true
 maxUploadSize = 200
 runOnSave = false
-# Mantener la conexión WebSocket viva — ping cada 25 segundos
-# Esto previene que Railway/proxies corten la conexión por inactividad
-websocketPingInterval = 25
+# Mantener la conexión WebSocket viva — ping cada 15 segundos
+# Intervalo más corto para prevenir cierres por proxies/Cloudflare/Streamlit Cloud
+websocketPingInterval = 15
 # Tiempo (segundos) que el servidor espera antes de limpiar una sesión
-# cuyo WebSocket se desconectó. 3600 = 1 hora de gracia.
-disconnectedSessionTTL = 3600
+# cuyo WebSocket se desconectó. 86400 = 24 horas de gracia.
+# Permite que los analistas dejen la app abierta todo el día sin perder sesión.
+disconnectedSessionTTL = 86400
 
 [browser]
 gatherUsageStats = false

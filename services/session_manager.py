@@ -121,7 +121,7 @@ class SessionManager:
                     } catch(e2) {}
                 }
             }
-            setInterval(pingServer, 20000);
+            setInterval(pingServer, 10000);  // Ping cada 10 segundos para mayor estabilidad
 
             // ── Capa 2: Detectar actividad del usuario ──────────────────────
             // Registrar eventos en el documento padre
