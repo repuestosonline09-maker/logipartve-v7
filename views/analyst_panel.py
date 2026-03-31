@@ -195,6 +195,11 @@ def render_analyst_panel():
         st.session_state.ac_alerta_modo = None      # None | 'alerta' | 'actualizar'
     if 'ac_alerta_nombre_trigger' not in st.session_state:
         st.session_state.ac_alerta_nombre_trigger = ''  # nombre que disparó la alerta
+    # ── PROTECCIÓN ANTI-DUPLICADO ────────────────────────────────────────────
+    # Flag que bloquea el botón GUARDAR después del primer clic exitoso.
+    # Se resetea solo cuando el analista inicia una NUEVA COTIZACIÓN.
+    if 'guardando_en_progreso' not in st.session_state:
+        st.session_state.guardando_en_progreso = False
     # Siempre recargar tarifas desde la BD para reflejar cambios del admin
     _mia_a = DBManager.get_freight_rate('Miami', 'Aéreo')
     _mia_m = DBManager.get_freight_rate('Miami', 'Marítimo')
@@ -1868,10 +1873,31 @@ def render_analyst_panel():
         with gen_col1:
             # Cambiar botón según modo
             button_label = "🔄 ACTUALIZAR COTIZACIÓN" if editing_mode else "💾 GUARDAR COTIZACIÓN"
-            
-            if st.button(button_label, use_container_width=True, type="primary", key="btn_guardar_cotizacion"):
+
+            # ── PROTECCIÓN ANTI-DUPLICADO ───────────────────────────────────────────
+            # El botón se deshabilita si:
+            # a) Ya se guardó exitosamente (cotizacion_guardada = True)
+            # b) Está en proceso de guardado (guardando_en_progreso = True)
+            # Esto impide que un doble clic accidental cree cotizaciones duplicadas.
+            _ya_guardada = st.session_state.get('cotizacion_guardada', False)
+            _guardando   = st.session_state.get('guardando_en_progreso', False)
+            _btn_disabled = (_ya_guardada or _guardando) and not editing_mode
+
+            if _btn_disabled:
+                st.button(
+                    "✅ COTIZACIÓN GUARDADA" if _ya_guardada else "⏳ Guardando...",
+                    use_container_width=True,
+                    type="primary",
+                    key="btn_guardar_cotizacion",
+                    disabled=True
+                )
+            elif st.button(button_label, use_container_width=True, type="primary", key="btn_guardar_cotizacion"):
+                # Activar flag anti-duplicado INMEDIATAMENTE al primer clic
+                if not editing_mode:
+                    st.session_state.guardando_en_progreso = True
                 # Validar que haya ítems
                 if not items or len(items) == 0:
+                    st.session_state.guardando_en_progreso = False  # Liberar si hay error
                     st.error("❌ Debes agregar al menos un ítem para guardar la cotización")
                 elif editing_mode and editing_quote_id:
                     # MODO EDICIÓN: Actualizar cotización existente
@@ -2022,16 +2048,20 @@ def render_analyst_panel():
                                         
                                         st.rerun()
                                     else:
+                                        st.session_state.guardando_en_progreso = False  # Liberar para reintento
                                         st.error("❌ Error al guardar ítems de la cotización. Revisa los logs para más detalles.")
                                 else:
+                                    st.session_state.guardando_en_progreso = False  # Liberar para reintento
                                     st.error("❌ Error al guardar cotización en base de datos. Revisa los logs para más detalles.")
                         
                         except Exception as e:
+                            st.session_state.guardando_en_progreso = False  # Liberar para reintento
                             st.error(f"❌ Error al guardar cotización: {str(e)}")
                             print(f"❌ DEBUG - Excepción al guardar: {str(e)}")
                             import traceback
                             traceback.print_exc()
                     else:
+                        st.session_state.guardando_en_progreso = False  # Liberar para reintento
                         st.error("❌ Error al generar número de cotización")
         
         with gen_col2:
@@ -2226,6 +2256,7 @@ def render_analyst_panel():
                         'editing_item_index', 'editing_item_data',
                         'item_links', 'limpiar_campos_item',
                         'cotizacion_aplica_iva',  # Resetear IVA a NO por defecto
+                        'guardando_en_progreso',  # Resetear protección anti-duplicado
                     ]
                     for _k in _keys_to_clear_nueva:
                         if _k in st.session_state:
