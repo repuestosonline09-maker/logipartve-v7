@@ -1932,15 +1932,14 @@ Cash | Zelle | Binance | Depósito Bancario Cta Divisas 🤝"""
                 )
                 
                 # Botón copiar al portapapeles via JavaScript
-                # Preparar texto seguro para incrustar en JS (sin backticks ni $ sueltos)
-                _msg_js = mensaje_usd.replace('\\', '\\\\').replace('`', "'")
+                # El texto se pasa directamente al JS del iframe (no puede acceder al DOM externo)
+                import json as _json
+                _texto_js = _json.dumps(mensaje_usd)  # escapado seguro para JS
                 copy_js = (
                     "<script>"
+                    f"var _textoUSD = {_texto_js};"
                     "function copiarMensajeUSD() {"
-                    "  const ta = document.querySelector('textarea[data-testid=stTextArea]')"
-                    "           || document.querySelector('.stTextArea textarea');"
-                    "  const texto = ta ? ta.value : '';"
-                    "  navigator.clipboard.writeText(texto).then(function() {"
+                    "  navigator.clipboard.writeText(_textoUSD).then(function() {"
                     "    var btn = document.getElementById('copy_btn_usd');"
                     "    btn.innerHTML = '&#9989; &iexcl;Copiado!';"
                     "    btn.style.background = '#00d4aa';"
@@ -1952,7 +1951,7 @@ Cash | Zelle | Binance | Depósito Bancario Cta Divisas 🤝"""
                     "    }, 2500);"
                     "  }).catch(function() {"
                     "    var btn = document.getElementById('copy_btn_usd');"
-                    "    btn.innerHTML = '&#9888; Selecciona el texto y copia manualmente (Ctrl+A, Ctrl+C)';"
+                    "    btn.innerHTML = '&#9888; No se pudo copiar. Selecciona el texto manualmente (Ctrl+A, Ctrl+C)';"
                     "  });"
                     "}"
                     "</script>"
