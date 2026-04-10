@@ -1934,36 +1934,35 @@ Cash | Zelle | Binance | Depósito Bancario Cta Divisas 🤝"""
                 # Botón copiar al portapapeles via JavaScript
                 # Preparar texto seguro para incrustar en JS (sin backticks ni $ sueltos)
                 _msg_js = mensaje_usd.replace('\\', '\\\\').replace('`', "'")
-                copy_js = """
-                <script>
-                function copiarMensajeUSD() {
-                    const textarea = document.querySelector('textarea[data-testid="stTextArea"]') ||
-                                     document.querySelector('.stTextArea textarea');
-                    const texto = textarea ? textarea.value : '';
-                    navigator.clipboard.writeText(texto).then(function() {
-                        var btn = document.getElementById('copy_btn_usd');
-                        btn.innerText = '\u2705 \u00a1Copiado!';
-                        btn.style.background = '#00d4aa';
-                        btn.style.color = '#000';
-                        setTimeout(function() {
-                            btn.innerText = '\ud83d\udccb Copiar al Portapapeles';
-                            btn.style.background = '#0f3460';
-                            btn.style.color = '#fff';
-                        }, 2500);
-                    }).catch(function() {
-                        var btn = document.getElementById('copy_btn_usd');
-                        btn.innerText = '\u26a0\ufe0f Selecciona el texto y copia manualmente (Ctrl+A, Ctrl+C)';
-                    });
-                }
-                </script>
-                <button id="copy_btn_usd"
-                    onclick="copiarMensajeUSD()"
-                    style="width:100%; padding:12px; font-size:1rem; font-weight:bold;
-                           background:#0f3460; color:white; border:2px solid #00d4aa;
-                           border-radius:8px; cursor:pointer; margin-top:8px;">
-                    \ud83d\udccb Copiar al Portapapeles
-                </button>
-                """
+                copy_js = (
+                    "<script>"
+                    "function copiarMensajeUSD() {"
+                    "  const ta = document.querySelector('textarea[data-testid=stTextArea]')"
+                    "           || document.querySelector('.stTextArea textarea');"
+                    "  const texto = ta ? ta.value : '';"
+                    "  navigator.clipboard.writeText(texto).then(function() {"
+                    "    var btn = document.getElementById('copy_btn_usd');"
+                    "    btn.innerHTML = '&#9989; &iexcl;Copiado!';"
+                    "    btn.style.background = '#00d4aa';"
+                    "    btn.style.color = '#000';"
+                    "    setTimeout(function() {"
+                    "      btn.innerHTML = '&#128203; Copiar al Portapapeles';"
+                    "      btn.style.background = '#0f3460';"
+                    "      btn.style.color = '#fff';"
+                    "    }, 2500);"
+                    "  }).catch(function() {"
+                    "    var btn = document.getElementById('copy_btn_usd');"
+                    "    btn.innerHTML = '&#9888; Selecciona el texto y copia manualmente (Ctrl+A, Ctrl+C)';"
+                    "  });"
+                    "}"
+                    "</script>"
+                    "<button id='copy_btn_usd' onclick='copiarMensajeUSD()'"
+                    " style='width:100%;padding:12px;font-size:1rem;font-weight:bold;"
+                    "background:#0f3460;color:white;border:2px solid #00d4aa;"
+                    "border-radius:8px;cursor:pointer;margin-top:8px;'>"
+                    "&#128203; Copiar al Portapapeles"
+                    "</button>"
+                )
                 st.components.v1.html(copy_js, height=70)
                 
                 col_cerrar1, col_cerrar2, col_cerrar3 = st.columns([1, 2, 1])
