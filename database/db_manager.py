@@ -378,7 +378,33 @@ class DBManager:
                 print("✅ Migración: Columnas adicionales agregadas a tabla 'quotes'")
         except Exception as e:
             print(f"⚠️ Migración de columnas en 'quotes': {e}")
-        
+
+        # ── Migración: Agregar updated_at a tabla 'quotes' ─────────────────────
+        # updated_at registra la fecha/hora exacta en que se cambia el estado
+        # (aprobación, rechazo, etc.). Se inicializa con created_at para datos existentes.
+        try:
+            if is_postgres:
+                cursor.execute("""
+                    SELECT column_name FROM information_schema.columns
+                    WHERE table_name='quotes' AND column_name='updated_at'
+                """)
+                if not cursor.fetchone():
+                    cursor.execute("ALTER TABLE quotes ADD COLUMN updated_at TIMESTAMP")
+                    # Inicializar con created_at para registros existentes
+                    cursor.execute("UPDATE quotes SET updated_at = created_at WHERE updated_at IS NULL")
+                    conn.commit()
+                    print("✅ Migración: Columna updated_at agregada a tabla 'quotes'")
+            else:
+                cursor.execute("PRAGMA table_info(quotes)")
+                columns = [row[1] for row in cursor.fetchall()]
+                if 'updated_at' not in columns:
+                    cursor.execute("ALTER TABLE quotes ADD COLUMN updated_at TIMESTAMP")
+                    cursor.execute("UPDATE quotes SET updated_at = created_at WHERE updated_at IS NULL")
+                    conn.commit()
+                    print("✅ Migración: Columna updated_at agregada a tabla 'quotes'")
+        except Exception as e:
+            print(f"⚠️ Migración updated_at en 'quotes': {e}")
+
         # Migración: Agregar columnas adicionales a tabla 'quote_items'
         try:
             if is_postgres:
@@ -3318,64 +3344,51 @@ class DBManager:
             ph = '%s' if is_postgres else '?'
 
             # ── ESTRATEGIA DE FILTRADO ──────────────────────────────────────────────
-            # Una cotización puede crearse antes del período y aprobarse dentro de él.
-            # Por eso usamos un filtro amplio: cotizaciones con actividad en el rango,
-            # definida como: (created_at EN el rango) OR (updated_at EN el rango).
-            # Esto garantiza que tanto cotizaciones nuevas como aprobadas en el período
-            # aparezcan en los contadores del dashboard.
-            # Para APROBADAS se usa exclusivamente updated_at (fecha real de aprobación).
+            # Usamos created_at para filtrar el total de cotizaciones (comportamiento
+            # original que funcionaba correctamente). Para APROBADAS usamos
+            # COALESCE(updated_at, created_at) para aprovechar updated_at cuando
+            # exista (nueva columna migrada) y caer en created_at si no existe.
             # ────────────────────────────────────────────────────────────────────────
 
             if analyst_id is not None:
-                # Cotizaciones con actividad en el rango (creadas O actualizadas dentro)
-                where_quotes = (
-                    f"WHERE analyst_id = {ph} AND ("
-                    f"DATE(created_at) >= {ph} AND DATE(created_at) <= {ph}"
-                    f" OR DATE(updated_at) >= {ph} AND DATE(updated_at) <= {ph})"
-                )
-                params_quotes = (analyst_id, fecha_desde, fecha_hasta, fecha_desde, fecha_hasta)
+                # Filtro por analista + rango de fechas (por created_at, comportamiento original)
+                where_quotes = f"WHERE analyst_id = {ph} AND DATE(created_at) >= {ph} AND DATE(created_at) <= {ph}"
+                params_quotes = (analyst_id, fecha_desde, fecha_hasta)
 
-                where_items = (
-                    f"WHERE q.analyst_id = {ph} AND ("
-                    f"DATE(q.created_at) >= {ph} AND DATE(q.created_at) <= {ph}"
-                    f" OR DATE(q.updated_at) >= {ph} AND DATE(q.updated_at) <= {ph})"
-                )
-                params_items = (analyst_id, fecha_desde, fecha_hasta, fecha_desde, fecha_hasta)
+                where_items = f"WHERE q.analyst_id = {ph} AND DATE(q.created_at) >= {ph} AND DATE(q.created_at) <= {ph}"
+                params_items = (analyst_id, fecha_desde, fecha_hasta)
 
-                # Aprobadas: solo por updated_at (fecha real de aprobación)
+                # Aprobadas: usar COALESCE(updated_at, created_at) para soportar
+                # tanto la columna nueva como registros anteriores a la migración
                 where_approved = (
                     f"WHERE q.analyst_id = {ph}"
-                    f" AND DATE(q.updated_at) >= {ph} AND DATE(q.updated_at) <= {ph}"
+                    f" AND DATE(COALESCE(q.updated_at, q.created_at)) >= {ph}"
+                    f" AND DATE(COALESCE(q.updated_at, q.created_at)) <= {ph}"
                     f" AND q.status = 'approved'"
                 )
                 params_approved = (analyst_id, fecha_desde, fecha_hasta)
             else:
-                # Global: cotizaciones con actividad en el rango
-                where_quotes = (
-                    f"WHERE (DATE(created_at) >= {ph} AND DATE(created_at) <= {ph}"
-                    f" OR DATE(updated_at) >= {ph} AND DATE(updated_at) <= {ph})"
-                )
-                params_quotes = (fecha_desde, fecha_hasta, fecha_desde, fecha_hasta)
+                # Solo rango de fechas (global, por created_at, comportamiento original)
+                where_quotes = f"WHERE DATE(created_at) >= {ph} AND DATE(created_at) <= {ph}"
+                params_quotes = (fecha_desde, fecha_hasta)
 
-                where_items = (
-                    f"WHERE (DATE(q.created_at) >= {ph} AND DATE(q.created_at) <= {ph}"
-                    f" OR DATE(q.updated_at) >= {ph} AND DATE(q.updated_at) <= {ph})"
-                )
-                params_items = (fecha_desde, fecha_hasta, fecha_desde, fecha_hasta)
+                where_items = f"WHERE DATE(q.created_at) >= {ph} AND DATE(q.created_at) <= {ph}"
+                params_items = (fecha_desde, fecha_hasta)
 
-                # Aprobadas globales: solo por updated_at
+                # Aprobadas globales: COALESCE(updated_at, created_at)
                 where_approved = (
-                    f"WHERE DATE(q.updated_at) >= {ph} AND DATE(q.updated_at) <= {ph}"
+                    f"WHERE DATE(COALESCE(q.updated_at, q.created_at)) >= {ph}"
+                    f" AND DATE(COALESCE(q.updated_at, q.created_at)) <= {ph}"
                     f" AND q.status = 'approved'"
                 )
                 params_approved = (fecha_desde, fecha_hasta)
 
-            # Total de cotizaciones con actividad en el rango
+            # Total de cotizaciones (por created_at — comportamiento original)
             cursor.execute(f"SELECT COUNT(*) as total FROM quotes {where_quotes}", params_quotes)
             row = cursor.fetchone()
             total_quotes = row['total'] if is_postgres else row[0]
 
-            # Monto total cotizado (ítems de cotizaciones con actividad en el rango)
+            # Monto total cotizado
             cursor.execute(f"""
                 SELECT COALESCE(SUM(qi.total_cost), 0) as total
                 FROM quote_items qi
@@ -3385,7 +3398,7 @@ class DBManager:
             row = cursor.fetchone()
             total_amount = float(row['total'] if is_postgres else row[0])
 
-            # Distribución por estado (cotizaciones con actividad en el rango)
+            # Distribución por estado (por created_at)
             cursor.execute(f"SELECT status, COUNT(*) as count FROM quotes {where_quotes} GROUP BY status", params_quotes)
             quotes_by_status = {}
             for row in cursor.fetchall():
@@ -3393,12 +3406,14 @@ class DBManager:
                 count  = row['count']  if is_postgres else row[1]
                 quotes_by_status[status] = count
 
-            # Contar APROBADAS por updated_at (sobreescribe el valor del GROUP BY anterior)
+            # Contar APROBADAS por COALESCE(updated_at, created_at)
+            # Esto corrige el caso de cotizaciones creadas antes del período pero
+            # aprobadas dentro de él, sin romper los contadores generales.
             cursor.execute(f"SELECT COUNT(*) as cnt FROM quotes q {where_approved}", params_approved)
             row = cursor.fetchone()
             quotes_by_status['approved'] = row['cnt'] if is_postgres else row[0]
 
-            # Monto de aprobadas por updated_at
+            # Monto de aprobadas
             cursor.execute(f"""
                 SELECT COALESCE(SUM(qi.total_cost), 0) as total
                 FROM quote_items qi
