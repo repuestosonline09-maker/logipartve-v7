@@ -1907,7 +1907,7 @@ def render_analyst_panel():
                 # Texto del mensaje completo
                 mensaje_usd = f"""✨ ¡Optimiza tu compra con nosotros! ✨
 
-💡 ¿Sabías que al realizar tu pago anticipado en divisas, puedes acceder a un beneficio especial en el valor total de tus repuestos? Es nuestra forma de recompensar tu confianza y compromiso. 🙌
+💡 ¿Sabías que al realizar tu pago en divisas, puedes acceder a un beneficio especial en el valor total de tus repuestos? Es nuestra forma de recompensar tu confianza y compromiso. 🙌
 
 🔑 Esta opción te brinda la oportunidad de asegurar tus piezas con una ventaja adicional, manteniendo la transparencia y responsabilidad que nos caracterizan.
 
