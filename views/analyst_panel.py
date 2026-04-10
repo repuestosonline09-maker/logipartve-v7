@@ -1797,6 +1797,7 @@ def render_analyst_panel():
         iva_total = 0
         abona_ya = 0
         total_usd_divisas = 0
+        usd_abono = 0
         
         for item in items:
             cantidad = item.get('cantidad', 1)
@@ -1846,12 +1847,26 @@ def render_analyst_panel():
                 item.get('costo_tax', 0)
             )
             total_usd_divisas += total_usd_item
+            
+            # USD Abono = costos base SIN envío ni TAX (lo que se cobra por adelantado en USD)
+            # USD Entrega = Envío + TAX (lo que se cobra al momento de la entrega en USD)
+            usd_abono_item = (
+                item.get('fob_total', 0) +
+                item.get('costo_handling', 0) +
+                item.get('costo_manejo', 0) +
+                item.get('costo_impuesto', 0) +
+                item.get('utilidad_valor', 0)
+            )
+            usd_abono += usd_abono_item
         
         # Total a Pagar
         total_a_pagar = sub_total + iva_total
         
-        # Y en la Entrega
+        # Y en la Entrega (Bs)
         y_en_entrega = total_a_pagar - abona_ya
+        
+        # Y en la Entrega USD = Total USD - USD Abono (equivale a Envío + TAX de todos los ítems)
+        usd_entrega = total_usd_divisas - usd_abono
         
         # Mostrar totales
         st.markdown("### 📊 Totales de la Cotización")
@@ -1867,6 +1882,96 @@ def render_analyst_panel():
         with total_col3:
             st.info(f"💵 **Total si paga en USD/Divisas:**\n\n${total_usd_divisas:.2f}")
             st.caption("⚠️ Este monto NO aparece en el PDF. Comunícalo al cliente por mensaje aparte.")
+            
+            # ── BOTÓN POP-UP MENSAJE PAGO USD ─────────────────────────────────────
+            if items and len(items) > 0:
+                if st.button("📋 Copiar Mensaje Pago USD", use_container_width=True, type="secondary", key="btn_popup_usd"):
+                    st.session_state['mostrar_popup_usd'] = not st.session_state.get('mostrar_popup_usd', False)
+        
+        # ── POP-UP MENSAJE PAGO USD ────────────────────────────────────────────────
+        if st.session_state.get('mostrar_popup_usd', False) and items and len(items) > 0:
+            st.markdown("---")
+            with st.container():
+                st.markdown("""
+                <div style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+                            border: 2px solid #00d4aa;
+                            border-radius: 16px;
+                            padding: 24px;
+                            margin: 8px 0;">
+                    <h3 style="color: #00d4aa; text-align: center; margin-bottom: 16px; font-size: 1.1rem;">
+                        📲 Mensaje listo para WhatsApp / Instagram
+                    </h3>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # Texto del mensaje completo
+                mensaje_usd = f"""✨ ¡Optimiza tu compra con nosotros! ✨
+
+💡 ¿Sabías que al realizar tu pago anticipado en divisas, puedes acceder a un beneficio especial en el valor total de tus repuestos? Es nuestra forma de recompensar tu confianza y compromiso. 🙌
+
+🔑 Esta opción te brinda la oportunidad de asegurar tus piezas con una ventaja adicional, manteniendo la transparencia y responsabilidad que nos caracterizan.
+
+📋 Si decides aprovechar esta facilidad, tu presupuesto quedaría en:
+
+━━━━━━━━━━━━━━━━━━━━
+💵 *Total a Pagar en USD:*  ${total_usd_divisas:.2f}
+✅ *Monto a Abonar:*         ${usd_abono:.2f}
+🚚 *Y en la Entrega:*        ${usd_entrega:.2f}
+━━━━━━━━━━━━━━━━━━━━
+
+💳 *Formas de pago que te ofrecemos:*
+Cash | Zelle | Binance | Depósito Bancario Cta Divisas 🤝"""
+                
+                # Mostrar el mensaje en un text_area para fácil selección manual
+                st.text_area(
+                    "Mensaje generado:",
+                    value=mensaje_usd,
+                    height=320,
+                    key="textarea_mensaje_usd",
+                    help="Selecciona todo el texto y cópialo, o usa el botón de abajo."
+                )
+                
+                # Botón copiar al portapapeles via JavaScript
+                # Preparar texto seguro para incrustar en JS (sin backticks ni $ sueltos)
+                _msg_js = mensaje_usd.replace('\\', '\\\\').replace('`', "'")
+                copy_js = """
+                <script>
+                function copiarMensajeUSD() {
+                    const textarea = document.querySelector('textarea[data-testid="stTextArea"]') ||
+                                     document.querySelector('.stTextArea textarea');
+                    const texto = textarea ? textarea.value : '';
+                    navigator.clipboard.writeText(texto).then(function() {
+                        var btn = document.getElementById('copy_btn_usd');
+                        btn.innerText = '\u2705 \u00a1Copiado!';
+                        btn.style.background = '#00d4aa';
+                        btn.style.color = '#000';
+                        setTimeout(function() {
+                            btn.innerText = '\ud83d\udccb Copiar al Portapapeles';
+                            btn.style.background = '#0f3460';
+                            btn.style.color = '#fff';
+                        }, 2500);
+                    }).catch(function() {
+                        var btn = document.getElementById('copy_btn_usd');
+                        btn.innerText = '\u26a0\ufe0f Selecciona el texto y copia manualmente (Ctrl+A, Ctrl+C)';
+                    });
+                }
+                </script>
+                <button id="copy_btn_usd"
+                    onclick="copiarMensajeUSD()"
+                    style="width:100%; padding:12px; font-size:1rem; font-weight:bold;
+                           background:#0f3460; color:white; border:2px solid #00d4aa;
+                           border-radius:8px; cursor:pointer; margin-top:8px;">
+                    \ud83d\udccb Copiar al Portapapeles
+                </button>
+                """
+                st.components.v1.html(copy_js, height=70)
+                
+                col_cerrar1, col_cerrar2, col_cerrar3 = st.columns([1, 2, 1])
+                with col_cerrar2:
+                    if st.button("✖ Cerrar", use_container_width=True, key="btn_cerrar_popup_usd"):
+                        st.session_state['mostrar_popup_usd'] = False
+                        st.rerun()
+        # ── FIN POP-UP MENSAJE PAGO USD ────────────────────────────────────────────
         
         # Botones de generación
         gen_col1, gen_col2, gen_col3 = st.columns(3)
