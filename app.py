@@ -743,12 +743,19 @@ def show_analyst_dashboard():
     try:
         import pandas as pd
         mis_quotes = DBManager.get_quotes_by_analyst(analyst_id, limit=500)
-        # Filtrar por rango de fechas
+        # Filtrar por rango de fechas:
+        # - Aprobadas: se filtra por updated_at (fecha real de aprobación)
+        # - Resto: se filtra por created_at (fecha de creación)
         mis_quotes_filtradas = []
         for q in mis_quotes:
             try:
-                q_fecha = datetime.fromisoformat(str(q.get('created_at', ''))).date()
-                if fecha_desde <= q_fecha <= fecha_hasta:
+                estado = q.get('status', 'draft')
+                if estado == 'approved':
+                    # Usar updated_at para aprobadas
+                    ref_fecha = datetime.fromisoformat(str(q.get('updated_at', q.get('created_at', '')))).date()
+                else:
+                    ref_fecha = datetime.fromisoformat(str(q.get('created_at', ''))).date()
+                if fecha_desde <= ref_fecha <= fecha_hasta:
                     mis_quotes_filtradas.append(q)
             except Exception:
                 pass
@@ -757,7 +764,11 @@ def show_analyst_dashboard():
             rows = []
             for q in mis_quotes_filtradas[:20]:
                 try:
-                    fecha_q = datetime.fromisoformat(str(q.get('created_at', ''))).strftime('%d/%m/%Y')
+                    estado = q.get('status', 'draft')
+                    if estado == 'approved':
+                        fecha_q = datetime.fromisoformat(str(q.get('updated_at', q.get('created_at', '')))).strftime('%d/%m/%Y')
+                    else:
+                        fecha_q = datetime.fromisoformat(str(q.get('created_at', ''))).strftime('%d/%m/%Y')
                 except Exception:
                     fecha_q = '—'
                 rows.append({
