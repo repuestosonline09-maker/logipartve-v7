@@ -1883,10 +1883,14 @@ def render_analyst_panel():
             st.info(f"💵 **Total si paga en USD/Divisas:**\n\n${total_usd_divisas:.2f}")
             st.caption("⚠️ Este monto NO aparece en el PDF. Comunícalo al cliente por mensaje aparte.")
             
-            # ── BOTÓN POP-UP MENSAJE PAGO USD ─────────────────────────────────────
+            # ── BOTONES POP-UP MENSAJE PAGO USD y BCV ────────────────────────────
             if items and len(items) > 0:
                 if st.button("📋 Copiar Mensaje Pago USD", use_container_width=True, type="secondary", key="btn_popup_usd"):
                     st.session_state['mostrar_popup_usd'] = not st.session_state.get('mostrar_popup_usd', False)
+                    st.session_state['mostrar_popup_bcv'] = False
+                if st.button("📋 Copiar Mensaje BCV", use_container_width=True, type="secondary", key="btn_popup_bcv"):
+                    st.session_state['mostrar_popup_bcv'] = not st.session_state.get('mostrar_popup_bcv', False)
+                    st.session_state['mostrar_popup_usd'] = False
         
         # ── POP-UP MENSAJE PAGO USD ────────────────────────────────────────────────
         if st.session_state.get('mostrar_popup_usd', False) and items and len(items) > 0:
@@ -1970,6 +1974,80 @@ Cash | Zelle | Binance | Depósito Bancario Cta Divisas 🤝"""
                         st.session_state['mostrar_popup_usd'] = False
                         st.rerun()
         # ── FIN POP-UP MENSAJE PAGO USD ────────────────────────────────────────────
+
+        # ── POP-UP MENSAJE BCV ─────────────────────────────────────────────────
+        if st.session_state.get('mostrar_popup_bcv', False) and items and len(items) > 0:
+            st.markdown("---")
+            with st.container():
+                st.markdown("""
+                <div style="background: linear-gradient(135deg, #1a2e1a 0%, #163e16 50%, #0f6030 100%);
+                            border: 2px solid #00d4aa;
+                            border-radius: 16px;
+                            padding: 24px;
+                            margin: 8px 0;">
+                    <h3 style="color: #00d4aa; text-align: center; margin-bottom: 16px; font-size: 1.1rem;">
+                        📲 Mensaje listo para WhatsApp / Instagram
+                    </h3>
+                </div>
+                """, unsafe_allow_html=True)
+
+                # Texto fijo del mensaje BCV
+                mensaje_bcv = (
+                    "✅ En la parte central tiene el detalle de la(s) pieza(s). "
+                    "⏱️ Tiempo de entrega y garantía en VZLA.\n\n"
+                    "✅ En la parte inferior derecha puede ver el costo total en sus manos a tasa BCV "
+                    "💵 y la forma de pago si desea ordenarlo(s).\n\n"
+                    "Estaré atento. 👀\n\n"
+                    "Muchas Gracias! 😊🙌"
+                )
+
+                # Mostrar el mensaje en un text_area para visualización
+                st.text_area(
+                    "Mensaje generado:",
+                    value=mensaje_bcv,
+                    height=200,
+                    key="textarea_mensaje_bcv",
+                    help="Usa el botón de abajo para copiarlo al portapapeles."
+                )
+
+                # Botón copiar al portapapeles via JavaScript (texto incrustado en el iframe)
+                import json as _json_bcv
+                _texto_bcv_js = _json_bcv.dumps(mensaje_bcv)
+                copy_js_bcv = (
+                    "<script>"
+                    f"var _textoBCV = {_texto_bcv_js};"
+                    "function copiarMensajeBCV() {"
+                    "  navigator.clipboard.writeText(_textoBCV).then(function() {"
+                    "    var btn = document.getElementById('copy_btn_bcv');"
+                    "    btn.innerHTML = '&#9989; &iexcl;Copiado!';"
+                    "    btn.style.background = '#00d4aa';"
+                    "    btn.style.color = '#000';"
+                    "    setTimeout(function() {"
+                    "      btn.innerHTML = '&#128203; Copiar al Portapapeles';"
+                    "      btn.style.background = '#0f6030';"
+                    "      btn.style.color = '#fff';"
+                    "    }, 2500);"
+                    "  }).catch(function() {"
+                    "    var btn = document.getElementById('copy_btn_bcv');"
+                    "    btn.innerHTML = '&#9888; No se pudo copiar. Selecciona el texto manualmente (Ctrl+A, Ctrl+C)';"
+                    "  });"
+                    "}"
+                    "</script>"
+                    "<button id='copy_btn_bcv' onclick='copiarMensajeBCV()'"
+                    " style='width:100%;padding:12px;font-size:1rem;font-weight:bold;"
+                    "background:#0f6030;color:white;border:2px solid #00d4aa;"
+                    "border-radius:8px;cursor:pointer;margin-top:8px;'>"
+                    "&#128203; Copiar al Portapapeles"
+                    "</button>"
+                )
+                st.components.v1.html(copy_js_bcv, height=70)
+
+                col_cerrar_bcv1, col_cerrar_bcv2, col_cerrar_bcv3 = st.columns([1, 2, 1])
+                with col_cerrar_bcv2:
+                    if st.button("✖ Cerrar", use_container_width=True, key="btn_cerrar_popup_bcv"):
+                        st.session_state['mostrar_popup_bcv'] = False
+                        st.rerun()
+        # ── FIN POP-UP MENSAJE BCV ─────────────────────────────────────────────────
         
         # Botones de generación
         gen_col1, gen_col2, gen_col3 = st.columns(3)
