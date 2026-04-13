@@ -750,6 +750,7 @@ def _show_acciones(quote_id: int):
                 help="Usa el bot\u00f3n de abajo para copiarlo al portapapeles."
             )
 
+            import streamlit.components.v1 as _components_mq
             _texto_bcv_mq_js = _json_bcv_mq.dumps(_mensaje_bcv_mq)
             _copy_js_bcv_mq = (
                 "<script>"
