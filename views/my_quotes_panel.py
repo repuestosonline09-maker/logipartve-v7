@@ -600,42 +600,17 @@ def _show_acciones(quote_id: int):
 
     # ── POP-UP MENSAJE PAGO USD ───────────────────────────────────────────────
     if st.session_state.get(f'mq_popup_usd_{quote_id}', False):
-        # Recalcular montos USD con los ítems guardados
+        # Opción A: usar total_cost y shipping_cost guardados en BD (valores exactos del cuadro de costos)
         qd_usd = DBManager.get_quote_full_details(quote_id)
         items_usd = qd_usd.get('items', []) if qd_usd else []
         _total_usd = 0.0
         _usd_abono = 0.0
         for _it in items_usd:
-            # Recalcular desde campos reales de la BD
-            _qty          = float(_it.get('quantity', 1) or 1)
-            _unit_cost    = float(_it.get('unit_cost', 0) or 0)
-            _handling     = float(_it.get('international_handling', 0) or 0)
-            _manejo       = float(_it.get('national_handling', 0) or 0)
-            _envio        = float(_it.get('shipping_cost', 0) or 0)
-            _imp_pct      = float(_it.get('tax_percentage', 0) or 0)
-            _factor_util  = float(_it.get('profit_factor', 1.0) or 1.0)
-            _dif_pct      = float(_it.get('diferencial_porcentaje', 0) or 0)
-            _tax_pct      = 0.0  # TAX adicional (si existe campo separado)
-
-            # Fórmulas idénticas a analyst_panel.py
-            _fob_total    = _unit_cost * _qty
-            _costo_imp    = _fob_total * (_imp_pct / 100)
-            _util_base    = _fob_total + _handling + _manejo + _costo_imp
-            _util_valor   = _util_base * (_factor_util - 1.0)
-            _base_tax     = _fob_total + _handling + _manejo + _costo_imp + _util_valor + _envio
-            _costo_tax    = _base_tax * (_tax_pct / 100)
-
-            # Si precio_usd ya está guardado, usarlo directamente
-            _precio_usd_guardado = float(_it.get('precio_usd', 0) or 0)
-            if _precio_usd_guardado > 0:
-                # Usar precio_usd guardado como total del ítem
-                _total_item = _precio_usd_guardado
-                # Abono = total - envío (envío se paga en la entrega)
-                _abono_item = _total_item - _envio
-            else:
-                _total_item = _fob_total + _handling + _manejo + _costo_imp + _util_valor + _envio + _costo_tax
-                _abono_item = _fob_total + _handling + _manejo + _costo_imp + _util_valor
-
+            # total_cost ya incluye FOB + Handling + Manejo + Imp + Utilidad + Envío + TAX (precio USD real)
+            _total_item = float(_it.get('total_cost', 0) or 0)
+            _envio      = float(_it.get('shipping_cost', 0) or 0)
+            # Abono = total sin envío; Entrega = envío
+            _abono_item = _total_item - _envio
             _total_usd += _total_item
             _usd_abono += max(0.0, _abono_item)
         _usd_entrega = _total_usd - _usd_abono
