@@ -600,17 +600,28 @@ def _show_acciones(quote_id: int):
 
     # ── POP-UP MENSAJE PAGO USD ───────────────────────────────────────────────
     if st.session_state.get(f'mq_popup_usd_{quote_id}', False):
-        # Opción A: usar total_cost y shipping_cost guardados en BD (valores exactos del cuadro de costos)
+        # Fórmula aprobada:
+        # Abono = FOB + Handling + Manejo + Impuesto Internacional + Utilidad
+        # Entrega = total_cost - abono  (= Envío + TAX + Diferencial)
         qd_usd = DBManager.get_quote_full_details(quote_id)
         items_usd = qd_usd.get('items', []) if qd_usd else []
         _total_usd = 0.0
         _usd_abono = 0.0
         for _it in items_usd:
-            # total_cost ya incluye FOB + Handling + Manejo + Imp + Utilidad + Envío + TAX (precio USD real)
-            _total_item = float(_it.get('total_cost', 0) or 0)
-            _envio      = float(_it.get('shipping_cost', 0) or 0)
-            # Abono = total sin envío; Entrega = envío
-            _abono_item = _total_item - _envio
+            _total_item   = float(_it.get('total_cost', 0) or 0)
+            _qty          = float(_it.get('quantity', 1) or 1)
+            _unit_cost    = float(_it.get('unit_cost', 0) or 0)
+            _handling     = float(_it.get('international_handling', 0) or 0)
+            _manejo       = float(_it.get('national_handling', 0) or 0)
+            _imp_pct      = float(_it.get('tax_percentage', 0) or 0)
+            _factor_util  = float(_it.get('profit_factor', 1.0) or 1.0)
+
+            _fob          = _unit_cost * _qty
+            _imp          = _fob * (_imp_pct / 100)
+            _util         = _fob * (_factor_util - 1.0)
+            # Abono = FOB + Handling + Manejo + Impuesto + Utilidad
+            _abono_item   = _fob + _handling + _manejo + _imp + _util
+
             _total_usd += _total_item
             _usd_abono += max(0.0, _abono_item)
         _usd_entrega = _total_usd - _usd_abono
