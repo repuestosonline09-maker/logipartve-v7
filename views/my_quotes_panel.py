@@ -584,6 +584,194 @@ def _show_acciones(quote_id: int):
         if ya_aprobada:
             st.caption("🔒 Aprobada")
 
+    # ── BOTONES MENSAJES USD y BCV ────────────────────────────────────────────
+    st.markdown("---")
+    msg_col1, msg_col2 = st.columns(2)
+    with msg_col1:
+        if st.button("📋 Copiar Mensaje Pago USD", use_container_width=True,
+                     type="secondary", key=f"acc_popup_usd_{quote_id}"):
+            st.session_state[f'mq_popup_usd_{quote_id}'] = not st.session_state.get(f'mq_popup_usd_{quote_id}', False)
+            st.session_state[f'mq_popup_bcv_{quote_id}'] = False
+    with msg_col2:
+        if st.button("📋 Copiar Mensaje BCV", use_container_width=True,
+                     type="secondary", key=f"acc_popup_bcv_{quote_id}"):
+            st.session_state[f'mq_popup_bcv_{quote_id}'] = not st.session_state.get(f'mq_popup_bcv_{quote_id}', False)
+            st.session_state[f'mq_popup_usd_{quote_id}'] = False
+
+    # ── POP-UP MENSAJE PAGO USD ───────────────────────────────────────────────
+    if st.session_state.get(f'mq_popup_usd_{quote_id}', False):
+        # Recalcular montos USD con los ítems guardados
+        qd_usd = DBManager.get_quote_full_details(quote_id)
+        items_usd = qd_usd.get('items', []) if qd_usd else []
+        _total_usd = 0.0
+        _usd_abono = 0.0
+        for _it in items_usd:
+            _total_usd += (
+                float(_it.get('fob_total', 0) or 0) +
+                float(_it.get('costo_handling', 0) or 0) +
+                float(_it.get('costo_manejo', 0) or 0) +
+                float(_it.get('costo_impuesto', 0) or 0) +
+                float(_it.get('utilidad_valor', 0) or 0) +
+                float(_it.get('costo_envio', 0) or 0) +
+                float(_it.get('costo_tax', 0) or 0)
+            )
+            _usd_abono += (
+                float(_it.get('fob_total', 0) or 0) +
+                float(_it.get('costo_handling', 0) or 0) +
+                float(_it.get('costo_manejo', 0) or 0) +
+                float(_it.get('costo_impuesto', 0) or 0) +
+                float(_it.get('utilidad_valor', 0) or 0)
+            )
+        _usd_entrega = _total_usd - _usd_abono
+
+        with st.container():
+            st.markdown("""
+            <div style="background: linear-gradient(135deg, #0d1b2a 0%, #1a3a5c 50%, #0a4a7a 100%);
+                        border: 2px solid #00b4d8;
+                        border-radius: 16px;
+                        padding: 24px;
+                        margin: 8px 0;">
+                <h3 style="color: #00b4d8; text-align: center; margin-bottom: 16px; font-size: 1.1rem;">
+                    &#128242; Mensaje listo para WhatsApp / Instagram
+                </h3>
+            </div>
+            """, unsafe_allow_html=True)
+
+            import json as _json_usd_mq
+            _mensaje_usd_mq = (
+                "\u2728 \u00a1Optimiza tu compra con nosotros! \u2728\n\n"
+                "\U0001f4a1 \u00bfSab\u00edas que al realizar tu pago en divisas, puedes acceder a un beneficio especial "
+                "en el valor total de tus repuestos? Es nuestra forma de recompensar tu confianza y compromiso. \U0001f64c\n\n"
+                "\U0001f511 Esta opci\u00f3n te brinda la oportunidad de asegurar tus piezas con una ventaja adicional, "
+                "manteniendo la transparencia y responsabilidad que nos caracterizan.\n\n"
+                "\U0001f4cb Si decides aprovechar esta facilidad, tu presupuesto quedar\u00eda en:\n\n"
+                "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n"
+                f"\U0001f4b5 *Total a Pagar en USD:*  ${_total_usd:.2f}\n"
+                f"\u2705 *Monto a Abonar:*         ${_usd_abono:.2f}\n"
+                f"\U0001f69a *Y en la Entrega:*        ${_usd_entrega:.2f}\n"
+                "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\n"
+                "\U0001f4b3 *Formas de pago que te ofrecemos:*\n"
+                "Cash | Zelle | Binance | Dep\u00f3sito Bancario Cta Divisas \U0001f91d"
+            )
+
+            st.text_area(
+                "Mensaje generado:",
+                value=_mensaje_usd_mq,
+                height=320,
+                key=f"ta_usd_mq_{quote_id}",
+                help="Usa el bot\u00f3n de abajo para copiarlo al portapapeles."
+            )
+
+            _texto_usd_mq_js = _json_usd_mq.dumps(_mensaje_usd_mq)
+            _copy_js_usd_mq = (
+                "<script>"
+                f"var _textoUSDMQ = {_texto_usd_mq_js};"
+                "function copiarUSDMQ() {"
+                "  navigator.clipboard.writeText(_textoUSDMQ).then(function() {"
+                "    var btn = document.getElementById('copy_btn_usd_mq');"
+                "    btn.innerHTML = '&#9989; &iexcl;Copiado!';"
+                "    btn.style.background = '#00b4d8';"
+                "    btn.style.color = '#000';"
+                "    setTimeout(function() {"
+                "      btn.innerHTML = '&#128203; Copiar al Portapapeles';"
+                "      btn.style.background = '#0a4a7a';"
+                "      btn.style.color = '#fff';"
+                "    }, 2500);"
+                "  }).catch(function() {"
+                "    var btn = document.getElementById('copy_btn_usd_mq');"
+                "    btn.innerHTML = '&#9888; No se pudo copiar. Selecciona manualmente (Ctrl+A, Ctrl+C)';"
+                "  });"
+                "}"
+                "</script>"
+                "<button id='copy_btn_usd_mq' onclick='copiarUSDMQ()'"
+                " style='width:100%;padding:12px;font-size:1rem;font-weight:bold;"
+                "background:#0a4a7a;color:white;border:2px solid #00b4d8;"
+                "border-radius:8px;cursor:pointer;margin-top:8px;'>"
+                "&#128203; Copiar al Portapapeles"
+                "</button>"
+            )
+            import streamlit.components.v1 as _components_mq
+            _components_mq.html(_copy_js_usd_mq, height=70)
+
+            _cc1, _cc2, _cc3 = st.columns([1, 2, 1])
+            with _cc2:
+                if st.button("\u2716 Cerrar", use_container_width=True,
+                             key=f"mq_cerrar_usd_{quote_id}"):
+                    st.session_state[f'mq_popup_usd_{quote_id}'] = False
+                    st.rerun()
+    # ── FIN POP-UP MENSAJE PAGO USD ───────────────────────────────────────────
+
+    # ── POP-UP MENSAJE BCV ────────────────────────────────────────────────────
+    if st.session_state.get(f'mq_popup_bcv_{quote_id}', False):
+        with st.container():
+            st.markdown("""
+            <div style="background: linear-gradient(135deg, #1a2e1a 0%, #163e16 50%, #0f6030 100%);
+                        border: 2px solid #00d4aa;
+                        border-radius: 16px;
+                        padding: 24px;
+                        margin: 8px 0;">
+                <h3 style="color: #00d4aa; text-align: center; margin-bottom: 16px; font-size: 1.1rem;">
+                    &#128242; Mensaje listo para WhatsApp / Instagram
+                </h3>
+            </div>
+            """, unsafe_allow_html=True)
+
+            import json as _json_bcv_mq
+            _mensaje_bcv_mq = (
+                "\u2705 En la parte central tiene el detalle de la(s) pieza(s). "
+                "\u23f1\ufe0f Tiempo de entrega y garant\u00eda en VZLA.\n\n"
+                "\u2705 En la parte inferior derecha puede ver el costo total en sus manos a tasa BCV "
+                "\U0001f4b5 y la forma de pago si desea ordenarlo(s).\n\n"
+                "Estar\u00e9 atento. \U0001f440\n\n"
+                "Muchas Gracias! \U0001f60a\U0001f64c"
+            )
+
+            st.text_area(
+                "Mensaje generado:",
+                value=_mensaje_bcv_mq,
+                height=200,
+                key=f"ta_bcv_mq_{quote_id}",
+                help="Usa el bot\u00f3n de abajo para copiarlo al portapapeles."
+            )
+
+            _texto_bcv_mq_js = _json_bcv_mq.dumps(_mensaje_bcv_mq)
+            _copy_js_bcv_mq = (
+                "<script>"
+                f"var _textoBCVMQ = {_texto_bcv_mq_js};"
+                "function copiarBCVMQ() {"
+                "  navigator.clipboard.writeText(_textoBCVMQ).then(function() {"
+                "    var btn = document.getElementById('copy_btn_bcv_mq');"
+                "    btn.innerHTML = '&#9989; &iexcl;Copiado!';"
+                "    btn.style.background = '#00d4aa';"
+                "    btn.style.color = '#000';"
+                "    setTimeout(function() {"
+                "      btn.innerHTML = '&#128203; Copiar al Portapapeles';"
+                "      btn.style.background = '#0f6030';"
+                "      btn.style.color = '#fff';"
+                "    }, 2500);"
+                "  }).catch(function() {"
+                "    var btn = document.getElementById('copy_btn_bcv_mq');"
+                "    btn.innerHTML = '&#9888; No se pudo copiar. Selecciona manualmente (Ctrl+A, Ctrl+C)';"
+                "  });"
+                "}"
+                "</script>"
+                "<button id='copy_btn_bcv_mq' onclick='copiarBCVMQ()'"
+                " style='width:100%;padding:12px;font-size:1rem;font-weight:bold;"
+                "background:#0f6030;color:white;border:2px solid #00d4aa;"
+                "border-radius:8px;cursor:pointer;margin-top:8px;'>"
+                "&#128203; Copiar al Portapapeles"
+                "</button>"
+            )
+            _components_mq.html(_copy_js_bcv_mq, height=70)
+
+            _cb1, _cb2, _cb3 = st.columns([1, 2, 1])
+            with _cb2:
+                if st.button("\u2716 Cerrar", use_container_width=True,
+                             key=f"mq_cerrar_bcv_{quote_id}"):
+                    st.session_state[f'mq_popup_bcv_{quote_id}'] = False
+                    st.rerun()
+    # ── FIN POP-UP MENSAJE BCV ────────────────────────────────────────────────
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # REGENERAR PDF
