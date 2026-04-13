@@ -606,22 +606,38 @@ def _show_acciones(quote_id: int):
         _total_usd = 0.0
         _usd_abono = 0.0
         for _it in items_usd:
-            _total_usd += (
-                float(_it.get('fob_total', 0) or 0) +
-                float(_it.get('costo_handling', 0) or 0) +
-                float(_it.get('costo_manejo', 0) or 0) +
-                float(_it.get('costo_impuesto', 0) or 0) +
-                float(_it.get('utilidad_valor', 0) or 0) +
-                float(_it.get('costo_envio', 0) or 0) +
-                float(_it.get('costo_tax', 0) or 0)
-            )
-            _usd_abono += (
-                float(_it.get('fob_total', 0) or 0) +
-                float(_it.get('costo_handling', 0) or 0) +
-                float(_it.get('costo_manejo', 0) or 0) +
-                float(_it.get('costo_impuesto', 0) or 0) +
-                float(_it.get('utilidad_valor', 0) or 0)
-            )
+            # Recalcular desde campos reales de la BD
+            _qty          = float(_it.get('quantity', 1) or 1)
+            _unit_cost    = float(_it.get('unit_cost', 0) or 0)
+            _handling     = float(_it.get('international_handling', 0) or 0)
+            _manejo       = float(_it.get('national_handling', 0) or 0)
+            _envio        = float(_it.get('shipping_cost', 0) or 0)
+            _imp_pct      = float(_it.get('tax_percentage', 0) or 0)
+            _factor_util  = float(_it.get('profit_factor', 1.0) or 1.0)
+            _dif_pct      = float(_it.get('diferencial_porcentaje', 0) or 0)
+            _tax_pct      = 0.0  # TAX adicional (si existe campo separado)
+
+            # Fórmulas idénticas a analyst_panel.py
+            _fob_total    = _unit_cost * _qty
+            _costo_imp    = _fob_total * (_imp_pct / 100)
+            _util_base    = _fob_total + _handling + _manejo + _costo_imp
+            _util_valor   = _util_base * (_factor_util - 1.0)
+            _base_tax     = _fob_total + _handling + _manejo + _costo_imp + _util_valor + _envio
+            _costo_tax    = _base_tax * (_tax_pct / 100)
+
+            # Si precio_usd ya está guardado, usarlo directamente
+            _precio_usd_guardado = float(_it.get('precio_usd', 0) or 0)
+            if _precio_usd_guardado > 0:
+                # Usar precio_usd guardado como total del ítem
+                _total_item = _precio_usd_guardado
+                # Abono = total - envío (envío se paga en la entrega)
+                _abono_item = _total_item - _envio
+            else:
+                _total_item = _fob_total + _handling + _manejo + _costo_imp + _util_valor + _envio + _costo_tax
+                _abono_item = _fob_total + _handling + _manejo + _costo_imp + _util_valor
+
+            _total_usd += _total_item
+            _usd_abono += max(0.0, _abono_item)
         _usd_entrega = _total_usd - _usd_abono
 
         with st.container():
