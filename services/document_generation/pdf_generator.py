@@ -127,14 +127,29 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
         output_path: Ruta donde se guardará el PDF
     """
     
+    # Pre-calcular densidad para ajustar márgenes antes de crear el documento
+    _pre_items = datos_cotizacion.get('items', [])
+    _pre_max_desc = max((len(str(it.get('descripcion', '') or it.get('descripcion_repuesto', ''))) for it in _pre_items), default=0)
+    _pre_max_part = max((len(str(it.get('parte', ''))) for it in _pre_items), default=0)
+    _pre_density = len(_pre_items)
+    if _pre_max_desc > 15:  _pre_density += 1
+    if _pre_max_desc > 30:  _pre_density += 1
+    if _pre_max_desc > 60:  _pre_density += 1
+    if _pre_max_desc > 100: _pre_density += 1
+    if _pre_max_part > 15:  _pre_density += 1
+    if _pre_max_part > 30:  _pre_density += 1
+    # Márgenes mínimos cuando hay mucho contenido
+    _margin_h = 0.1*inch if _pre_density > 8 else 0.3*inch
+    _margin_v = 0.1*inch if _pre_density > 8 else 0.2*inch
+
     # Configuración del documento (horizontal)
     doc = SimpleDocTemplate(
         output_path,
         pagesize=landscape(letter),
-        rightMargin=0.3*inch,
-        leftMargin=0.3*inch,
-        topMargin=0.2*inch,
-        bottomMargin=0.2*inch
+        rightMargin=_margin_h,
+        leftMargin=_margin_h,
+        topMargin=_margin_v,
+        bottomMargin=_margin_v
     )
     
     # Colores del tema
@@ -516,29 +531,44 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
             Paragraph(f"${precio_total:.2f}", style_normal),
         ])
     
-    # Anchos de columna optimizados (12 columnas) - Ajustados para alineación perfecta con DATOS DEL CLIENTE (9.48 inches total)
-    col_widths = [0.4*inch, 1.7*inch, 0.95*inch, 0.85*inch, 0.6*inch, 0.4*inch, 0.6*inch, 0.7*inch, 0.78*inch, 0.5*inch, 1.0*inch, 1.0*inch]
+    # Anchos de columna optimizados (12 columnas)
+    # Con márgenes reducidos (densidad > 8), el ancho disponible es ~10.0 inches en vez de 9.48
+    if _pre_density > 8:
+        # Aprovechar el espacio extra de los márgenes reducidos
+        col_widths = [0.4*inch, 2.0*inch, 1.1*inch, 0.9*inch, 0.65*inch, 0.4*inch, 0.65*inch, 0.75*inch, 0.82*inch, 0.53*inch, 1.0*inch, 1.0*inch]
+    else:
+        col_widths = [0.4*inch, 1.7*inch, 0.95*inch, 0.85*inch, 0.6*inch, 0.4*inch, 0.6*inch, 0.7*inch, 0.78*inch, 0.5*inch, 1.0*inch, 1.0*inch]
     
     # ── Compresión calibrada para máximo 5 ítems en UNA SOLA HOJA ──────────────────────
     # El sistema acepta máximo 5 ítems por cotización.
     # La compresión aumenta progresivamente para garantizar que todo quede en una página.
     #
-    # Lógica: se calcula un "score de densidad" combinando cantidad de ítems
-    # y longitud máxima de texto en las columnas más anchas (descripción y origen).
-    # Esto garantiza que ítems con texto largo (ej. 'Emiratos Árabes Unidos') también
-    # se compriman correctamente aunque sean pocos ítems.
+    # Lógica: se calcula un "score de densidad" combinando cantidad de ítems,
+    # longitud máxima de descripción, número de parte y origen.
+    # Esto garantiza que ítems con texto muy largo (ej. descripciones de 100+ chars
+    # o múltiples números de parte) también se compriman correctamente.
     num_items = len(items)
 
-    # Calcular longitud máxima de texto en columnas críticas (descripción + origen)
-    _max_text_len = 0
+    # Calcular longitud máxima de texto en columnas críticas
+    _max_desc_len = 0
+    _max_part_len = 0
     for item in items:
         desc = str(item.get('descripcion', '') or item.get('descripcion_repuesto', ''))
+        parte = str(item.get('parte', ''))
         orig = str(item.get('origen', ''))
-        _max_text_len = max(_max_text_len, len(desc), len(orig))
+        _max_desc_len = max(_max_desc_len, len(desc), len(orig))
+        _max_part_len = max(_max_part_len, len(parte))
 
-    # Score de densidad: combina ítems y longitud de texto
-    # Texto > 15 chars en columnas críticas equivale a +1 ítem de densidad
-    _density = num_items + (1 if _max_text_len > 15 else 0) + (1 if _max_text_len > 25 else 0)
+    # Score de densidad: combina ítems, longitud de descripción y número de parte
+    _density = num_items
+    # Descripción larga
+    if _max_desc_len > 15:  _density += 1
+    if _max_desc_len > 30:  _density += 1
+    if _max_desc_len > 60:  _density += 1
+    if _max_desc_len > 100: _density += 1
+    # Número de parte largo (múltiples partes separadas por espacio)
+    if _max_part_len > 15:  _density += 1
+    if _max_part_len > 30:  _density += 1
 
     if _density <= 2:          # 1-2 ítems con texto corto
         _font_header  = 6.5
@@ -556,9 +586,13 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
         _font_header  = 5.0
         _font_content = 5.5
         _pad_v        = 1
-    else:                      # Máxima densidad
+    elif _density <= 8:        # 5 ítems con descripciones muy largas
         _font_header  = 4.5
         _font_content = 5.0
+        _pad_v        = 1
+    else:                      # Máxima densidad (descripciones 100+ chars + múltiples partes)
+        _font_header  = 4.0
+        _font_content = 4.5
         _pad_v        = 1
     # ─────────────────────────────────────────────────────────────────────────────────
 
