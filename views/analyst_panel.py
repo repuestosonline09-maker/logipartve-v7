@@ -781,10 +781,56 @@ def render_analyst_panel():
                 st.session_state.ac_dups_cache = []
         if st.session_state.ac_dups_cache:
             _total_dups = sum(len(g) for g in st.session_state.ac_dups_cache)
-            st.warning(
-                f"⚠️ Se detectaron **{_total_dups} registros duplicados** en la base de datos "
-                f"(misma cédula y teléfono). El administrador puede eliminarlos desde el panel."
-            )
+            _is_admin_here = AuthManager.is_admin()
+            # Construir lista de duplicados para mostrar en el aviso
+            _dup_lines = []
+            for _gi, _grupo in enumerate(st.session_state.ac_dups_cache, 1):
+                for _cli in _grupo:
+                    _dup_lines.append(
+                        f"  • ID {_cli['id']} | **{_cli['nombre']}** "
+                        f"| C.I.: {_cli.get('ci_rif') or '—'} "
+                        f"| Tel: {_cli.get('telefono') or '—'}"
+                    )
+            _dup_detail = "\n".join(_dup_lines)
+            if _is_admin_here:
+                st.warning(
+                    f"⚠️ Se detectaron **{_total_dups} registros duplicados** "
+                    f"(misma cédula y teléfono):\n\n{_dup_detail}\n\n"
+                    f"Elimina el sobrante usando el botón de abajo."
+                )
+                # Botones de eliminación directa para cada duplicado
+                from database.cliente_manager import eliminar_cliente as _elim_cli
+                for _gi, _grupo in enumerate(st.session_state.ac_dups_cache, 1):
+                    st.caption(f"Grupo {_gi} — selecciona cuál eliminar:")
+                    _bcols = st.columns(len(_grupo))
+                    for _bi, (_bcol, _cli) in enumerate(zip(_bcols, _grupo)):
+                        with _bcol:
+                            _del_key = f"dup_del_{_cli['id']}_confirm"
+                            if st.session_state.get(_del_key):
+                                st.error(f"¿Eliminar **{_cli['nombre']}** (ID {_cli['id']})?")
+                            _btn_label = f"🗑️ Eliminar ID {_cli['id']}: {_cli['nombre']}"
+                            if not st.session_state.get(_del_key):
+                                if st.button(_btn_label, key=f"dup_del_btn_{_cli['id']}", use_container_width=True):
+                                    st.session_state[_del_key] = True
+                                    st.rerun()
+                            else:
+                                _cc1, _cc2 = st.columns(2)
+                                with _cc1:
+                                    if st.button("✅ SÍ, ELIMINAR", key=f"dup_del_ok_{_cli['id']}", use_container_width=True, type="primary"):
+                                        _elim_cli(_cli['id'])
+                                        del st.session_state['ac_dups_cache']
+                                        st.session_state[_del_key] = False
+                                        st.success(f"✅ Cliente ID {_cli['id']} eliminado.")
+                                        st.rerun()
+                                with _cc2:
+                                    if st.button("❌ CANCELAR", key=f"dup_del_cancel_{_cli['id']}", use_container_width=True):
+                                        st.session_state[_del_key] = False
+                                        st.rerun()
+            else:
+                st.warning(
+                    f"⚠️ Se detectaron **{_total_dups} registros duplicados** en la base de datos "
+                    f"(misma cédula y teléfono). El administrador puede eliminarlos desde el panel."
+                )
 
         cliente_telefono = st.text_input("Teléfono", value=default_telefono, key=f"cliente_telefono_{reset_key}")
     with col2:
