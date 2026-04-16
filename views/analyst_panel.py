@@ -1671,12 +1671,32 @@ def render_analyst_panel():
                             
                             if success:
                                 st.success("✅ Cotización actualizada correctamente en la base de datos")
-                                # Limpiar estado de edición
-                                if 'editing_quote_id' in st.session_state:
-                                    del st.session_state.editing_quote_id
-                                if 'editing_quote_number' in st.session_state:
-                                    del st.session_state.editing_quote_number
-                                # Esperar 2 segundos y redirigir a Mis Cotizaciones
+                                # ── LIMPIEZA COMPLETA DE LA PIZARRA ──────────────────────────────
+                                # Borrar TODOS los datos residuales del session_state para evitar
+                                # que queden en memoria y se conviertan en una cotización nueva
+                                # en una sesión posterior (bug de cotización fantasma).
+                                _keys_limpiar_edicion = [
+                                    'editing_mode', 'editing_quote_id', 'editing_quote_number',
+                                    'editing_quote_data', 'editing_data_loaded',
+                                    'editing_item_index', 'editing_item_data',
+                                    'cotizacion_items', 'cliente_datos',
+                                    'item_links', 'limpiar_campos_item',
+                                    'mostrar_cotizacion', 'cotizacion_guardada',
+                                    'show_save_success', 'saved_quote_number', 'saved_quote_id',
+                                    'guardando_en_progreso',
+                                ]
+                                for _k in _keys_limpiar_edicion:
+                                    if _k in st.session_state:
+                                        del st.session_state[_k]
+                                # Reinicializar listas vacías para evitar errores en el próximo render
+                                st.session_state.cotizacion_items = []
+                                st.session_state.cliente_datos = {}
+                                st.session_state.item_links = []
+                                # Incrementar contadores de reset para limpiar los widgets del formulario
+                                st.session_state.cliente_reset_counter = st.session_state.get('cliente_reset_counter', 0) + 1
+                                st.session_state.item_reset_counter = st.session_state.get('item_reset_counter', 0) + 1
+                                # ─────────────────────────────────────────────────────────────────
+                                # Redirigir a Mis Cotizaciones
                                 import time
                                 time.sleep(2)
                                 st.session_state.selected_panel = "Mis Cotizaciones"
