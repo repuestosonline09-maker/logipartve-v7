@@ -1671,6 +1671,9 @@ def render_analyst_panel():
                             
                             if success:
                                 st.success("✅ Cotización actualizada correctamente en la base de datos")
+                                # Capturar número e ID ANTES de limpiar el session_state
+                                _saved_quote_number = st.session_state.get('editing_quote_number', '')
+                                _saved_quote_id     = editing_quote_id
                                 # ── LIMPIEZA COMPLETA DE LA PIZARRA ──────────────────────────────
                                 # Borrar TODOS los datos residuales del session_state para evitar
                                 # que queden en memoria y se conviertan en una cotización nueva
@@ -1696,7 +1699,11 @@ def render_analyst_panel():
                                 st.session_state.cliente_reset_counter = st.session_state.get('cliente_reset_counter', 0) + 1
                                 st.session_state.item_reset_counter = st.session_state.get('item_reset_counter', 0) + 1
                                 # ─────────────────────────────────────────────────────────────────
-                                # Redirigir a Mis Cotizaciones
+                                # Redirigir a Mis Cotizaciones con la orden ya expandida
+                                # El flag mq_auto_open le dice a Mis Cotizaciones que abra
+                                # automáticamente esa orden sin que el usuario tenga que buscarla.
+                                st.session_state.mq_auto_open_quote_number = _saved_quote_number
+                                st.session_state.mq_auto_open_quote_id     = _saved_quote_id
                                 import time
                                 time.sleep(2)
                                 st.session_state.selected_panel = "Mis Cotizaciones"
@@ -2192,6 +2199,9 @@ Cash | Zelle | Binance | Depósito Bancario Cta Divisas 🤝"""
                                 print(f"📊 DEBUG - Resultado update_quote_items: {items_actualizados}")
                                 
                                 if items_actualizados:
+                                    # Capturar número e ID ANTES de limpiar el session_state
+                                    _saved_qnum2 = editing_quote_number
+                                    _saved_qid2  = editing_quote_id
                                     # Limpiar modo edición
                                     st.session_state.editing_mode = False
                                     st.session_state.editing_quote_id = None
@@ -2202,17 +2212,21 @@ Cash | Zelle | Binance | Depósito Bancario Cta Divisas 🤝"""
                                     st.session_state.cliente_datos = {}
                                     st.session_state.cotizacion_aplica_iva = False  # Resetear IVA a NO
                                     
-                                    print(f"✅ DEBUG - Cotización actualizada exitosamente: {editing_quote_number}")
+                                    print(f"✅ DEBUG - Cotización actualizada exitosamente: {_saved_qnum2}")
                                     
                                     # Registrar actividad
                                     DBManager.log_activity(
                                         user_id,
                                         'quote_updated',
-                                        f'Cotización {editing_quote_number} actualizada con {len(items)} ítems'
+                                        f'Cotización {_saved_qnum2} actualizada con {len(items)} ítems'
                                     )
                                     
-                                    st.success(f"✅ ¡Cotización {editing_quote_number} actualizada exitosamente!")
-                                    st.info("👉 Vaya a 'Mis Cotizaciones' para ver los cambios o regenerar el PDF")
+                                    # Redirigir a Mis Cotizaciones con la orden ya expandida
+                                    st.session_state.mq_auto_open_quote_number = _saved_qnum2
+                                    st.session_state.mq_auto_open_quote_id     = _saved_qid2
+                                    st.session_state.selected_panel = "Mis Cotizaciones"
+                                    import time; time.sleep(1)
+                                    st.rerun()
                                 else:
                                     st.error("❌ Error al actualizar ítems de la cotización. Revisa los logs para más detalles.")
                             else:

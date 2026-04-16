@@ -240,9 +240,23 @@ def render_my_quotes_panel():
     st.title("📋 MIS COTIZACIONES")
     st.markdown("---")
 
-    # ── MENSAJE DE ÉXITO PERSISTENTE (se muestra tras eliminar o actualizar) ──────────
+    # ── MENSAJE DE ÉXITO PERSISTENTE (se muestra tras eliminar o actualizar) ──────────────
     if st.session_state.get('mq_delete_success_msg'):
         st.success(st.session_state.pop('mq_delete_success_msg'))
+
+    # ── AUTO-APERTURA TRAS EDICIÓN ────────────────────────────────────────────────────
+    # Si el analista acaba de guardar una edición, analyst_panel deja los flags
+    # mq_auto_open_quote_number y mq_auto_open_quote_id en el session_state.
+    # Los consumimos aquí para pre-rellenar el buscador y abrir la orden directamente.
+    _auto_qnum = st.session_state.pop('mq_auto_open_quote_number', None)
+    _auto_qid  = st.session_state.pop('mq_auto_open_quote_id', None)
+    if _auto_qnum and _auto_qid:
+        # Pre-cargar el buscador con el número de la orden
+        st.session_state[f"mq_search_{st.session_state.get('mq_reset_counter', 0)}"] = _auto_qnum
+        # Activar la vista expandida directamente
+        st.session_state['mq_ver_id'] = _auto_qid
+        st.success(f"✅ Cotización **{_auto_qnum}** actualizada. Aquí están sus acciones:")
+    # ───────────────────────────────────────────────────────────────────────────────────
 
     # ── BLOQUE 1: FILTROS ─────────────────────────────────────────────────
     st.subheader("🔍 Filtros y Búsqueda")
@@ -271,13 +285,28 @@ def render_my_quotes_panel():
         )
 
     # Sin texto → pantalla limpia
+    # EXCEPCIÓN: si hay una vista activa por auto-apertura tras edición,
+    # no retornar — dejar que el flujo continúe para mostrar la orden.
     if not search_term or not search_term.strip():
-        st.info("💡 Escribe el número de orden, nombre del cliente o teléfono para buscar.")
-        return
+        if not st.session_state.get('mq_ver_id'):
+            st.info("💡 Escribe el número de orden, nombre del cliente o teléfono para buscar.")
+            return
 
     st.markdown("---")
 
-    # ── BLOQUE 2: OBTENER Y FILTRAR COTIZACIONES ──────────────────────────
+    # ── BLOQUE 2: OBTENER Y FILTRAR COTIZACIONES ──────────────────────
+    # Si no hay search_term pero sí hay mq_ver_id activo (auto-apertura tras edición),
+    # saltar la búsqueda y mostrar directamente la vista de la orden.
+    if not search_term or not search_term.strip():
+        if st.session_state.get('mq_ver_id'):
+            ver_id = st.session_state['mq_ver_id']
+            _show_quote_readonly(ver_id)
+            st.markdown("---")
+            if st.button("✖ CERRAR", key="mq_btn_cerrar_auto", type="secondary"):
+                _limpiar_todo()
+                st.rerun()
+            return
+
     quotes = DBManager.search_quotes(
         None if role == 'admin' else user_id,
         search_term.strip(),
