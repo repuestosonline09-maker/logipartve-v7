@@ -511,9 +511,9 @@ def _show_acciones(quote_id: int):
     estado_actual = quote.get('status', 'draft')
     ya_aprobada   = (estado_actual == 'approved')
 
-    a1, a2, a3, a4, a5, a6 = st.columns(6)
+    a1, a2, a3, a4, a5, a6, a7 = st.columns(7)
 
-    # ── EDITAR ────────────────────────────────────────────────────────────────────
+    # ── EDITAR ───────────────────────────────────────────────────────────────────────────────
     with a1:
         editar_disabled = ya_aprobada
         if st.button("✏️ EDITAR", use_container_width=True,
@@ -532,8 +532,29 @@ def _show_acciones(quote_id: int):
         if ya_aprobada:
             st.caption("🔒 Aprobada")
 
-    # ── DESCARGAR PDF ───────────────────────────────────────────────────────────────────
+    # ── COPIAR COTIZACIÓN ───────────────────────────────────────────────────────────────────
     with a2:
+        if st.button("📋 COPIAR", use_container_width=True,
+                     type="secondary", key=f"acc_copiar_{quote_id}"):
+            qd_copy = DBManager.get_quote_full_details(quote_id)
+            if qd_copy:
+                st.session_state.copying_mode          = True
+                st.session_state.copying_from_quote_id = quote_id
+                st.session_state.copying_from_number   = qd_copy['quote_number']
+                st.session_state.copying_quote_data    = qd_copy
+                # Limpiar modo edición previo para evitar conflictos
+                st.session_state.editing_mode          = False
+                st.session_state.pop('editing_quote_id', None)
+                st.session_state.pop('editing_quote_number', None)
+                st.session_state.pop('editing_quote_data', None)
+                st.success(f"✅ Cotización #{qd_copy['quote_number']} lista para copiar")
+                st.info("👉 Vaya a 'Panel de Analista' — datos pre-cargados. "
+                        "⚠️ Debes modificar al menos un ítem antes de poder guardar.")
+            else:
+                st.error("❌ Error al cargar la cotización para copiar")
+
+    # ── DESCARGAR PDF ───────────────────────────────────────────────────────────────────────────────
+    with a3:
         pdf_path = str(quote.get('pdf_path') or '')
         if pdf_path and os.path.exists(pdf_path):
             with open(pdf_path, 'rb') as f:
@@ -550,8 +571,8 @@ def _show_acciones(quote_id: int):
                          type="secondary", key=f"acc_gen_pdf_{quote_id}"):
                 _regenerar_pdf(quote_id)
 
-    # ── DESCARGAR PNG ───────────────────────────────────────────────────────────────────
-    with a3:
+    # ── DESCARGAR PNG ───────────────────────────────────────────────────────────────────────────────
+    with a4:
         png_path = str(quote.get('jpeg_path') or '')
         if png_path and os.path.exists(png_path):
             with open(png_path, 'rb') as f:
@@ -568,15 +589,13 @@ def _show_acciones(quote_id: int):
                          type="secondary", key=f"acc_gen_png_{quote_id}"):
                 _regenerar_png(quote_id)
 
-    # ── CUADRO DE COSTOS ───────────────────────────────────────────────────────────────────
-    with a4:
+    # ── CUADRO DE COSTOS ──────────────────────────────────────────────────────────────────────────────────
+    with a5:
         if st.button("📊 CUADRO COSTOS", use_container_width=True,
                      type="secondary", key=f"acc_cuadro_{quote_id}"):
             st.session_state.cuadro_costos_quote_id = quote_id
             # SIEMPRE limpiar el PNG en caché para forzar regeneración con datos frescos
-            # Esto corrige el bug donde el Cuadro mostraba valores anteriores a una edición
             st.session_state.pop('cuadro_costos_png_path', None)
-            # También limpiar el archivo físico si existe, para evitar servir imagen vieja
             import tempfile, os as _os2
             _qb = DBManager.get_quote_by_id(quote_id)
             if _qb:
@@ -590,8 +609,8 @@ def _show_acciones(quote_id: int):
                         pass
             st.rerun()
 
-    # ── ORDEN APROBADA (FASE 5) ──────────────────────────────────────────────────────────
-    with a5:
+    # ── ORDEN APROBADA (FASE 5) ────────────────────────────────────────────────────────────────────────
+    with a6:
         if ya_aprobada:
             st.button("✅ APROBADA", use_container_width=True,
                       type="secondary", key=f"acc_aprobada_dis_{quote_id}",
@@ -603,8 +622,8 @@ def _show_acciones(quote_id: int):
                 st.session_state.mq_aprobar_id = quote_id
                 st.rerun()
 
-    # ── ELIMINAR ────────────────────────────────────────────────────────────────────
-    with a6:
+    # ── ELIMINAR ───────────────────────────────────────────────────────────────────────────────
+    with a7:
         if st.button("🗑️ ELIMINAR", use_container_width=True,
                      type="secondary", key=f"acc_elim_{quote_id}",
                      disabled=ya_aprobada):

@@ -422,7 +422,134 @@ def render_analyst_panel():
         # Marcar como cargado
         st.session_state.editing_data_loaded = True
         st.rerun()
-    
+
+    # ── MODO COPIA: pre-cargar datos de la orden original (solo la primera vez) ──
+    copying_mode = st.session_state.get('copying_mode', False)
+    copying_from_number = st.session_state.get('copying_from_number', '')
+    copying_quote_data  = st.session_state.get('copying_quote_data', None)
+
+    if copying_mode and copying_quote_data and not st.session_state.get('copying_data_loaded', False):
+        # Guardar snapshot de los ítems originales para detectar cambios obligatorios
+        st.session_state.copying_original_items_snapshot = [
+            {
+                'descripcion': it.get('description', ''),
+                'parte':       it.get('part_number', ''),
+                'marca':       it.get('marca', ''),
+                'costo_fob':   float(it.get('unit_cost', 0) or 0),
+                'cantidad':    int(it.get('quantity', 1) or 1),
+            }
+            for it in copying_quote_data.get('items', [])
+        ]
+        # Pre-cargar datos del cliente
+        st.session_state.cliente_datos = {
+            'nombre':     copying_quote_data.get('client_name', ''),
+            'telefono':   copying_quote_data.get('client_phone', ''),
+            'email':      copying_quote_data.get('client_email', ''),
+            'cedula':     copying_quote_data.get('client_cedula', ''),
+            'direccion':  copying_quote_data.get('client_address', ''),
+            'vehiculo':   copying_quote_data.get('client_vehicle', ''),
+            'cilindrada': copying_quote_data.get('client_cilindrada', ''),
+            'year':       copying_quote_data.get('client_year', ''),
+            'vin':        copying_quote_data.get('client_vin', '')
+        }
+        # Pre-cargar ítems (misma lógica que editing_mode)
+        items_copy = copying_quote_data.get('items', [])
+        st.session_state.cotizacion_items = []
+        for item in items_copy:
+            _costo_fob      = float(item.get('unit_cost', 0) or 0)
+            _costo_handling = float(item.get('international_handling', 0) or 0)
+            _costo_manejo   = float(item.get('national_handling', 0) or 0)
+            _costo_envio    = float(item.get('shipping_cost', 0) or 0)
+            _impuesto_pct   = float(item.get('tax_percentage', 0) or 0)
+            _factor_util    = float(item.get('profit_factor', 1.0) or 1.0)
+            _cantidad       = int(item.get('quantity', 1) or 1)
+            _total_cost     = float(item.get('total_cost', 0) or 0)
+            _fob_total      = _costo_fob * _cantidad
+            _costo_impuesto = _fob_total * (_impuesto_pct / 100)
+            _utilidad_base  = _fob_total + _costo_handling + _costo_manejo + _costo_impuesto
+            _utilidad_valor = _utilidad_base * (_factor_util - 1.0)
+            _aplicar_iva    = bool(item.get('aplicar_iva', False))
+            _iva_porcentaje = float(item.get('iva_porcentaje', 16.0) or 16.0)
+            _iva_valor      = float(item.get('iva_valor', 0) or 0)
+            _precio_bs      = float(item.get('precio_bs', _total_cost) or _total_cost)
+            _precio_usd     = float(item.get('precio_usd', _total_cost) or _total_cost)
+            st.session_state.cotizacion_items.append({
+                'descripcion':            item.get('description', ''),
+                'parte':                  item.get('part_number', ''),
+                'marca':                  item.get('marca', ''),
+                'garantia':               item.get('garantia', ''),
+                'cantidad':               _cantidad,
+                'origen':                 item.get('origen', ''),
+                'envio_tipo':             item.get('envio_tipo', ''),
+                'tiempo_entrega':         item.get('tiempo_entrega', ''),
+                'fabricacion':            item.get('fabricacion', ''),
+                'link':                   item.get('page_url', ''),
+                'costo_fob':              _costo_fob,
+                'costo_handling':         _costo_handling,
+                'costo_manejo':           _costo_manejo,
+                'costo_envio':            _costo_envio,
+                'impuesto_porcentaje':    _impuesto_pct,
+                'factor_utilidad':        _factor_util,
+                'fob_total':              _fob_total,
+                'costo_impuesto':         _costo_impuesto,
+                'utilidad_valor':         _utilidad_valor,
+                'diferencial_valor':      float(item.get('diferencial_valor', 0) or 0),
+                'diferencial_porcentaje': float(item.get('diferencial_porcentaje', 0) or 0),
+                'costo_tax':              float(item.get('costo_tax', 0) or 0),
+                'aplicar_iva':            _aplicar_iva,
+                'iva_porcentaje':         _iva_porcentaje,
+                'iva_valor':              _iva_valor,
+                'costo_unitario':         _costo_fob,
+                'costo_total':            _total_cost,
+                'costo_total_bs':         _precio_bs,
+                'precio_usd':             _precio_usd,
+                'precio_bs':              _precio_bs,
+                'precio_usd_total':       _precio_usd,
+            })
+        st.session_state.copying_data_loaded = True
+        st.rerun()
+
+    # Mostrar banner de modo copia si está activo
+    if copying_mode and copying_from_number:
+        st.markdown(
+            f"""
+            <div style="
+                background-color: #1A6B3C;
+                border: 3px solid #0D4A28;
+                border-radius: 8px;
+                padding: 16px 20px;
+                margin: 8px 0 16px 0;
+                text-align: center;
+            ">
+                <span style="font-size:1.4rem; font-weight:800; color:#FFFFFF;">
+                    📋 MODO COPIA — Basada en #{copying_from_number}
+                </span><br>
+                <span style="font-size:1.0rem; color:#C8F0D8;">
+                    Los datos están pre-cargados. <strong>⚠️ Debes modificar al menos un ítem</strong>
+                    antes de poder guardar. Esta será una cotización nueva independiente.
+                </span>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+        if st.button("❌ CANCELAR COPIA", type="secondary"):
+            keys_copy = [
+                'copying_mode', 'copying_from_quote_id', 'copying_from_number',
+                'copying_quote_data', 'copying_data_loaded',
+                'copying_original_items_snapshot',
+                'cotizacion_items', 'cliente_datos',
+                'item_links', 'mostrar_cotizacion', 'cotizacion_guardada',
+                'show_save_success', 'saved_quote_number', 'saved_quote_id',
+            ]
+            for _k in keys_copy:
+                if _k in st.session_state:
+                    del st.session_state[_k]
+            st.session_state.cliente_reset_counter = st.session_state.get('cliente_reset_counter', 0) + 1
+            st.session_state.item_reset_counter = st.session_state.get('item_reset_counter', 0) + 1
+            st.session_state.cotizacion_items = []
+            st.session_state.cliente_datos = {}
+            st.rerun()
+
     # ==========================================
     # SIDEBAR: CONVERTIDOR DE MONEDA EUR → USD
     # ==========================================
@@ -2145,6 +2272,37 @@ Cash | Zelle | Binance | Depósito Bancario Cta Divisas 🤝"""
                     key="btn_guardar_cotizacion",
                     disabled=True
                 )
+            # En modo copia: verificar si hay cambios respecto al original
+            _copying_mode_active = st.session_state.get('copying_mode', False)
+            _copy_sin_cambios = False
+            if _copying_mode_active:
+                _original_snap = st.session_state.get('copying_original_items_snapshot', [])
+                _current_items = st.session_state.get('cotizacion_items', [])
+                # Comparar cantidad de ítems y campos clave de cada uno
+                def _items_son_iguales(orig, curr):
+                    if len(orig) != len(curr):
+                        return False
+                    for o, c in zip(orig, curr):
+                        if (str(o.get('descripcion','')) != str(c.get('descripcion','')) or
+                            str(o.get('parte',''))       != str(c.get('parte',''))       or
+                            str(o.get('marca',''))       != str(c.get('marca',''))       or
+                            float(o.get('costo_fob',0))  != float(c.get('costo_fob',0))  or
+                            int(o.get('cantidad',1))     != int(c.get('cantidad',1))):
+                            return False
+                    return True
+                _copy_sin_cambios = _items_son_iguales(_original_snap, _current_items)
+
+            if _copy_sin_cambios:
+                st.button(
+                    "📋 COPIA SIN CAMBIOS — Modifica al menos un ítem",
+                    use_container_width=True,
+                    type="primary",
+                    key="btn_guardar_cotizacion",
+                    disabled=True
+                )
+                st.warning("⚠️ Esta cotización es idéntica a la original **#" +
+                           st.session_state.get('copying_from_number','') +
+                           "**. Debes modificar al menos un ítem (descripción, parte, marca, precio o cantidad) antes de poder guardar.")
             elif st.button(button_label, use_container_width=True, type="primary", key="btn_guardar_cotizacion"):
                 # Activar flag anti-duplicado INMEDIATAMENTE al primer clic
                 if not editing_mode:
@@ -2297,16 +2455,39 @@ Cash | Zelle | Binance | Depósito Bancario Cta Divisas 🤝"""
                                         st.session_state.saved_quote_id = quote_id
                                         st.session_state.cotizacion_guardada = True
                                         st.session_state.show_save_success = True
-                                        
+
                                         print(f"✅ DEBUG - Cotización guardada exitosamente: {final_quote_number} (ID: {quote_id})")
-                                        
+
                                         # Registrar actividad
-                                        DBManager.log_activity(
-                                            user_id,
-                                            'quote_created',
+                                        _copy_origin = st.session_state.get('copying_from_number', '')
+                                        _activity_detail = (
+                                            f'Cotización {final_quote_number} creada como copia de #{_copy_origin} con {len(items)} ítems'
+                                            if _copy_origin else
                                             f'Cotización {final_quote_number} creada con {len(items)} ítems'
                                         )
-                                        
+                                        DBManager.log_activity(user_id, 'quote_created', _activity_detail)
+
+                                        # Registrar en auditoría si es una copia
+                                        if _copy_origin:
+                                            try:
+                                                DBManager.log_quote_change(
+                                                    quote_id=quote_id,
+                                                    changed_by=username,
+                                                    change_type='CREADA_COMO_COPIA',
+                                                    old_data={'origen': f'Copia de #{_copy_origin}'},
+                                                    new_data={'quote_number': final_quote_number, 'items': len(items)}
+                                                )
+                                            except Exception:
+                                                pass
+
+                                        # Limpiar modo copia del session_state
+                                        for _ck in [
+                                            'copying_mode', 'copying_from_quote_id', 'copying_from_number',
+                                            'copying_quote_data', 'copying_data_loaded',
+                                            'copying_original_items_snapshot'
+                                        ]:
+                                            st.session_state.pop(_ck, None)
+
                                         st.rerun()
                                     else:
                                         st.session_state.guardando_en_progreso = False  # Liberar para reintento
