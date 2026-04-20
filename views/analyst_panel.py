@@ -2264,21 +2264,12 @@ Cash | Zelle | Binance | Depósito Bancario Cta Divisas 🤝"""
             _guardando   = st.session_state.get('guardando_en_progreso', False)
             _btn_disabled = (_ya_guardada or _guardando) and not editing_mode
 
-            if _btn_disabled:
-                st.button(
-                    "✅ COTIZACIÓN GUARDADA" if _ya_guardada else "⏳ Guardando...",
-                    use_container_width=True,
-                    type="primary",
-                    key="btn_guardar_cotizacion",
-                    disabled=True
-                )
-            # En modo copia: verificar si hay cambios respecto al original
+            # Determinar si hay copia sin cambios (para bloquear el botón)
             _copying_mode_active = st.session_state.get('copying_mode', False)
             _copy_sin_cambios = False
             if _copying_mode_active:
                 _original_snap = st.session_state.get('copying_original_items_snapshot', [])
                 _current_items = st.session_state.get('cotizacion_items', [])
-                # Comparar cantidad de ítems y campos clave de cada uno
                 def _items_son_iguales(orig, curr):
                     if len(orig) != len(curr):
                         return False
@@ -2292,18 +2283,30 @@ Cash | Zelle | Binance | Depósito Bancario Cta Divisas 🤝"""
                     return True
                 _copy_sin_cambios = _items_son_iguales(_original_snap, _current_items)
 
-            if _copy_sin_cambios:
-                st.button(
-                    "📋 COPIA SIN CAMBIOS — Modifica al menos un ítem",
-                    use_container_width=True,
-                    type="primary",
-                    key="btn_guardar_cotizacion",
-                    disabled=True
-                )
+            # Determinar label y estado del botón (UN SOLO render con una sola key)
+            if _btn_disabled:
+                _guardar_label    = "✅ COTIZACIÓN GUARDADA" if _ya_guardada else "⏳ Guardando..."
+                _guardar_disabled = True
+            elif _copy_sin_cambios:
+                _guardar_label    = "📋 COPIA SIN CAMBIOS — Modifica al menos un ítem"
+                _guardar_disabled = True
+            else:
+                _guardar_label    = button_label
+                _guardar_disabled = False
+
+            if _copy_sin_cambios and not _btn_disabled:
                 st.warning("⚠️ Esta cotización es idéntica a la original **#" +
                            st.session_state.get('copying_from_number','') +
                            "**. Debes modificar al menos un ítem (descripción, parte, marca, precio o cantidad) antes de poder guardar.")
-            elif st.button(button_label, use_container_width=True, type="primary", key="btn_guardar_cotizacion"):
+
+            _guardar_clicked = st.button(
+                _guardar_label,
+                use_container_width=True,
+                type="primary",
+                key="btn_guardar_cotizacion",
+                disabled=_guardar_disabled
+            )
+            if _guardar_clicked and not _guardar_disabled:
                 # Activar flag anti-duplicado INMEDIATAMENTE al primer clic
                 if not editing_mode:
                     st.session_state.guardando_en_progreso = True
