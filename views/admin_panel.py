@@ -69,13 +69,14 @@ def show_admin_panel():
     st.title("🔧 Panel de Administración")
     
     # Tabs para organizar las secciones
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
         "👤 Mi Perfil",
         "👥 Gestión de Usuarios",
         "⚙️ Configuración del Sistema",
         "📊 Reportes y Estadísticas",
         "📧 Configuración de Correos",
-        "👨‍💼 Clientes"
+        "👨‍💼 Clientes",
+        "🔍 Auditoría"
     ])
 
     # TAB 1: MI PERFIL
@@ -101,6 +102,10 @@ def show_admin_panel():
     # TAB 6: GESTIÓN DE CLIENTES
     with tab6:
         show_clientes_management()
+
+    # TAB 7: AUDITORÍA DE COTIZACIONES
+    with tab7:
+        show_audit_panel()
 
 
 def show_my_profile():
@@ -1479,3 +1484,324 @@ def show_clientes_management():
                                      key=f"cli_eliminar_{cid}"):
                             st.session_state[_confirm_key] = True
                             st.rerun()
+
+
+# ==================== TAB 7: AUDITORÍA DE COTIZACIONES ====================
+
+def show_audit_panel():
+    """
+    Panel de auditoría de cotizaciones — solo visible para el administrador.
+    Muestra tres vistas:
+      1. Buscador por número de orden (línea de vida completa)
+      2. Actividad reciente (últimas 48 horas)
+      3. Alertas inteligentes (cambios sospechosos)
+    """
+    import json as _json
+    from datetime import datetime, timedelta
+
+    st.markdown("### 🔍 Auditoría de Cotizaciones")
+    st.caption("Historial completo de creaciones y ediciones. Solo visible para el administrador.")
+    st.markdown("---")
+
+    # ── SUBTABS ──────────────────────────────────────────────────────────────
+    atab1, atab2, atab3 = st.tabs([
+        "📋 Línea de Vida por Orden",
+        "🕐 Actividad Reciente (48 h)",
+        "🚨 Alertas Inteligentes"
+    ])
+
+    # ── HELPER: consulta directa a quote_history ─────────────────────────────
+    def _get_history_for_quote(quote_number: str):
+        """Devuelve todos los registros de quote_history para una cotización."""
+        try:
+            conn = DBManager.get_connection()
+            cursor = conn.cursor()
+            is_pg = DBManager.USE_POSTGRES
+            ph = '%s' if is_pg else '?'
+            cursor.execute(f"""
+                SELECT qh.id, qh.edited_at, qh.field_changed, qh.old_value,
+                       qh.new_value, qh.change_summary,
+                       u.full_name AS editor_name,
+                       q.quote_number
+                FROM quote_history qh
+                JOIN quotes q ON qh.quote_id = q.id
+                JOIN users  u ON qh.edited_by = u.id
+                WHERE q.quote_number = {ph}
+                ORDER BY qh.edited_at ASC
+            """, (quote_number,))
+            rows = [dict(r) for r in cursor.fetchall()]
+            cursor.close(); conn.close()
+            return rows
+        except Exception as e:
+            st.error(f"Error al consultar historial: {e}")
+            return []
+
+    def _get_recent_activity(hours: int = 48):
+        """Devuelve los últimos registros de quote_history en las últimas N horas."""
+        try:
+            conn = DBManager.get_connection()
+            cursor = conn.cursor()
+            is_pg = DBManager.USE_POSTGRES
+            ph = '%s' if is_pg else '?'
+            since = datetime.now() - timedelta(hours=hours)
+            cursor.execute(f"""
+                SELECT qh.id, qh.edited_at, qh.field_changed,
+                       qh.change_summary,
+                       u.full_name AS editor_name,
+                       q.quote_number, q.client_name, q.client_vehicle
+                FROM quote_history qh
+                JOIN quotes q ON qh.quote_id = q.id
+                JOIN users  u ON qh.edited_by = u.id
+                WHERE qh.edited_at >= {ph}
+                ORDER BY qh.edited_at DESC
+                LIMIT 200
+            """, (since,))
+            rows = [dict(r) for r in cursor.fetchall()]
+            cursor.close(); conn.close()
+            return rows
+        except Exception as e:
+            st.error(f"Error al consultar actividad reciente: {e}")
+            return []
+
+    def _get_suspicious_edits():
+        """
+        Detecta cotizaciones donde entre ediciones cambió el cliente o el vehículo,
+        o donde dos usuarios distintos editaron la misma orden.
+        Solo analiza registros de tipo 'quote_edited_complete'.
+        """
+        try:
+            conn = DBManager.get_connection()
+            cursor = conn.cursor()
+            is_pg = DBManager.USE_POSTGRES
+            cursor.execute("""
+                SELECT qh.quote_id, qh.edited_at, qh.new_value,
+                       qh.change_summary,
+                       u.full_name AS editor_name,
+                       q.quote_number
+                FROM quote_history qh
+                JOIN quotes q ON qh.quote_id = q.id
+                JOIN users  u ON qh.edited_by = u.id
+                WHERE qh.field_changed = 'quote_edited_complete'
+                ORDER BY qh.quote_id, qh.edited_at ASC
+            """)
+            rows = [dict(r) for r in cursor.fetchall()]
+            cursor.close(); conn.close()
+            return rows
+        except Exception as e:
+            st.error(f"Error al consultar ediciones: {e}")
+            return []
+
+    # ── SUBTAB 1: LÍNEA DE VIDA ───────────────────────────────────────────────
+    with atab1:
+        st.markdown("#### 📋 Línea de Vida de una Cotización")
+        st.caption("Escribe el número exacto de la orden para ver todo su historial de creación y ediciones.")
+
+        audit_search = st.text_input(
+            "Número de Cotización",
+            placeholder="Ej: 2026-40184-J",
+            key="audit_search_quote"
+        ).strip().upper()
+
+        if audit_search:
+            history = _get_history_for_quote(audit_search)
+            if not history:
+                st.warning(f"⚠️ No se encontró historial para la orden **{audit_search}**. "
+                           "Recuerda que el registro de auditoría aplica a cotizaciones creadas o editadas "
+                           "a partir de hoy.")
+            else:
+                st.success(f"✅ Se encontraron **{len(history)}** evento(s) para la orden **{audit_search}**")
+                for i, ev in enumerate(history):
+                    # Determinar icono y color según tipo de evento
+                    fc = ev.get('field_changed', '')
+                    if fc == 'quote_created':
+                        icon = "🟢"
+                        label = "CREADA"
+                    elif fc == 'quote_edited_complete':
+                        icon = "🟡"
+                        label = "EDITADA"
+                    elif fc == 'quote_data':
+                        icon = "🔵"
+                        label = "DATOS ACTUALIZADOS"
+                    elif fc == 'items_updated':
+                        icon = "🟠"
+                        label = "ÍTEMS ACTUALIZADOS"
+                    elif fc == 'status_changed':
+                        icon = "🟣"
+                        label = "ESTADO CAMBIADO"
+                    else:
+                        icon = "⚪"
+                        label = fc.upper()
+
+                    ts = str(ev.get('edited_at', ''))[:19].replace('T', ' ')
+                    editor = ev.get('editor_name', 'Desconocido')
+
+                    with st.expander(f"{icon} [{ts}] {label} — por {editor}", expanded=(i == 0)):
+                        st.markdown(f"**Resumen:** {ev.get('change_summary', '—')}")
+
+                        # Si es edición completa, mostrar snapshot de ítems
+                        nv = ev.get('new_value', '')
+                        if fc == 'quote_edited_complete' and nv:
+                            try:
+                                snap = _json.loads(nv)
+                                cliente = snap.get('cliente', {})
+                                items_snap = snap.get('items', [])
+                                totales = snap.get('totales', {})
+
+                                col_c, col_t = st.columns(2)
+                                with col_c:
+                                    st.markdown("**Cliente al momento de la edición:**")
+                                    st.markdown(f"- Nombre: `{cliente.get('nombre','—')}`")
+                                    st.markdown(f"- Vehículo: `{cliente.get('vehiculo','—')}`")
+                                    st.markdown(f"- Teléfono: `{cliente.get('telefono','—')}`")
+                                with col_t:
+                                    st.markdown("**Totales:**")
+                                    st.markdown(f"- Sub-Total: `${totales.get('sub_total', 0):.2f}`")
+                                    st.markdown(f"- IVA: `${totales.get('iva', 0):.2f}`")
+                                    st.markdown(f"- Total: `${totales.get('total', 0):.2f}`")
+
+                                if items_snap:
+                                    st.markdown("**Ítems en esa edición:**")
+                                    import pandas as _pd
+                                    df = _pd.DataFrame(items_snap)
+                                    df.columns = [c.capitalize() for c in df.columns]
+                                    st.dataframe(df, use_container_width=True, hide_index=True)
+                            except Exception:
+                                st.code(nv[:500])
+                        elif nv:
+                            st.markdown(f"**Detalle:** `{nv[:300]}`")
+
+    # ── SUBTAB 2: ACTIVIDAD RECIENTE ─────────────────────────────────────────
+    with atab2:
+        st.markdown("#### 🕐 Actividad Reciente — Últimas 48 Horas")
+        st.caption("Todos los eventos de creación y edición de cotizaciones en las últimas 48 horas.")
+
+        if st.button("🔄 Actualizar", key="audit_refresh_recent"):
+            st.rerun()
+
+        recent = _get_recent_activity(hours=48)
+        if not recent:
+            st.info("ℹ️ No hay actividad registrada en las últimas 48 horas. "
+                    "El registro aplica a eventos ocurridos a partir de hoy.")
+        else:
+            # Agrupar por analista para mostrar resumen
+            from collections import Counter as _Counter
+            analistas = _Counter(r['editor_name'] for r in recent)
+            cols = st.columns(len(analistas) if len(analistas) <= 4 else 4)
+            for idx, (nombre, cnt) in enumerate(analistas.most_common(4)):
+                with cols[idx % 4]:
+                    st.metric(label=nombre, value=f"{cnt} evento(s)")
+
+            st.markdown("---")
+            st.markdown(f"**{len(recent)} evento(s) en total:**")
+
+            # Tabla de actividad
+            import pandas as _pd
+            rows_display = []
+            for r in recent:
+                fc = r.get('field_changed', '')
+                tipo = {
+                    'quote_created': '🟢 Creada',
+                    'quote_edited_complete': '🟡 Editada',
+                    'quote_data': '🔵 Datos actualizados',
+                    'items_updated': '🟠 Ítems actualizados',
+                    'status_changed': '🟣 Estado cambiado',
+                }.get(fc, f'⚪ {fc}')
+                rows_display.append({
+                    'Fecha/Hora': str(r.get('edited_at', ''))[:19].replace('T', ' '),
+                    'Analista': r.get('editor_name', '—'),
+                    'Cotización': r.get('quote_number', '—'),
+                    'Evento': tipo,
+                    'Resumen': (r.get('change_summary') or '—')[:80],
+                })
+            df_recent = _pd.DataFrame(rows_display)
+            st.dataframe(df_recent, use_container_width=True, hide_index=True)
+
+    # ── SUBTAB 3: ALERTAS INTELIGENTES ───────────────────────────────────────
+    with atab3:
+        st.markdown("#### 🚨 Alertas Inteligentes")
+        st.caption(
+            "Detecta automáticamente cambios sospechosos: cliente o vehículo que cambia "
+            "completamente entre ediciones, o una orden editada por dos usuarios distintos."
+        )
+
+        if st.button("🔄 Actualizar alertas", key="audit_refresh_alerts"):
+            st.rerun()
+
+        edits = _get_suspicious_edits()
+
+        if not edits:
+            st.success("✅ No hay alertas. No se detectaron cambios sospechosos en ninguna cotización.")
+        else:
+            # Agrupar ediciones por quote_id para comparar snapshots consecutivos
+            from collections import defaultdict as _dd
+            by_quote = _dd(list)
+            for ev in edits:
+                by_quote[ev['quote_id']].append(ev)
+
+            alertas = []
+            for qid, events in by_quote.items():
+                # Alerta: editada por dos usuarios distintos
+                editores = list({e['editor_name'] for e in events})
+                if len(editores) > 1:
+                    alertas.append({
+                        'tipo': '👥 Editada por múltiples usuarios',
+                        'cotizacion': events[0]['quote_number'],
+                        'detalle': f"Editada por: {', '.join(editores)}",
+                        'nivel': 'warning'
+                    })
+
+                # Alerta: cliente o vehículo cambió entre ediciones
+                snapshots = []
+                for ev in events:
+                    try:
+                        snap = _json.loads(ev.get('new_value', '{}'))
+                        snapshots.append((ev['edited_at'], ev['editor_name'], snap.get('cliente', {})))
+                    except Exception:
+                        pass
+
+                for i in range(1, len(snapshots)):
+                    prev_ts, prev_editor, prev_cli = snapshots[i - 1]
+                    curr_ts, curr_editor, curr_cli = snapshots[i]
+
+                    nombre_cambio = (
+                        prev_cli.get('nombre', '') != curr_cli.get('nombre', '') and
+                        prev_cli.get('nombre', '') != '' and curr_cli.get('nombre', '') != ''
+                    )
+                    vehiculo_cambio = (
+                        prev_cli.get('vehiculo', '') != curr_cli.get('vehiculo', '') and
+                        prev_cli.get('vehiculo', '') != '' and curr_cli.get('vehiculo', '') != ''
+                    )
+
+                    if nombre_cambio or vehiculo_cambio:
+                        cambios = []
+                        if nombre_cambio:
+                            cambios.append(
+                                f"Nombre: **{prev_cli.get('nombre','?')}** → **{curr_cli.get('nombre','?')}**"
+                            )
+                        if vehiculo_cambio:
+                            cambios.append(
+                                f"Vehículo: **{prev_cli.get('vehiculo','?')}** → **{curr_cli.get('vehiculo','?')}**"
+                            )
+                        alertas.append({
+                            'tipo': '🔄 Cliente/Vehículo cambió entre ediciones',
+                            'cotizacion': events[0]['quote_number'],
+                            'detalle': ' | '.join(cambios) + f" (editado por {curr_editor} el {str(curr_ts)[:19]})",
+                            'nivel': 'error'
+                        })
+
+            if not alertas:
+                st.success("✅ No hay alertas. Todas las ediciones son consistentes.")
+            else:
+                st.error(f"⚠️ Se detectaron **{len(alertas)}** alerta(s):")
+                for alerta in alertas:
+                    nivel = alerta['nivel']
+                    if nivel == 'error':
+                        st.error(
+                            f"**{alerta['tipo']}** — Orden: `{alerta['cotizacion']}`\n\n"
+                            f"{alerta['detalle']}"
+                        )
+                    else:
+                        st.warning(
+                            f"**{alerta['tipo']}** — Orden: `{alerta['cotizacion']}`\n\n"
+                            f"{alerta['detalle']}"
+                        )
