@@ -1827,6 +1827,22 @@ class DBManager:
             conn.close()
             
             print(f"✅ Cotización guardada exitosamente: {quote_number} (ID: {quote_id})")
+            
+            # ── AUDITORÍA SILENCIOSA: Registrar creación ──────────────────────────────
+            # Este bloque nunca interrumpe el flujo principal aunque falle.
+            try:
+                DBManager.log_quote_change(
+                    quote_id=quote_id,
+                    edited_by=analyst_id,
+                    field_changed='quote_created',
+                    old_value='',
+                    new_value=f"Cliente: {client_name} | Vehículo: {client_vehicle} | Total: ${total_amount:.2f}",
+                    change_summary=f"Cotización {quote_number} creada por analista ID {analyst_id}"
+                )
+            except Exception as _audit_err:
+                print(f"[Auditoría] No se pudo registrar creación: {_audit_err}")
+            # ─────────────────────────────────────────────────────────────────────────
+            
             return quote_id
             
         except Exception as e:
@@ -3312,6 +3328,53 @@ class DBManager:
 
             print(f"✅ Cotización {quote_id} actualizada completamente")
             print(f"   Sub-Total: ${recalc_sub_total:.2f} | IVA: ${recalc_iva_total:.2f} | Total: ${recalc_total_a_pagar:.2f}")
+            
+            # ── AUDITORÍA SILENCIOSA: Registrar edición completa con snapshot de ítems ─────────
+            # Guarda un snapshot de los ítems editados para poder reconstruir
+            # qué tenía la cotización antes y después de cada edición.
+            # Este bloque nunca interrumpe el flujo principal aunque falle.
+            try:
+                import json as _json
+                _items_snapshot = []
+                for _it in items:
+                    _items_snapshot.append({
+                        'descripcion': _it.get('descripcion', '') or _it.get('description', ''),
+                        'parte':       _it.get('parte', '') or _it.get('part_number', ''),
+                        'cantidad':    _it.get('cantidad', 1),
+                        'fob_total':   _it.get('fob_total', 0),
+                        'precio_usd':  _it.get('precio_usd', 0) or _it.get('total_cost', 0),
+                    })
+                _cliente_snapshot = {
+                    'nombre':   cliente_datos.get('nombre', ''),
+                    'vehiculo': cliente_datos.get('vehiculo', ''),
+                    'telefono': cliente_datos.get('telefono', ''),
+                }
+                DBManager.log_quote_change(
+                    quote_id=quote_id,
+                    edited_by=user_id,
+                    field_changed='quote_edited_complete',
+                    old_value='',
+                    new_value=_json.dumps({
+                        'cliente': _cliente_snapshot,
+                        'items': _items_snapshot,
+                        'totales': {
+                            'sub_total': round(recalc_sub_total, 2),
+                            'iva': round(recalc_iva_total, 2),
+                            'total': round(recalc_total_a_pagar, 2),
+                        }
+                    }, ensure_ascii=False),
+                    change_summary=(
+                        f"Edición completa por '{username}': "
+                        f"{len(items)} ítem(s) | "
+                        f"Cliente: {cliente_datos.get('nombre','')} | "
+                        f"Vehículo: {cliente_datos.get('vehiculo','')} | "
+                        f"Total: ${recalc_total_a_pagar:.2f}"
+                    )
+                )
+            except Exception as _audit_err:
+                print(f"[Auditoría] No se pudo registrar edición completa: {_audit_err}")
+            # ─────────────────────────────────────────────────────────────────────────
+            
             return True
             
         except Exception as e:
