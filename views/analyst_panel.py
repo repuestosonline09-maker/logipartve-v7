@@ -5,7 +5,12 @@ Campos configurables desde Panel Admin
 """
 
 import streamlit as st
+import streamlit.components.v1 as _components
 import json
+import time
+import traceback
+import unicodedata
+import os
 import datetime
 from datetime import timedelta
 from database.db_manager import DBManager
@@ -17,12 +22,17 @@ from database.cliente_manager import (
     es_nombre_real, detectar_duplicados
 )
 try:
+    from services.document_generation import PDFQuoteGenerator, PNGQuoteGenerator, clean_text as _clean_text_gen
+except ImportError:
+    PDFQuoteGenerator = None
+    PNGQuoteGenerator = None
+    _clean_text_gen = None
+try:
     from services.timezone_utils import now_caracas_naive
 except ImportError:
     from datetime import timezone
     def now_caracas_naive():
-        from datetime import timedelta as _td
-        return datetime.datetime.now(tz=timezone(_td(hours=-4))).replace(tzinfo=None)
+        return datetime.datetime.now(tz=timezone(timedelta(hours=-4))).replace(tzinfo=None)
 
 # Lista de cantidades del 1 al 1000 (fija, no configurable)
 CANTIDADES = list(range(1, 1001))
@@ -77,8 +87,24 @@ def calcular_envio(largo_cm, ancho_cm, alto_cm, peso_kg, origen, tipo_envio, tar
 # FUNCIÓN PARA CARGAR CONFIGURACIONES DESDE BD
 # ==========================================
 
+# TTL del caché de configuraciones: 5 minutos (300 segundos)
+_CONFIG_CACHE_TTL = 300
+
 def cargar_configuraciones():
-    """Carga todas las configuraciones desde la base de datos"""
+    """Carga todas las configuraciones desde la base de datos.
+    
+    OPTIMIZACIÓN: Usa caché en session_state con TTL de 5 minutos para evitar
+    17+ llamadas a BD en cada render. El caché se invalida automáticamente cuando
+    el admin actualiza configuraciones (usando la clave 'config_cache_ts').
+    """
+    # ── CACHÉ EN SESSION_STATE ────────────────────────────────────────────────
+    # Si ya tenemos config cacheada y no ha expirado, usarla directamente
+    _now = time.time()
+    _cached = st.session_state.get('_config_cache')
+    _cached_ts = st.session_state.get('_config_cache_ts', 0)
+    if _cached is not None and (_now - _cached_ts) < _CONFIG_CACHE_TTL:
+        return _cached
+    # ── CARGAR DESDE BD (solo cuando el caché expiró o no existe) ────────────
     try:
         # Obtener listas desde BD usando ConfigHelpers
         paises_origen = ConfigHelpers.get_paises_origen()
@@ -110,6 +136,9 @@ def cargar_configuraciones():
             "eur_usd_factor": float(DBManager.get_config('eur_usd_factor') or 1.23),
             "terms_conditions": DBManager.get_config('terms_conditions') or 'Términos y condiciones estándar.'
         }
+        # Guardar en caché con timestamp
+        st.session_state['_config_cache'] = config
+        st.session_state['_config_cache_ts'] = _now
         return config
     except Exception as e:
         # Valores por defecto si hay error
@@ -140,7 +169,6 @@ def render_analyst_panel():
     # Si se activó el flag (ej: al pulsar NUEVA COTIZACIÓN), inyectar JS de scroll
     # ==========================================
     if st.session_state.pop('scroll_to_top', False):
-        import streamlit.components.v1 as _components
         _components.html(
             """
             <script>
@@ -200,15 +228,22 @@ def render_analyst_panel():
     # Se resetea solo cuando el analista inicia una NUEVA COTIZACIÓN.
     if 'guardando_en_progreso' not in st.session_state:
         st.session_state.guardando_en_progreso = False
-    # Siempre recargar tarifas desde la BD para reflejar cambios del admin
-    _mia_a = DBManager.get_freight_rate('Miami', 'Aéreo')
-    _mia_m = DBManager.get_freight_rate('Miami', 'Marítimo')
-    _mad   = DBManager.get_freight_rate('Madrid', 'Aéreo')
-    st.session_state.tarifas = {
-        "mia_a": float(_mia_a) if _mia_a is not None else 9.0,   # Miami Aéreo $/lb
-        "mia_m": float(_mia_m) if _mia_m is not None else 40.0,  # Miami Marítimo $/ft³
-        "mad":   float(_mad)   if _mad   is not None else 25.0,  # Madrid Aéreo $/kg
-    }
+    # ── CACHÉ DE TARIFAS (TTL 5 min) ─────────────────────────────────────────
+    # Evita 3 llamadas a BD en cada render. El admin puede forzar recarga
+    # desde su panel (invalida '_tarifas_cache_ts' en session_state).
+    _tarifas_now = time.time()
+    _tarifas_cached_ts = st.session_state.get('_tarifas_cache_ts', 0)
+    if 'tarifas' not in st.session_state or (_tarifas_now - _tarifas_cached_ts) >= _CONFIG_CACHE_TTL:
+        _mia_a = DBManager.get_freight_rate('Miami', 'Aéreo')
+        _mia_m = DBManager.get_freight_rate('Miami', 'Marítimo')
+        _mad   = DBManager.get_freight_rate('Madrid', 'Aéreo')
+        st.session_state.tarifas = {
+            "mia_a": float(_mia_a) if _mia_a is not None else 9.0,   # Miami Aéreo $/lb
+            "mia_m": float(_mia_m) if _mia_m is not None else 40.0,  # Miami Marítimo $/ft³
+            "mad":   float(_mad)   if _mad   is not None else 25.0,  # Madrid Aéreo $/kg
+        }
+        st.session_state['_tarifas_cache_ts'] = _tarifas_now
+    # ── FIN CACHÉ DE TARIFAS ──────────────────────────────────────────────────
     
     # ==========================================
     # FUNCIONES CALLBACK PARA BOTONES DE ÍTEMS
@@ -1751,7 +1786,6 @@ def render_analyst_panel():
 
                     # Guardar datos del cliente limpiando caracteres de control
                     def _clean(v):
-                        import unicodedata
                         if v is None:
                             return ''
                         return ''.join(
@@ -1831,8 +1865,6 @@ def render_analyst_panel():
                                 # automáticamente esa orden sin que el usuario tenga que buscarla.
                                 st.session_state.mq_auto_open_quote_number = _saved_quote_number
                                 st.session_state.mq_auto_open_quote_id     = _saved_quote_id
-                                import time
-                                time.sleep(2)
                                 st.session_state.selected_panel = "Mis Cotizaciones"
                                 st.rerun()
                             else:
@@ -2137,8 +2169,7 @@ Cash | Zelle | Binance | Depósito Bancario Cta Divisas 🤝"""
                 
                 # Botón copiar al portapapeles via JavaScript
                 # El texto se pasa directamente al JS del iframe (no puede acceder al DOM externo)
-                import json as _json
-                _texto_js = _json.dumps(mensaje_usd)  # escapado seguro para JS
+                _texto_js = json.dumps(mensaje_usd)  # escapado seguro para JS
                 copy_js = (
                     "<script>"
                     f"var _textoUSD = {_texto_js};"
@@ -2211,8 +2242,7 @@ Cash | Zelle | Binance | Depósito Bancario Cta Divisas 🤝"""
                 )
 
                 # Botón copiar al portapapeles via JavaScript (texto incrustado en el iframe)
-                import json as _json_bcv
-                _texto_bcv_js = _json_bcv.dumps(mensaje_bcv)
+                _texto_bcv_js = json.dumps(mensaje_bcv)
                 copy_js_bcv = (
                     "<script>"
                     f"var _textoBCV = {_texto_bcv_js};"
@@ -2386,7 +2416,6 @@ Cash | Zelle | Binance | Depósito Bancario Cta Divisas 🤝"""
                                     st.session_state.mq_auto_open_quote_number = _saved_qnum2
                                     st.session_state.mq_auto_open_quote_id     = _saved_qid2
                                     st.session_state.selected_panel = "Mis Cotizaciones"
-                                    import time; time.sleep(1)
                                     st.rerun()
                                 else:
                                     st.error("❌ Error al actualizar ítems de la cotización. Revisa los logs para más detalles.")
@@ -2396,7 +2425,6 @@ Cash | Zelle | Binance | Depósito Bancario Cta Divisas 🤝"""
                     except Exception as e:
                         st.error(f"❌ Error al actualizar cotización: {str(e)}")
                         print(f"❌ DEBUG - Excepción al actualizar: {str(e)}")
-                        import traceback
                         traceback.print_exc()
                 else:
                     # MODO NORMAL: Crear nueva cotización
@@ -2503,7 +2531,6 @@ Cash | Zelle | Binance | Depósito Bancario Cta Divisas 🤝"""
                             st.session_state.guardando_en_progreso = False  # Liberar para reintento
                             st.error(f"❌ Error al guardar cotización: {str(e)}")
                             print(f"❌ DEBUG - Excepción al guardar: {str(e)}")
-                            import traceback
                             traceback.print_exc()
                     else:
                         st.session_state.guardando_en_progreso = False  # Liberar para reintento
@@ -2513,8 +2540,8 @@ Cash | Zelle | Binance | Depósito Bancario Cta Divisas 🤝"""
             if st.button("📅 GENERAR PDF", use_container_width=True, type="secondary", key="btn_generar_pdf"):
                 if st.session_state.get('saved_quote_number'):
                     try:
-                        from services.document_generation import PDFQuoteGenerator, clean_text
-                        import os
+                        # PDFQuoteGenerator y clean_text ya importados al inicio del módulo
+                        clean_text = _clean_text_gen
                         
                         # Preparar datos para PDF
                         # clean_text elimina caracteres de control y espacios Unicode especiales
@@ -2602,8 +2629,8 @@ Cash | Zelle | Binance | Depósito Bancario Cta Divisas 🤝"""
             if st.button("🖼️ GENERAR PNG", use_container_width=True, type="secondary", key="btn_generar_png"):
                 if st.session_state.get('saved_quote_number'):
                     try:
-                        from services.document_generation import PNGQuoteGenerator, clean_text
-                        import os
+                        # PNGQuoteGenerator y clean_text ya importados al inicio del módulo
+                        clean_text = _clean_text_gen
                         
                         # Preparar datos para PNG
                         # clean_text elimina caracteres de control y espacios Unicode especiales

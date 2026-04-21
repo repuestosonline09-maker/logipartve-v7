@@ -492,6 +492,7 @@ def show_system_configuration():
                 DBManager.set_config('manejo_options', manejo_options, "Opciones de MANEJO en dólares", st.session_state.user_id)
                 st.success("✅ Opciones de MANEJO actualizadas")
                 DBManager.log_activity(st.session_state.user_id, "update_config", "Actualizó opciones de MANEJO")
+                st.session_state.pop('_config_cache_ts', None)  # Invalidar caché
                 st.rerun()
         
         # IMPUESTO INTERNACIONAL
@@ -508,6 +509,7 @@ def show_system_configuration():
                 DBManager.set_config('impuesto_internacional_options', impuesto_options, "Opciones de Impuesto Internacional %", st.session_state.user_id)
                 st.success("✅ Opciones de Impuesto Internacional actualizadas")
                 DBManager.log_activity(st.session_state.user_id, "update_config", "Actualizó opciones de Impuesto Internacional")
+                st.session_state.pop('_config_cache_ts', None)  # Invalidar caché
                 st.rerun()
     
     with col2:
@@ -525,6 +527,7 @@ def show_system_configuration():
                 DBManager.set_config('profit_factors', utilidad_options, "Factores de utilidad disponibles", st.session_state.user_id)
                 st.success("✅ Factores de Utilidad actualizados")
                 DBManager.log_activity(st.session_state.user_id, "update_config", "Actualizó factores de utilidad")
+                st.session_state.pop('_config_cache_ts', None)  # Invalidar caché
                 st.rerun()
         
         # TAX (valor único)
@@ -544,6 +547,7 @@ def show_system_configuration():
                 DBManager.set_config('american_tax', str(tax_percentage), "TAX de empresa americana - Porcentaje", st.session_state.user_id)
                 st.success("✅ TAX actualizado")
                 DBManager.log_activity(st.session_state.user_id, "update_config", "Actualizó TAX")
+                st.session_state.pop('_config_cache_ts', None)  # Invalidar caché
                 st.rerun()
     
     st.markdown("---")
@@ -571,6 +575,7 @@ def show_system_configuration():
                 DBManager.set_config('exchange_differential', str(int(exchange_diff)), "Diferencial BCV vs Paralelo - Porcentaje diario", st.session_state.user_id)
                 st.success(f"✅ Diferencial actualizado a {int(exchange_diff)}%")
                 DBManager.log_activity(st.session_state.user_id, "update_config", f"Actualizó diferencial a {int(exchange_diff)}%")
+                st.session_state.pop('_config_cache_ts', None)  # Invalidar caché
                 st.rerun()
     
     with col2:
@@ -588,6 +593,7 @@ def show_system_configuration():
                 DBManager.set_config('venezuela_iva', str(venezuela_iva), "IVA Venezuela - Porcentaje", st.session_state.user_id)
                 st.success("✅ IVA actualizado")
                 DBManager.log_activity(st.session_state.user_id, "update_config", "Actualizó IVA")
+                st.session_state.pop('_config_cache_ts', None)  # Invalidar caché
                 st.rerun()
     
     st.markdown("---")
@@ -615,6 +621,7 @@ def show_system_configuration():
                 DBManager.set_config('eur_usd_factor', str(eur_usd_factor), "Factor de conversión EUR a USD con comisiones bancarias", st.session_state.user_id)
                 st.success(f"✅ Factor EUR → USD actualizado a {eur_usd_factor}")
                 DBManager.log_activity(st.session_state.user_id, "update_config", f"Actualizó factor EUR → USD a {eur_usd_factor}")
+                st.session_state.pop('_config_cache_ts', None)  # Invalidar caché
                 st.rerun()
     
     with col2:
@@ -649,6 +656,8 @@ def show_system_configuration():
                 DBManager.update_freight_rate('Miami', 'Aéreo', miami_air, st.session_state.user_id)
                 st.success("✅ Tarifa actualizada")
                 DBManager.log_activity(st.session_state.user_id, "update_freight_rate", "Actualizó tarifa Miami Aéreo")
+                # Invalidar caché de tarifas para que los analistas vean el cambio inmediatamente
+                st.session_state.pop('_tarifas_cache_ts', None)
                 st.rerun()
     
     with col2:
@@ -667,6 +676,8 @@ def show_system_configuration():
                 DBManager.update_freight_rate('Miami', 'Marítimo', miami_sea, st.session_state.user_id)
                 st.success("✅ Tarifa actualizada")
                 DBManager.log_activity(st.session_state.user_id, "update_freight_rate", "Actualizó tarifa Miami Marítimo")
+                # Invalidar caché de tarifas para que los analistas vean el cambio inmediatamente
+                st.session_state.pop('_tarifas_cache_ts', None)
                 st.rerun()
     
     with col3:
@@ -685,6 +696,8 @@ def show_system_configuration():
                 DBManager.update_freight_rate('Madrid', 'Aéreo', madrid_air, st.session_state.user_id)
                 st.success("✅ Tarifa actualizada")
                 DBManager.log_activity(st.session_state.user_id, "update_freight_rate", "Actualizó tarifa Madrid Aéreo")
+                # Invalidar caché de tarifas para que los analistas vean el cambio inmediatamente
+                st.session_state.pop('_tarifas_cache_ts', None)
                 st.rerun()
     
     st.markdown("---")
@@ -707,6 +720,7 @@ def show_system_configuration():
             DBManager.update_config('warranties', warranties_clean, st.session_state.user_id)
             st.success("✅ Opciones de garantía actualizadas")
             DBManager.log_activity(st.session_state.user_id, "update_config", "Actualizó opciones de garantía")
+            st.session_state.pop('_config_cache_ts', None)  # Invalidar caché
             st.rerun()
     
     st.markdown("---")
@@ -732,6 +746,7 @@ def show_system_configuration():
                 DBManager.set_config('paises_origen', paises_options, "Países de origen/localización", st.session_state.user_id)
                 st.success("✅ Lista de países actualizada")
                 DBManager.log_activity(st.session_state.user_id, "update_config", "Actualizó lista de países")
+                st.session_state.pop('_config_cache_ts', None)  # Invalidar caché
                 st.rerun()
     
     col1, col2 = st.columns(2)
@@ -751,6 +766,7 @@ def show_system_configuration():
                     DBManager.set_config('tipos_envio', tipos_options, "Tipos de envío disponibles", st.session_state.user_id)
                     st.success("✅ Tipos de envío actualizados")
                     DBManager.log_activity(st.session_state.user_id, "update_config", "Actualizó tipos de envío")
+                    st.session_state.pop('_config_cache_ts', None)  # Invalidar caché
                     st.rerun()
     
     with col2:
@@ -768,6 +784,7 @@ def show_system_configuration():
                     DBManager.set_config('tiempos_entrega', tiempos_options, "Tiempos de entrega disponibles", st.session_state.user_id)
                     st.success("✅ Tiempos de entrega actualizados")
                     DBManager.log_activity(st.session_state.user_id, "update_config", "Actualizó tiempos de entrega")
+                    st.session_state.pop('_config_cache_ts', None)  # Invalidar caché
                     st.rerun()
     
     st.markdown("---")
@@ -787,6 +804,7 @@ def show_system_configuration():
             DBManager.set_config('terms_conditions', terms, "Términos y condiciones de las cotizaciones", st.session_state.user_id)
             st.success("✅ Términos y condiciones actualizados")
             DBManager.log_activity(st.session_state.user_id, "update_config", "Actualizó términos y condiciones")
+            st.session_state.pop('_config_cache_ts', None)  # Invalidar caché
             st.rerun()
     
     # ==========================================
