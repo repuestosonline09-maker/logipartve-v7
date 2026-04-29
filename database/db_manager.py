@@ -2323,64 +2323,26 @@ class DBManager:
             
             old_quote = dict(cursor.fetchone())
             
-            # Actualizar cotización
-            cursor.execute("""
-                UPDATE quotes SET
-                    client_name = %s,
-                    client_phone = %s,
-                    client_email = %s,
-                    client_cedula = %s,
-                    client_address = %s,
-                    client_vehicle = %s,
-                    client_year = %s,
-                    client_vin = %s,
-                    total_amount = %s,
-                    sub_total = %s,
-                    iva_total = %s,
-                    abona_ya = %s,
-                    en_entrega = %s,
-                    terms_conditions = %s,
-                    pdf_path = %s,
-                    jpeg_path = %s
-                WHERE id = %s
-            """ if is_postgres else """
-                UPDATE quotes SET
-                    client_name = ?,
-                    client_phone = ?,
-                    client_email = ?,
-                    client_cedula = ?,
-                    client_address = ?,
-                    client_vehicle = ?,
-                    client_year = ?,
-                    client_vin = ?,
-                    total_amount = ?,
-                    sub_total = ?,
-                    iva_total = ?,
-                    abona_ya = ?,
-                    en_entrega = ?,
-                    terms_conditions = ?,
-                    pdf_path = ?,
-                    jpeg_path = ?
-                WHERE id = ?
-            """, (
-                quote_data.get('client_name'),
-                quote_data.get('client_phone'),
-                quote_data.get('client_email'),
-                quote_data.get('client_cedula'),
-                quote_data.get('client_address'),
-                quote_data.get('client_vehicle'),
-                quote_data.get('client_year'),
-                quote_data.get('client_vin'),
-                quote_data.get('total_amount'),
-                quote_data.get('sub_total'),
-                quote_data.get('iva_total'),
-                quote_data.get('abona_ya'),
-                quote_data.get('en_entrega'),
-                quote_data.get('terms_conditions'),
-                quote_data.get('pdf_path'),
-                quote_data.get('jpeg_path'),
-                quote_id
-            ))
+            # Actualizar cotización — SET dinámico: solo actualiza los campos presentes en quote_data.
+            # Esto evita sobreescribir con NULL campos que no se enviaron (ej. status, client_name
+            # cuando solo se actualizan los totales financieros).
+            _updatable_fields = [
+                'client_name', 'client_phone', 'client_email', 'client_cedula',
+                'client_address', 'client_vehicle', 'client_year', 'client_vin',
+                'total_amount', 'sub_total', 'iva_total', 'abona_ya', 'en_entrega',
+                'terms_conditions', 'pdf_path', 'jpeg_path',
+            ]
+            _set_clauses = []
+            _set_values  = []
+            _ph = '%s' if is_postgres else '?'
+            for _field in _updatable_fields:
+                if _field in quote_data:  # Solo actualizar campos presentes en el dict
+                    _set_clauses.append(f"{_field} = {_ph}")
+                    _set_values.append(quote_data[_field])
+            if _set_clauses:
+                _set_values.append(quote_id)
+                _update_sql = f"UPDATE quotes SET {', '.join(_set_clauses)} WHERE id = {_ph}"
+                cursor.execute(_update_sql, tuple(_set_values))
             
             # Registrar cambios en el historial
             changes = []
