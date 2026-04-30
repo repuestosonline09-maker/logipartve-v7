@@ -69,14 +69,15 @@ def show_admin_panel():
     st.title("🔧 Panel de Administración")
     
     # Tabs para organizar las secciones
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
         "👤 Mi Perfil",
         "👥 Gestión de Usuarios",
         "⚙️ Configuración del Sistema",
         "📊 Reportes y Estadísticas",
         "📧 Configuración de Correos",
         "👨‍💼 Clientes",
-        "🔍 Auditoría"
+        "🔍 Auditoría",
+        "⛔ Anulaciones"
     ])
 
     # TAB 1: MI PERFIL
@@ -106,6 +107,10 @@ def show_admin_panel():
     # TAB 7: AUDITORÍA DE COTIZACIONES
     with tab7:
         show_audit_panel()
+
+    # TAB 8: ANULACIONES
+    with tab8:
+        show_cancellations_panel()
 
 
 def show_my_profile():
@@ -1823,3 +1828,240 @@ def show_audit_panel():
                             f"**{alerta['tipo']}** — Orden: `{alerta['cotizacion']}`\n\n"
                             f"{alerta['detalle']}"
                         )
+
+
+# ==================== TAB 8: ANULACIONES ====================
+
+def show_cancellations_panel():
+    """
+    Panel de gestión de anulaciones de cotizaciones.
+    Permite al administrador:
+      1. Anular la aprobación de una cotización (approved → cancelled)
+      2. Ver el historial de todas las cotizaciones anuladas
+      3. Reactivar una cotización anulada (cancelled → draft) si fuera necesario
+    """
+    from datetime import datetime
+
+    st.markdown("### ⛔ Gestión de Anulaciones")
+    st.caption("Anula aprobaciones de cotizaciones y consulta el historial de órdenes anuladas.")
+    st.markdown("---")
+
+    user_id = st.session_state.get('user_id')
+
+    ctab1, ctab2 = st.tabs([
+        "⛔ Anular Cotización Aprobada",
+        "📋 Historial de Anuladas"
+    ])
+
+    # ── SUBTAB 1: ANULAR UNA COTIZACIÓN ──────────────────────────────────────
+    with ctab1:
+        st.markdown("#### ⛔ Anular Aprobación de una Cotización")
+        st.info(
+            "Busca la cotización aprobada que deseas anular. "
+            "Los datos del cliente e ítems se preservan intactos en la base de datos. "
+            "La cotización pasará al estado **Anulada** y no podrá ser editada ni aprobada nuevamente "
+            "sin reactivación manual."
+        )
+
+        # Buscador
+        cancel_search = st.text_input(
+            "Número de cotización, nombre del cliente o teléfono",
+            placeholder="Ej: 2026-60258-O, Alejandro, 0414-...",
+            key="cancel_search_input"
+        )
+
+        if cancel_search and cancel_search.strip():
+            results = DBManager.search_quotes(None, cancel_search.strip(), limit=50)
+            # Solo mostrar las aprobadas
+            aprobadas = [q for q in results if q.get('status') == 'approved']
+
+            if not aprobadas:
+                st.warning("⚠️ No se encontraron cotizaciones **aprobadas** con ese criterio.")
+            else:
+                MOTIVOS = [
+                    "Selecciona un motivo...",
+                    "Repuestos incorrectos",
+                    "Cliente desistió",
+                    "Error de precio",
+                    "Devolución de dinero al cliente",
+                    "Orden duplicada",
+                    "Proveedor no disponible",
+                    "Otro"
+                ]
+
+                for q in aprobadas:
+                    qnum   = q.get('quote_number', 'N/A')
+                    cname  = q.get('client_name', 'Sin nombre')
+                    cphone = q.get('client_phone', '')
+                    cveh   = q.get('client_vehicle', '')
+                    total  = q.get('total_amount')
+                    total_str = f"${float(total):,.2f}" if total else "N/D"
+
+                    with st.expander(f"⛔ {qnum}  —  {cname}  —  {cphone}  —  {total_str}", expanded=False):
+                        c1, c2 = st.columns(2)
+                        with c1:
+                            st.markdown(f"**Cotización:** `{qnum}`")
+                            st.markdown(f"**Cliente:** {cname}")
+                            st.markdown(f"**Teléfono:** {cphone}")
+                        with c2:
+                            st.markdown(f"**Vehículo:** {cveh}")
+                            st.markdown(f"**Total:** {total_str}")
+                            st.markdown(f"**Estado actual:** ✅ Aprobada")
+
+                        st.markdown("---")
+                        st.markdown("**Datos de la anulación:**")
+
+                        motivo_sel = st.selectbox(
+                            "Motivo de anulación *",
+                            options=MOTIVOS,
+                            key=f"cancel_motivo_{q['id']}"
+                        )
+                        nota_libre = st.text_area(
+                            "Nota adicional (opcional)",
+                            placeholder="Ej: El cliente confirmó que el repuesto no era el correcto. Se procesó devolución el 30/04/2026.",
+                            key=f"cancel_nota_{q['id']}",
+                            height=80
+                        )
+
+                        col_btn, col_info = st.columns([1, 3])
+                        with col_btn:
+                            confirmar = st.button(
+                                "⛔ ANULAR ESTA COTIZACIÓN",
+                                key=f"btn_anular_{q['id']}",
+                                type="primary",
+                                use_container_width=True
+                            )
+                        with col_info:
+                            st.caption("⚠️ Esta acción cambiará el estado a **Anulada**. Los datos del cliente se preservan.")
+
+                        if confirmar:
+                            if motivo_sel == "Selecciona un motivo...":
+                                st.error("❌ Debes seleccionar un motivo de anulación.")
+                            else:
+                                ok = DBManager.cancel_quote(
+                                    quote_id=q['id'],
+                                    cancelled_by=user_id,
+                                    reason=motivo_sel,
+                                    note=nota_libre.strip()
+                                )
+                                if ok:
+                                    st.success(f"✅ Cotización **{qnum}** anulada correctamente. Motivo: {motivo_sel}")
+                                    # Invalidar caché de configuraciones si existe
+                                    for key in ['_config_cache_ts', '_tarifas_cache_ts']:
+                                        if key in st.session_state:
+                                            del st.session_state[key]
+                                    st.rerun()
+                                else:
+                                    st.error("❌ Error al anular la cotización. Intenta de nuevo.")
+
+    # ── SUBTAB 2: HISTORIAL DE ANULADAS ──────────────────────────────────────
+    with ctab2:
+        st.markdown("#### 📋 Historial de Cotizaciones Anuladas")
+
+        cancelled_list = DBManager.get_cancelled_quotes()
+
+        if not cancelled_list:
+            st.info("ℹ️ No hay cotizaciones anuladas registradas.")
+        else:
+            st.success(f"📊 Total de cotizaciones anuladas: **{len(cancelled_list)}**")
+            st.markdown("---")
+
+            for cq in cancelled_list:
+                qnum      = cq.get('quote_number', 'N/A')
+                cname     = cq.get('client_name', 'Sin nombre')
+                cphone    = cq.get('client_phone', '')
+                cveh      = cq.get('client_vehicle', '')
+                total     = cq.get('total_amount')
+                total_str = f"${float(total):,.2f}" if total else "N/D"
+                analyst   = cq.get('analyst_name', 'N/D')
+                motivo    = cq.get('cancellation_reason', 'No especificado')
+                nota      = cq.get('cancellation_note', '')
+                canc_by   = cq.get('cancelled_by_name', 'N/D')
+
+                # Fecha de anulación
+                canc_at_str = ''
+                try:
+                    if cq.get('cancelled_at'):
+                        canc_at_str = datetime.fromisoformat(str(cq['cancelled_at'])).strftime('%d/%m/%Y %H:%M')
+                except Exception:
+                    pass
+
+                # Fecha de creación
+                created_str = ''
+                try:
+                    if cq.get('created_at'):
+                        created_str = datetime.fromisoformat(str(cq['created_at'])).strftime('%d/%m/%Y')
+                except Exception:
+                    pass
+
+                with st.expander(
+                    f"⛔ {qnum}  —  {cname}  —  {motivo}  —  {canc_at_str or 'Fecha N/D'}",
+                    expanded=False
+                ):
+                    r1, r2, r3 = st.columns(3)
+                    with r1:
+                        st.markdown(f"**Cotización:** `{qnum}`")
+                        st.markdown(f"**Cliente:** {cname}")
+                        st.markdown(f"**Teléfono:** {cphone}")
+                    with r2:
+                        st.markdown(f"**Vehículo:** {cveh}")
+                        st.markdown(f"**Total:** {total_str}")
+                        st.markdown(f"**Analista:** {analyst}")
+                    with r3:
+                        st.markdown(f"**Fecha cotización:** {created_str}")
+                        st.markdown(f"**Anulada el:** {canc_at_str or 'N/D'}")
+                        st.markdown(f"**Anulada por:** {canc_by}")
+
+                    st.markdown(f"**Motivo:** {motivo}")
+                    if nota:
+                        st.markdown(f"**Nota:** {nota}")
+
+                    st.markdown("---")
+
+                    # Opción de reactivar (volver a draft)
+                    with st.expander("🔄 Reactivar esta cotización (volver a Borrador)", expanded=False):
+                        st.warning(
+                            "⚠️ Reactivar la cotización la devolverá al estado **Borrador**. "
+                            "El analista podrá editarla y volver a aprobarla. "
+                            "Usa esta opción solo si la anulación fue un error."
+                        )
+                        reactivar_nota = st.text_input(
+                            "Motivo de reactivación",
+                            placeholder="Ej: Anulación por error, el pedido sí procede.",
+                            key=f"reactivar_nota_{cq['id']}"
+                        )
+                        if st.button(
+                            "🔄 REACTIVAR A BORRADOR",
+                            key=f"btn_reactivar_{cq['id']}",
+                            type="secondary"
+                        ):
+                            if not reactivar_nota.strip():
+                                st.error("❌ Escribe el motivo de reactivación.")
+                            else:
+                                try:
+                                    conn = DBManager.get_connection()
+                                    cursor = conn.cursor()
+                                    ph = '%s' if DBManager.USE_POSTGRES else '?'
+                                    cursor.execute(f"""
+                                        UPDATE quotes SET
+                                            status              = 'draft',
+                                            cancellation_reason = NULL,
+                                            cancellation_note   = NULL,
+                                            cancelled_at        = NULL,
+                                            cancelled_by        = NULL
+                                        WHERE id = {ph}
+                                    """, (cq['id'],))
+                                    DBManager.log_quote_change(
+                                        quote_id=cq['id'],
+                                        edited_by=user_id,
+                                        field_changed='status',
+                                        old_value='cancelled',
+                                        new_value='draft',
+                                        change_summary=f"Cotización reactivada a borrador. Motivo: {reactivar_nota.strip()}"
+                                    )
+                                    conn.commit()
+                                    cursor.close(); conn.close()
+                                    st.success(f"✅ Cotización **{qnum}** reactivada a Borrador.")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"❌ Error al reactivar: {e}")

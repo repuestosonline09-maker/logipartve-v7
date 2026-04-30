@@ -21,10 +21,11 @@ from services.auth_manager import AuthManager
 # CONSTANTES
 # ─────────────────────────────────────────────────────────────────────────────
 ESTADO_MAP = {
-    'draft':    '📝 Borrador',
-    'sent':     '📤 Enviada',
-    'approved': '✅ Aprobada',
-    'rejected': '❌ Rechazada',
+    'draft':     '📝 Borrador',
+    'sent':      '📤 Enviada',
+    'approved':  '✅ Aprobada',
+    'rejected':  '❌ Rechazada',
+    'cancelled': '⛔ Anulada',
 }
 
 PERIOD_DAYS = {
@@ -273,7 +274,7 @@ def render_my_quotes_panel():
     with col2:
         status_filter = st.selectbox(
             "Estado",
-            options=["Todas", "Aprobadas", "No Aprobadas"],
+            options=["Todas", "Aprobadas", "No Aprobadas", "Anuladas"],
             key=f"mq_status_{reset_key}"
         )
     with col3:
@@ -316,8 +317,10 @@ def render_my_quotes_panel():
     # Filtro de estado
     if status_filter == "Aprobadas":
         quotes = [q for q in quotes if q.get('status') == 'approved']
+    elif status_filter == "Anuladas":
+        quotes = [q for q in quotes if q.get('status') == 'cancelled']
     elif status_filter == "No Aprobadas":
-        quotes = [q for q in quotes if q.get('status') != 'approved']
+        quotes = [q for q in quotes if q.get('status') not in ('approved', 'cancelled')]
 
     # Filtro de período
     if period_filter in PERIOD_DAYS:
@@ -440,6 +443,40 @@ def _show_quote_readonly(quote_id: int):
     with h3:
         st.markdown(f"**Estado:** {ESTADO_MAP.get(quote.get('status', 'draft'), 'Desconocido')}")
 
+    # Banner de ANULADA (solo si la cotización está cancelada)
+    if quote.get('status') == 'cancelled':
+        _motivo = quote.get('cancellation_reason', 'No especificado')
+        _nota   = quote.get('cancellation_note', '')
+        _fecha_anulacion = ''
+        try:
+            if quote.get('cancelled_at'):
+                from datetime import datetime as _dt
+                _fecha_anulacion = _dt.fromisoformat(str(quote['cancelled_at'])).strftime('%d/%m/%Y %H:%M')
+        except Exception:
+            pass
+        _texto_banner = f"⛔ COTIZACIÓN ANULADA &nbsp;&nbsp;|&nbsp;&nbsp; Motivo: {_motivo}"
+        if _fecha_anulacion:
+            _texto_banner += f" &nbsp;&nbsp;|&nbsp;&nbsp; Fecha: {_fecha_anulacion}"
+        if _nota:
+            _texto_banner += f"<br><small style='font-weight:400;'>{_nota}</small>"
+        st.markdown(
+            f"""
+            <div style="
+                background-color: #8B0000;
+                border: 3px solid #5C0000;
+                border-radius: 8px;
+                padding: 14px 20px;
+                margin: 10px 0 16px 0;
+                text-align: center;
+            ">
+                <span style="font-size:1.1rem; font-weight:800; color:#FFFFFF;">
+                    {_texto_banner}
+                </span>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
     # Datos del cliente
     st.markdown("👤 **Datos del Cliente**")
     c1, c2, c3 = st.columns(3)
@@ -510,10 +547,16 @@ def _show_acciones(quote_id: int):
 
     estado_actual = quote.get('status', 'draft')
     ya_aprobada   = (estado_actual == 'approved')
+    ya_anulada    = (estado_actual == 'cancelled')
+
+    # Si la cotización está anulada, mostrar solo un mensaje informativo y salir
+    if ya_anulada:
+        st.warning("⛔ Esta cotización está **anulada**. No se pueden realizar acciones sobre ella. Solo el administrador puede reactivarla si fuera necesario.")
+        return
 
     a1, a2, a3, a4, a5, a6, a7 = st.columns(7)
 
-    # ── EDITAR ───────────────────────────────────────────────────────────────────────────────
+    # ── EDITAR ────────────────────────────────────────────────────────────────────────────────────────
     with a1:
         editar_disabled = ya_aprobada
         if st.button("✏️ EDITAR", use_container_width=True,

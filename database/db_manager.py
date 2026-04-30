@@ -3508,3 +3508,146 @@ class DBManager:
         except Exception as e:
             print(f"❌ Error en get_all_analysts: {e}")
             return []
+
+    @staticmethod
+    def cancel_quote(quote_id: int, cancelled_by: int, reason: str, note: str = '') -> bool:
+        """
+        Anula una cotización aprobada, cambiando su estado a 'cancelled'.
+        Registra el motivo, la nota y el usuario que realizó la anulación.
+        Los datos del cliente e ítems se preservan intactos.
+
+        Args:
+            quote_id:     ID de la cotización a anular
+            cancelled_by: ID del usuario administrador que realiza la anulación
+            reason:       Motivo de anulación (ej. 'Repuestos incorrectos')
+            note:         Nota adicional opcional
+
+        Returns:
+            True si se anuló exitosamente, False en caso de error
+        """
+        try:
+            from services.timezone_utils import now_caracas_naive
+        except ImportError:
+            from datetime import timezone, timedelta
+            def now_caracas_naive():
+                from datetime import datetime
+                return datetime.now(tz=timezone(timedelta(hours=-4))).replace(tzinfo=None)
+
+        try:
+            conn = DBManager.get_connection()
+            cursor = conn.cursor()
+            is_postgres = DBManager.USE_POSTGRES
+            ph = '%s' if is_postgres else '?'
+
+            # Verificar que la cotización existe y está aprobada
+            cursor.execute(f"SELECT id, quote_number, status FROM quotes WHERE id = {ph}", (quote_id,))
+            row = cursor.fetchone()
+            if not row:
+                print(f"❌ cancel_quote: Cotización {quote_id} no encontrada")
+                cursor.close(); conn.close()
+                return False
+
+            quote_number = row['quote_number'] if is_postgres else row[1]
+            old_status   = row['status']       if is_postgres else row[2]
+
+            # Actualizar estado a cancelled con motivo y metadatos
+            cursor.execute(f"""
+                UPDATE quotes SET
+                    status               = 'cancelled',
+                    cancellation_reason  = {ph},
+                    cancellation_note    = {ph},
+                    cancelled_at         = {ph},
+                    cancelled_by         = {ph}
+                WHERE id = {ph}
+            """, (reason, note, now_caracas_naive(), cancelled_by, quote_id))
+
+            # Registrar en historial
+            DBManager.log_quote_change(
+                quote_id=quote_id,
+                edited_by=cancelled_by,
+                field_changed='status',
+                old_value=old_status,
+                new_value='cancelled',
+                change_summary=f"Aprobación anulada. Motivo: {reason}. {note}".strip()
+            )
+
+            # Registrar en activity_logs
+            cursor.execute(f"""
+                INSERT INTO activity_logs (user_id, action, details, timestamp)
+                VALUES ({ph}, 'quote_cancelled', {ph}, {ph})
+            """, (
+                cancelled_by,
+                f"Cotización {quote_number} anulada. Motivo: {reason}",
+                now_caracas_naive()
+            ))
+
+            conn.commit()
+            cursor.close()
+            conn.close()
+            print(f"✅ Cotización {quote_number} anulada correctamente. Motivo: {reason}")
+            return True
+
+        except Exception as e:
+            print(f"❌ Error en cancel_quote: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+    @staticmethod
+    def get_cancelled_quotes(analyst_id: int = None) -> List[Dict[str, Any]]:
+        """
+        Devuelve todas las cotizaciones anuladas (status='cancelled').
+        Si se pasa analyst_id, filtra por analista.
+
+        Args:
+            analyst_id: ID del analista (None = todas)
+
+        Returns:
+            Lista de dicts con los datos de las cotizaciones anuladas
+        """
+        try:
+            conn = DBManager.get_connection()
+            cursor = conn.cursor()
+            is_postgres = DBManager.USE_POSTGRES
+            ph = '%s' if is_postgres else '?'
+
+            if analyst_id:
+                cursor.execute(f"""
+                    SELECT q.id, q.quote_number, q.client_name, q.client_phone,
+                           q.client_vehicle, q.total_amount, q.created_at,
+                           q.cancellation_reason, q.cancellation_note, q.cancelled_at,
+                           u.full_name AS analyst_name,
+                           cb.full_name AS cancelled_by_name
+                    FROM quotes q
+                    JOIN users u ON q.analyst_id = u.id
+                    LEFT JOIN users cb ON q.cancelled_by = cb.id
+                    WHERE q.status = 'cancelled' AND q.analyst_id = {ph}
+                    ORDER BY q.cancelled_at DESC NULLS LAST
+                """, (analyst_id,))
+            else:
+                cursor.execute("""
+                    SELECT q.id, q.quote_number, q.client_name, q.client_phone,
+                           q.client_vehicle, q.total_amount, q.created_at,
+                           q.cancellation_reason, q.cancellation_note, q.cancelled_at,
+                           u.full_name AS analyst_name,
+                           cb.full_name AS cancelled_by_name
+                    FROM quotes q
+                    JOIN users u ON q.analyst_id = u.id
+                    LEFT JOIN users cb ON q.cancelled_by = cb.id
+                    WHERE q.status = 'cancelled'
+                    ORDER BY q.cancelled_at DESC NULLS LAST
+                """)
+
+            rows = cursor.fetchall()
+            cursor.close()
+            conn.close()
+            if is_postgres:
+                return [dict(r) for r in rows]
+            else:
+                cols = ['id','quote_number','client_name','client_phone','client_vehicle',
+                        'total_amount','created_at','cancellation_reason','cancellation_note',
+                        'cancelled_at','analyst_name','cancelled_by_name']
+                return [dict(zip(cols, r)) for r in rows]
+        except Exception as e:
+            print(f"❌ Error en get_cancelled_quotes: {e}")
+            return []
