@@ -1842,6 +1842,12 @@ def show_cancellations_panel():
     """
     from datetime import datetime
 
+    # —— PROTECCIÓN DE ACCESO: solo el administrador puede gestionar anulaciones ——
+    _current_user = AuthManager.get_current_user() if AuthManager.is_logged_in() else None
+    if not _current_user or _current_user.get('role') != 'admin':
+        st.error("🚫 Acceso denegado. Solo el administrador puede gestionar anulaciones.")
+        st.stop()
+
     st.markdown("### ⛔ Gestión de Anulaciones")
     st.caption("Anula aprobaciones de cotizaciones y consulta el historial de órdenes anuladas.")
     st.markdown("---")

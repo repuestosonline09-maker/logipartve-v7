@@ -272,9 +272,13 @@ def render_my_quotes_panel():
             key=f"mq_search_{reset_key}"
         )
     with col2:
+        # El filtro 'Anuladas' solo es visible para el administrador
+        _status_options = ["Todas", "Aprobadas", "No Aprobadas"]
+        if role == 'admin':
+            _status_options.append("Anuladas")
         status_filter = st.selectbox(
             "Estado",
-            options=["Todas", "Aprobadas", "No Aprobadas", "Anuladas"],
+            options=_status_options,
             key=f"mq_status_{reset_key}"
         )
     with col3:
@@ -314,10 +318,14 @@ def render_my_quotes_panel():
         limit=100
     )
 
+    # Los analistas nunca ven cotizaciones anuladas en sus resultados
+    if role != 'admin':
+        quotes = [q for q in quotes if q.get('status') != 'cancelled']
+
     # Filtro de estado
     if status_filter == "Aprobadas":
         quotes = [q for q in quotes if q.get('status') == 'approved']
-    elif status_filter == "Anuladas":
+    elif status_filter == "Anuladas" and role == 'admin':
         quotes = [q for q in quotes if q.get('status') == 'cancelled']
     elif status_filter == "No Aprobadas":
         quotes = [q for q in quotes if q.get('status') not in ('approved', 'cancelled')]
