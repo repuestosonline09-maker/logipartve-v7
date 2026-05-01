@@ -542,6 +542,8 @@ def render_analyst_panel():
                 'precio_usd_total':       _precio_usd,
             })
         st.session_state.copying_data_loaded = True
+        # Incrementar reset_key para forzar re-render de los widgets con los datos pre-cargados
+        st.session_state.cliente_reset_counter = st.session_state.get('cliente_reset_counter', 0) + 1
         st.rerun()
 
     # Mostrar banner de modo copia si está activo
@@ -734,20 +736,18 @@ def render_analyst_panel():
     # Generar keys únicas basadas en el contador
     reset_key = st.session_state.cliente_reset_counter
     
-    # Formulario de datos del cliente
-    st.markdown("### 👤 Datos del Cliente")
-
     # ── AUTOCOMPLETADO: valores por defecto ──────────────────────────────────
-    # En modo edición, cargar desde cliente_datos. En modo normal, vacío.
-    default_nombre    = st.session_state.cliente_datos.get('nombre', '')    if editing_mode else ''
-    default_telefono  = st.session_state.cliente_datos.get('telefono', '')  if editing_mode else ''
-    default_email     = st.session_state.cliente_datos.get('email', '')     if editing_mode else ''
-    default_vehiculo  = st.session_state.cliente_datos.get('vehiculo', '')  if editing_mode else ''
-    default_cilindrada= st.session_state.cliente_datos.get('cilindrada', '') if editing_mode else ''
-    default_ano       = st.session_state.cliente_datos.get('year', '')      if editing_mode else ''
-    default_vin       = st.session_state.cliente_datos.get('vin', '')       if editing_mode else ''
-    default_direccion = st.session_state.cliente_datos.get('direccion', '') if editing_mode else ''
-    default_ci_rif    = st.session_state.cliente_datos.get('cedula', '')    if editing_mode else ''
+    # En modo edición O copia, cargar desde cliente_datos. En modo normal, vacío.
+    _usar_datos_guardados = editing_mode or copying_mode
+    default_nombre    = st.session_state.cliente_datos.get('nombre', '')     if _usar_datos_guardados else ''
+    default_telefono  = st.session_state.cliente_datos.get('telefono', '')   if _usar_datos_guardados else ''
+    default_email     = st.session_state.cliente_datos.get('email', '')      if _usar_datos_guardados else ''
+    default_vehiculo  = st.session_state.cliente_datos.get('vehiculo', '')   if _usar_datos_guardados else ''
+    default_cilindrada= st.session_state.cliente_datos.get('cilindrada', '') if _usar_datos_guardados else ''
+    default_ano       = st.session_state.cliente_datos.get('year', '')       if _usar_datos_guardados else ''
+    default_vin       = st.session_state.cliente_datos.get('vin', '')        if _usar_datos_guardados else ''
+    default_direccion = st.session_state.cliente_datos.get('direccion', '')  if _usar_datos_guardados else ''
+    default_ci_rif    = st.session_state.cliente_datos.get('cedula', '')     if _usar_datos_guardados else ''
 
     # Si hay un cliente autocompletado pendiente, sobreescribir los defaults
     if st.session_state.get('ac_seleccionado'):
