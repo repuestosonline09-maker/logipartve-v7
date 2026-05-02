@@ -305,9 +305,13 @@ def render_analyst_panel():
     username = current_user.get('username', 'Usuario') if current_user else 'Usuario'
     full_name = current_user.get('full_name', username) if current_user else 'Usuario'
     
-    # Obtener vista previa del número de cotización
+    # Obtener vista previa del número de cotización (cacheado en session_state)
+    # Se invalida cuando se guarda una cotización nueva (deleted en el bloque de guardado)
+    _nqn_cache_key = f'_next_quote_number_cache_{user_id}'
     if user_id:
-        next_quote_number = QuoteNumberingService.get_next_quote_number_preview(user_id, username)
+        if _nqn_cache_key not in st.session_state:
+            st.session_state[_nqn_cache_key] = QuoteNumberingService.get_next_quote_number_preview(user_id, username)
+        next_quote_number = st.session_state[_nqn_cache_key] or "N/A"
     else:
         next_quote_number = "N/A"
     
@@ -700,7 +704,7 @@ def render_analyst_panel():
             st.session_state.converter_reset_counter += 1
             st.session_state.eur_amount = 0.0
             st.session_state.usd_amount = 0.0
-            st.rerun()
+            # No necesita st.rerun(): el cambio de key fuerza recreación automática del widget
         
         st.markdown("---")
         st.caption("📋 Copie el monto USD al campo 'Costo FOB ($)' en el formulario")
@@ -766,7 +770,7 @@ def render_analyst_panel():
                 # Limpiar resultado
                 if 'calc_resultado' in st.session_state:
                     del st.session_state.calc_resultado
-                st.rerun()
+                # No necesita st.rerun(): el cambio de key fuerza recreación automática del widget
         
         # Mostrar resultado si existe
         if 'calc_resultado' in st.session_state:
@@ -1049,7 +1053,7 @@ def render_analyst_panel():
                                 with _cc2:
                                     if st.button("❌ CANCELAR", key=f"dup_del_cancel_{_cli['id']}", use_container_width=True):
                                         st.session_state[_del_key] = False
-                                        st.rerun()
+                                        # No necesita rerun: el flag False ya oculta la confirmación en el próximo render natural
             else:
                 st.warning(
                     f"⚠️ Se detectaron **{_total_dups} registros duplicados** en la base de datos "
@@ -1949,8 +1953,9 @@ def render_analyst_panel():
                                 st.error("❌ Error al actualizar la cotización en la base de datos")
                     else:
                         # Modo creación normal
+                        # Activar la vista previa de cotización en el mismo render
                         st.session_state.mostrar_cotizacion = True
-                        st.rerun()
+                        # No necesita st.rerun(): el flag se lee más abajo en el mismo render
     
     with btn_action_col3:
         if st.button("🗑️ LIMPIAR TODO", use_container_width=True, key="btn_limpiar_todo"):
@@ -1958,7 +1963,10 @@ def render_analyst_panel():
             st.session_state.cliente_datos = {}
             if 'mostrar_cotizacion' in st.session_state:
                 del st.session_state.mostrar_cotizacion
-            st.rerun()
+            # Incrementar reset_key para que los widgets del formulario se limpien visualmente
+            st.session_state.cliente_reset_counter = st.session_state.get('cliente_reset_counter', 0) + 1
+            st.session_state.item_reset_counter = st.session_state.get('item_reset_counter', 0) + 1
+            # No necesita st.rerun(): el cambio de key ya fuerza el re-render de los widgets
     
     # ==========================================
     # SECCIÓN 7: RESUMEN DE ÍTEMS AGREGADOS
@@ -2281,7 +2289,7 @@ Cash | Zelle | Binance | Depósito Bancario Cta Divisas 🤝"""
                 with col_cerrar2:
                     if st.button("✖ Cerrar", use_container_width=True, key="btn_cerrar_popup_usd"):
                         st.session_state['mostrar_popup_usd'] = False
-                        st.rerun()
+                        # No necesita st.rerun(): el flag False ya oculta el popup en el próximo render natural
         # ── FIN POP-UP MENSAJE PAGO USD ────────────────────────────────────────────
 
         # ── POP-UP MENSAJE BCV ─────────────────────────────────────────────────
@@ -2352,9 +2360,9 @@ Cash | Zelle | Binance | Depósito Bancario Cta Divisas 🤝"""
 
                 col_cerrar_bcv1, col_cerrar_bcv2, col_cerrar_bcv3 = st.columns([1, 2, 1])
                 with col_cerrar_bcv2:
-                    if st.button("✖ Cerrar", use_container_width=True, key="btn_cerrar_popup_bcv"):
+                    if st.button("❖ Cerrar", use_container_width=True, key="btn_cerrar_popup_bcv"):
                         st.session_state['mostrar_popup_bcv'] = False
-                        st.rerun()
+                        # No necesita st.rerun(): el flag False ya oculta el popup en el próximo render natural
         # ── FIN POP-UP MENSAJE BCV ─────────────────────────────────────────────────
         
         # Botones de generación
@@ -2608,6 +2616,9 @@ Cash | Zelle | Binance | Depósito Bancario Cta Divisas 🤝"""
                                                 st.session_state.pop(_dk, None)
                                         except Exception:
                                             pass
+                                        # Invalidar caché del número de cotización para que el siguiente render muestre el nuevo número
+                                        _nqn_cache_key_clear = f'_next_quote_number_cache_{user_id}'
+                                        st.session_state.pop(_nqn_cache_key_clear, None)
                                         # ═══════════════════════════════════════════════
 
                                         st.rerun()
