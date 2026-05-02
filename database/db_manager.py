@@ -3651,3 +3651,91 @@ class DBManager:
         except Exception as e:
             print(f"❌ Error en get_cancelled_quotes: {e}")
             return []
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # AUTO-GUARDADO DE BORRADORES
+    # ══════════════════════════════════════════════════════════════════════════
+
+    @staticmethod
+    def save_draft(analyst_id: int, analyst_username: str, draft_data: dict) -> bool:
+        """Guarda o actualiza el borrador del analista (uno por analista)."""
+        try:
+            import json as _json_draft
+            conn, is_postgres = DBManager.get_connection(), DBManager.USE_POSTGRES
+            if isinstance(conn, tuple):
+                conn, is_postgres = conn
+            cursor = conn.cursor()
+            items_count    = len(draft_data.get('items', []))
+            client_name    = (draft_data.get('cliente', {}).get('nombre', '') or '')[:255]
+            client_vehicle = (draft_data.get('cliente', {}).get('vehiculo', '') or '')[:255]
+            data_json      = _json_draft.dumps(draft_data, ensure_ascii=False, default=str)
+            if is_postgres:
+                cursor.execute("""
+                    INSERT INTO quote_drafts
+                        (analyst_id, analyst_username, draft_data, items_count, client_name, client_vehicle, updated_at)
+                    VALUES (%s, %s, %s::jsonb, %s, %s, %s, NOW())
+                    ON CONFLICT (analyst_id)
+                    DO UPDATE SET
+                        draft_data     = EXCLUDED.draft_data,
+                        items_count    = EXCLUDED.items_count,
+                        client_name    = EXCLUDED.client_name,
+                        client_vehicle = EXCLUDED.client_vehicle,
+                        updated_at     = NOW()
+                """, (analyst_id, analyst_username, data_json, items_count, client_name, client_vehicle))
+                conn.commit()
+            cursor.close()
+            DBManager.release_connection(conn)
+            return True
+        except Exception as e:
+            print(f"❌ Error en save_draft: {e}")
+            return False
+
+    @staticmethod
+    def load_draft(analyst_id: int):
+        """Carga el borrador del analista si existe. Retorna dict o None."""
+        try:
+            import json as _json_draft
+            conn = DBManager.get_connection()
+            is_postgres = DBManager.USE_POSTGRES
+            if isinstance(conn, tuple):
+                conn, is_postgres = conn
+            if not is_postgres:
+                return None
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor.execute("""
+                SELECT draft_data, items_count, client_name, client_vehicle, updated_at
+                FROM quote_drafts
+                WHERE analyst_id = %s
+            """, (analyst_id,))
+            row = cursor.fetchone()
+            cursor.close()
+            DBManager.release_connection(conn)
+            if row:
+                data = dict(row)
+                if isinstance(data.get('draft_data'), str):
+                    data['draft_data'] = _json_draft.loads(data['draft_data'])
+                return data
+            return None
+        except Exception as e:
+            print(f"❌ Error en load_draft: {e}")
+            return None
+
+    @staticmethod
+    def delete_draft(analyst_id: int) -> bool:
+        """Elimina el borrador del analista."""
+        try:
+            conn = DBManager.get_connection()
+            is_postgres = DBManager.USE_POSTGRES
+            if isinstance(conn, tuple):
+                conn, is_postgres = conn
+            if not is_postgres:
+                return True
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM quote_drafts WHERE analyst_id = %s", (analyst_id,))
+            conn.commit()
+            cursor.close()
+            DBManager.release_connection(conn)
+            return True
+        except Exception as e:
+            print(f"❌ Error en delete_draft: {e}")
+            return False

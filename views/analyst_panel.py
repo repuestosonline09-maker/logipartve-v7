@@ -368,6 +368,68 @@ def render_analyst_panel():
     else:
         st.title("📋 Nueva Cotización")
     
+    # ══════════════════════════════════════════════════════════════════════════
+    # AUTO-GUARDADO DE BORRADOR — Recuperación tras cierre inesperado
+    # ══════════════════════════════════════════════════════════════════════════
+    # Solo mostrar en modo nueva cotización (no edición, no copia) y solo una vez
+    if (not editing_mode and not st.session_state.get('copying_mode', False)
+            and user_id
+            and not st.session_state.get('draft_checked', False)
+            and not st.session_state.get('draft_recovered', False)
+            and not st.session_state.get('draft_discarded', False)):
+        st.session_state.draft_checked = True
+        _draft_info = DBManager.load_draft(user_id)
+        if _draft_info and _draft_info.get('items_count', 0) > 0:
+            st.session_state._pending_draft = _draft_info
+
+    # Mostrar banner de borrador pendiente si existe
+    if st.session_state.get('_pending_draft') and not st.session_state.get('draft_recovered', False):
+        _d = st.session_state._pending_draft
+        _d_items   = _d.get('items_count', 0)
+        _d_cliente = _d.get('client_name', '') or 'Sin nombre'
+        _d_vehiculo= _d.get('client_vehicle', '') or ''
+        _d_fecha   = _d.get('updated_at', '')
+        _d_fecha_str = str(_d_fecha)[:16] if _d_fecha else 'fecha desconocida'
+        st.markdown(
+            f"""
+            <div style="background:#FFF3CD;border:2px solid #FFC107;border-radius:8px;
+                        padding:14px 18px;margin:8px 0 16px 0;">
+                <span style="font-size:1.1rem;font-weight:700;color:#856404;">
+                    ⚠️ Tienes un borrador sin terminar — {_d_fecha_str}
+                </span><br>
+                <span style="color:#533f03;">
+                    Cliente: <strong>{_d_cliente}</strong>
+                    {'| Vehículo: <strong>' + _d_vehiculo + '</strong>' if _d_vehiculo else ''}
+                    | <strong>{_d_items} ítem{'s' if _d_items != 1 else ''}</strong> guardado{'s' if _d_items != 1 else ''}
+                </span>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+        _col_rec, _col_des = st.columns(2)
+        with _col_rec:
+            if st.button("🔄 RECUPERAR BORRADOR", type="primary", use_container_width=True):
+                _draft_data = _d.get('draft_data', {})
+                # Restaurar datos del cliente
+                st.session_state.cliente_datos = _draft_data.get('cliente', {})
+                # Restaurar ítems
+                st.session_state.cotizacion_items = _draft_data.get('items', [])
+                # Limpiar flags
+                st.session_state.draft_recovered  = True
+                st.session_state._pending_draft    = None
+                st.session_state.draft_checked     = False
+                # Forzar re-render de widgets con los datos recuperados
+                st.session_state.cliente_reset_counter = st.session_state.get('cliente_reset_counter', 0) + 1
+                st.rerun()
+        with _col_des:
+            if st.button("🗑️ DESCARTAR", type="secondary", use_container_width=True):
+                DBManager.delete_draft(user_id)
+                st.session_state._pending_draft  = None
+                st.session_state.draft_discarded = True
+                st.session_state.draft_checked   = False
+                st.rerun()
+    # ══════════════════════════════════════════════════════════════════════════
+
     # Mostrar mensaje de éxito si se acaba de guardar
     if st.session_state.get('show_save_success', False):
         st.success(f"✅ ¡Cotización {st.session_state.saved_quote_number} guardada exitosamente! Ahora puedes generar el PDF.")
@@ -1659,6 +1721,22 @@ def render_analyst_panel():
                     
                     # Limpiar campos del ítem para el siguiente (mantener datos del cliente)
                     st.session_state.limpiar_campos_item = True
+
+                    # ══ AUTO-GUARDADO DE BORRADOR ════════════════════════════════════
+                    # Solo en modo nueva cotización (no edición, no copia)
+                    if (not editing_mode and not st.session_state.get('copying_mode', False)
+                            and user_id and username):
+                        try:
+                            _draft_payload = {
+                                'cliente': st.session_state.get('cliente_datos', {}),
+                                'items':   st.session_state.cotizacion_items,
+                            }
+                            DBManager.save_draft(user_id, username, _draft_payload)
+                            st.session_state._draft_saved_at = time.time()
+                        except Exception as _e_draft:
+                            pass  # El auto-guardado nunca debe interrumpir el flujo
+                    # ══════════════════════════════════════════════════════
+
                 except (AttributeError, TypeError) as e:
                     # Guardar mensaje de error en session_state
                     st.session_state.item_agregado_msg = f"⚠️ Error: {str(e)}. Reiniciando lista..."
@@ -2518,6 +2596,19 @@ Cash | Zelle | Binance | Depósito Bancario Cta Divisas 🤝"""
                                             'copying_original_items_snapshot'
                                         ]:
                                             st.session_state.pop(_ck, None)
+
+                                        # ══ ELIMINAR BORRADOR AL GUARDAR EXITOSAMENTE ══
+                                        try:
+                                            if user_id:
+                                                DBManager.delete_draft(user_id)
+                                            # Limpiar flags de borrador
+                                            for _dk in ['_pending_draft', 'draft_checked',
+                                                        'draft_recovered', 'draft_discarded',
+                                                        '_draft_saved_at']:
+                                                st.session_state.pop(_dk, None)
+                                        except Exception:
+                                            pass
+                                        # ═══════════════════════════════════════════════
 
                                         st.rerun()
                                     else:
