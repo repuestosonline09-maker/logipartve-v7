@@ -2201,8 +2201,9 @@ def render_analyst_panel():
             st.info(f"💵 **Total si paga en USD/Divisas:**\n\n${total_usd_divisas:.2f}")
             st.caption("⚠️ Este monto NO aparece en el PDF. Comunícalo al cliente por mensaje aparte.")
             
-            # ── BOTONES POP-UP MENSAJE PAGO USD y BCV ────────────────────────────
-            if items and len(items) > 0:
+            # ── BOTONES POP-UP MENSAJE PAGO USD y BCV ────────────────────
+            # Solo visibles después de guardar la cotización exitosamente
+            if items and len(items) > 0 and st.session_state.get('cotizacion_guardada', False):
                 if st.button("📋 Copiar Mensaje Pago USD", use_container_width=True, type="secondary", key="btn_popup_usd"):
                     st.session_state['mostrar_popup_usd'] = not st.session_state.get('mostrar_popup_usd', False)
                     st.session_state['mostrar_popup_bcv'] = False
@@ -2639,7 +2640,8 @@ Cash | Zelle | Binance | Depósito Bancario Cta Divisas 🤝"""
                         st.error("❌ Error al generar número de cotización")
         
         with gen_col2:
-            if st.button("📅 GENERAR PDF", use_container_width=True, type="secondary", key="btn_generar_pdf"):
+            # Solo mostrar el botón PDF si la cotización ya fue guardada exitosamente en BD
+            if st.session_state.get('cotizacion_guardada', False) and st.button("📅 GENERAR PDF", use_container_width=True, type="secondary", key="btn_generar_pdf"):
                 if st.session_state.get('saved_quote_number'):
                     try:
                         # PDFQuoteGenerator y clean_text ya importados al inicio del módulo
@@ -2728,7 +2730,8 @@ Cash | Zelle | Binance | Depósito Bancario Cta Divisas 🤝"""
                     st.warning("⚠️ Primero debe guardar la cotización")
         
         with gen_col3:
-            if st.button("🖼️ GENERAR PNG", use_container_width=True, type="secondary", key="btn_generar_png"):
+            # Solo mostrar el botón PNG si la cotización ya fue guardada exitosamente en BD
+            if st.session_state.get('cotizacion_guardada', False) and st.button("🖼️ GENERAR PNG", use_container_width=True, type="secondary", key="btn_generar_png"):
                 if st.session_state.get('saved_quote_number'):
                     try:
                         # PNGQuoteGenerator y clean_text ya importados al inicio del módulo
