@@ -143,7 +143,7 @@ class EmailService:
                     
                     <div class="footer">
                         <p>Este es un correo automático, por favor no respondas a este mensaje.</p>
-                        <p>&copy; 2026 LogiPartVE Pro - Cotizador Global de Repuestos v7.0</p>
+                        <p>&copy; 2026 LogiPartVE Pro - Cotizador Global de Repuestos v7.5</p>
                     </div>
                 </div>
             </body>

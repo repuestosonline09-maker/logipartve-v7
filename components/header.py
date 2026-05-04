@@ -83,13 +83,13 @@ def show_header():
         st.markdown(f"""
             <div class="app-header">
                 <img src="data:image/png;base64,{img_data}" class="app-logo" alt="LogiPartVE Logo">
-                <h1 class="app-title">Cotizador Global de Repuestos v7.0</h1>
+                <h1 class="app-title">Cotizador Global de Repuestos v7.5</h1>
             </div>
         """, unsafe_allow_html=True)
     else:
         st.markdown("""
             <div class="app-header">
-                <h1 class="app-title">Cotizador Global de Repuestos v7.0</h1>
+                <h1 class="app-title">Cotizador Global de Repuestos v7.5</h1>
             </div>
         """, unsafe_allow_html=True)
     

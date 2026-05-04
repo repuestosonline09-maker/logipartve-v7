@@ -1,6 +1,6 @@
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║                                                                              ║
-║                    LOGIPARTVE PRO v7.0 - FASE 2 COMPLETADA                  ║
+║                    LOGIPARTVE PRO v7.5 - FASE 2 COMPLETADA                  ║
 ║                        Panel de Administración Completo                      ║
 ║                                                                              ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
@@ -192,7 +192,7 @@ Para cualquier consulta o problema, contactar al equipo de desarrollo.
 
 ═══════════════════════════════════════════════════════════════════════════════
 
-LogiPartVE Pro v7.0 © 2026 - Todos los derechos reservados
+LogiPartVE Pro v7.5 © 2026 - Todos los derechos reservados
 
 Desarrollado con ❤️ usando Streamlit + Python
 

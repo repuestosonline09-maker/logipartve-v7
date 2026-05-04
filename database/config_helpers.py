@@ -1,6 +1,6 @@
 """
 Funciones auxiliares para obtener configuraciones del sistema
-LogiPartVE Pro v7.0
+LogiPartVE Pro v7.5
 
 ARQUITECTURA DE FALLBACK (3 niveles):
   1. Lee el valor de la BD normalmente

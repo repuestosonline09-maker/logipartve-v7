@@ -1,5 +1,5 @@
 """
-Prompt "Omni-Parts Expert & Logistics" para LogiPartVE v7.0
+Prompt "Omni-Parts Expert & Logistics" para LogiPartVE v7.5
 Sistema integrado de especialistas en autopartes y logística internacional
 """
 

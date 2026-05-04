@@ -1,5 +1,5 @@
 """
-Componentes reutilizables de LogiPartVE Pro v7.0
+Componentes reutilizables de LogiPartVE Pro v7.5
 
 Este módulo contiene componentes de interfaz de usuario:
 - Header: Encabezado con logo y versión

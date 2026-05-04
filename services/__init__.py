@@ -1,5 +1,5 @@
 """
-Servicios de LogiPartVE Pro v7.0
+Servicios de LogiPartVE Pro v7.5
 
 Este módulo contiene los servicios core del sistema de cotización:
 - URLValidator: Validación de URLs contra lista blanca

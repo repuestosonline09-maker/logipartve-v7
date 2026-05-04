@@ -23,7 +23,7 @@ import bcrypt
 
 class DBManager:
     """
-    Gestor de base de datos para LogiPartVE Pro v7.0
+    Gestor de base de datos para LogiPartVE Pro v7.5
     Maneja 7 tablas: users, system_config, quotes, quote_items, pages, cache, activity_logs
     Soporta SQLite (desarrollo local) y PostgreSQL (producción en Railway)
     """

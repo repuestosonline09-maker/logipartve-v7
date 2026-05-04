@@ -71,13 +71,13 @@ def show_login():
         st.markdown(f"""
             <div class="login-header">
                 <img src="data:image/png;base64,{img_data}" class="login-logo">
-                <div class="login-title">Cotizador Global de Repuestos v7.0</div>
+                <div class="login-title">Cotizador Global de Repuestos v7.5</div>
             </div>
         """, unsafe_allow_html=True)
     else:
         st.markdown("""
             <div class="login-header">
-                <div class="login-title">Cotizador Global de Repuestos v7.0</div>
+                <div class="login-title">Cotizador Global de Repuestos v7.5</div>
             </div>
         """, unsafe_allow_html=True)
     
@@ -122,7 +122,7 @@ def show_login():
     st.markdown("---")
     st.markdown("""
         <div style="text-align: center; color: #6c757d; font-size: 0.9rem;">
-            LogiPartVE Pro v7.0 © 2026 - Todos los derechos reservados
+            LogiPartVE Pro v7.5 © 2026 - Todos los derechos reservados
         </div>
     """, unsafe_allow_html=True)
 

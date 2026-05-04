@@ -1,5 +1,5 @@
 # app.py
-# Aplicación principal LogiPartVE Pro v7.0
+# Aplicación principal LogiPartVE Pro v7.5
 
 import streamlit as st
 from pathlib import Path
@@ -173,7 +173,7 @@ def main():
 
     st.markdown("""
         <div class="footer">
-            LogiPartVE Pro v7.0 © 2026 — Todos los derechos reservados
+            LogiPartVE Pro v7.5 © 2026 — Todos los derechos reservados
         </div>
     """, unsafe_allow_html=True)
 
@@ -335,7 +335,7 @@ def show_admin_dashboard():
     fecha_str  = f"{dia_nombre} {hoy.day} de {mes_nombre} de {hoy.year}"
 
     st.markdown(f"## {saludo}, {user['full_name']} 👋")
-    st.caption(f"Hoy es {fecha_str} — LogiPartVE Pro v7.0")
+    st.caption(f"Hoy es {fecha_str} — LogiPartVE Pro v7.5")
     st.markdown("---")
 
     # ── Selector de rango de fechas ────────────────────────────────────────
@@ -631,7 +631,7 @@ def show_analyst_dashboard():
     fecha_str  = f"{dia_nombre} {hoy.day} de {mes_nombre} de {hoy.year}"
 
     st.markdown(f"## {saludo}, {user['full_name']} 👋")
-    st.caption(f"Hoy es {fecha_str} — LogiPartVE Pro v7.0")
+    st.caption(f"Hoy es {fecha_str} — LogiPartVE Pro v7.5")
     st.markdown("---")
 
     # ── Selector de rango de fechas ────────────────────────────────────────

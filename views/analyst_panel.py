@@ -1,5 +1,5 @@
 """
-Panel de Analista - LogiPartVE Pro v7.0
+Panel de Analista - LogiPartVE Pro v7.5
 Sistema de cotización SIN IA - Solo cálculos y formularios
 Campos configurables desde Panel Admin
 """

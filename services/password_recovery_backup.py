@@ -179,7 +179,7 @@ class PasswordRecoveryService:
                         <p>Si no solicitaste restablecer tu contraseña, puedes ignorar este email.</p>
                     </div>
                     <div class="footer">
-                        <p>LogiPartVE Pro v7.0 © 2026</p>
+                        <p>LogiPartVE Pro v7.5 © 2026</p>
                         <p>Este es un email automático, por favor no respondas a este mensaje.</p>
                     </div>
                 </div>
@@ -200,7 +200,7 @@ class PasswordRecoveryService:
             
             Si no solicitaste restablecer tu contraseña, puedes ignorar este email.
             
-            LogiPartVE Pro v7.0 © 2026
+            LogiPartVE Pro v7.5 © 2026
             """
             
             # Adjuntar ambas versiones

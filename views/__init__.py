@@ -1,5 +1,5 @@
 """
-Vistas de LogiPartVE Pro v7.0
+Vistas de LogiPartVE Pro v7.5
 
 Este módulo contiene las vistas principales de la aplicación:
 - Login: Vista de inicio de sesión

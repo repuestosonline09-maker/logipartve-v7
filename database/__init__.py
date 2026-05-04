@@ -1,5 +1,5 @@
 """
-Módulo de base de datos de LogiPartVE Pro v7.0
+Módulo de base de datos de LogiPartVE Pro v7.5
 
 Este módulo contiene el gestor de base de datos con soporte para:
 - SQLite (desarrollo local)
