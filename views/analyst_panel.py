@@ -1083,11 +1083,15 @@ def render_analyst_panel():
     st.markdown("---")
     
     # ==========================================
-    # SECCIÓN 2.5: ÍTEMS EXISTENTES (MODO EDICIÓN)
+    # SECCIÓN 2.5: ÍTEMS EXISTENTES (MODO EDICIÓN y MODO COPIA)
     # ==========================================
-    if editing_mode and isinstance(st.session_state.cotizacion_items, list) and len(st.session_state.cotizacion_items) > 0:
+    _mostrar_items_existentes = (editing_mode or copying_mode) and isinstance(st.session_state.cotizacion_items, list) and len(st.session_state.cotizacion_items) > 0
+    if _mostrar_items_existentes:
         st.markdown("### 📋 ÍTEMS EXISTENTES")
-        st.info("📝 Puede editar cualquier ítem haciendo clic en '✏️ EDITAR' o eliminar con '🗑️ ELIMINAR'")
+        _msg_items = "📝 Puede editar cualquier ítem haciendo clic en '✏️ EDITAR' o eliminar con '🗑️ ELIMINAR'"
+        if copying_mode:
+            _msg_items = "📝 Ítems copiados de la cotización original. Edita o elimina los que necesites antes de guardar."
+        st.info(_msg_items)
         
         for i, item in enumerate(st.session_state.cotizacion_items):
             # Expandir automáticamente el ítem que se está editando
