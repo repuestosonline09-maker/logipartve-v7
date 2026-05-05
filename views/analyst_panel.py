@@ -299,6 +299,53 @@ def render_analyst_panel():
             if 'editing_item_data' in st.session_state:
                 del st.session_state['editing_item_data']
     
+    # ══ FUNCIÓN DE AUTO-GUARDADO DE BORRADOR ══════════════════════════════════
+    def _autosave_draft():
+        """Guarda el borrador actual en BD. Se llama desde on_change de cada campo.
+        Solo actúa en modo nueva cotización (no edición, no copia)."""
+        try:
+            _cur_user = AuthManager.get_current_user()
+            _uid  = _cur_user.get('user_id') if _cur_user else None
+            _uname = _cur_user.get('username', '') if _cur_user else ''
+            if not _uid:
+                return
+            # No guardar en modo edición ni copia
+            if (st.session_state.get('editing_mode', False) or
+                    st.session_state.get('copying_mode', False)):
+                return
+            # Recopilar datos del cliente desde session_state de los widgets
+            _rk = st.session_state.get('cliente_reset_counter', 0)
+            _cliente_snap = {
+                'nombre':     st.session_state.get(f'cliente_nombre_{_rk}', ''),
+                'telefono':   st.session_state.get(f'cliente_telefono_{_rk}', ''),
+                'email':      st.session_state.get(f'cliente_email_{_rk}', ''),
+                'vehiculo':   st.session_state.get(f'cliente_vehiculo_{_rk}', ''),
+                'cilindrada': st.session_state.get(f'cliente_cilindrada_{_rk}', ''),
+                'ano':        st.session_state.get(f'cliente_ano_{_rk}', ''),
+                'vin':        st.session_state.get(f'cliente_vin_{_rk}', ''),
+                'direccion':  st.session_state.get(f'cliente_direccion_{_rk}', ''),
+                'cedula':     st.session_state.get(f'cliente_ci_rif_{_rk}', ''),
+            }
+            # Recopilar ítem en progreso desde session_state de los widgets
+            _irk = st.session_state.get('item_reset_counter', _rk)
+            _item_progreso = {
+                'descripcion': st.session_state.get(f'item_descripcion_{_irk}', ''),
+                'parte':       st.session_state.get(f'item_parte_{_irk}', ''),
+                'marca':       st.session_state.get(f'item_marca_{_irk}', ''),
+                'fob':         st.session_state.get(f'costo_fob_{_irk}', 0),
+                'handling':    st.session_state.get(f'costo_handling_{_irk}', 0),
+                'envio':       st.session_state.get(f'costo_envio_{_irk}', 0),
+            }
+            _payload = {
+                'cliente':       _cliente_snap,
+                'items':         st.session_state.get('cotizacion_items', []),
+                'item_en_progreso': _item_progreso,
+            }
+            DBManager.save_draft(_uid, _uname, _payload)
+        except Exception:
+            pass  # El auto-guardado nunca debe interrumpir el flujo
+    # ══════════════════════════════════════════════════════════════════════════
+
     # Obtener información del usuario actual
     current_user = AuthManager.get_current_user()
     user_id = current_user.get('user_id') if current_user else None
@@ -383,7 +430,7 @@ def render_analyst_panel():
             and not st.session_state.get('draft_discarded', False)):
         st.session_state.draft_checked = True
         _draft_info = DBManager.load_draft(user_id)
-        if _draft_info and _draft_info.get('items_count', 0) > 0:
+        if _draft_info and (_draft_info.get('items_count', 0) > 0 or _draft_info.get('draft_data', {}).get('cliente', {})):
             st.session_state._pending_draft = _draft_info
 
     # Mostrar banner de borrador pendiente si existe
@@ -404,7 +451,8 @@ def render_analyst_panel():
                 <span style="color:#533f03;">
                     Cliente: <strong>{_d_cliente}</strong>
                     {'| Vehículo: <strong>' + _d_vehiculo + '</strong>' if _d_vehiculo else ''}
-                    | <strong>{_d_items} ítem{'s' if _d_items != 1 else ''}</strong> guardado{'s' if _d_items != 1 else ''}
+                    {('| <strong>' + str(_d_items) + ' ítem' + ('s' if _d_items != 1 else '') + '</strong> guardado' + ('s' if _d_items != 1 else '')) if _d_items > 0 else '| Formulario en progreso'}
+                    {('| N° Parte en progreso: <strong>' + str(_d.get('draft_data', {}).get('item_en_progreso', {}).get('parte', '')) + '</strong>') if _d.get('draft_data', {}).get('item_en_progreso', {}).get('parte') else ''}
                 </span>
             </div>
             """,
@@ -1060,25 +1108,25 @@ def render_analyst_panel():
                     f"(misma cédula y teléfono). El administrador puede eliminarlos desde el panel."
                 )
 
-        cliente_telefono = st.text_input("Teléfono", value=default_telefono, key=f"cliente_telefono_{reset_key}")
+        cliente_telefono = st.text_input("Teléfono", value=default_telefono, key=f"cliente_telefono_{reset_key}", on_change=_autosave_draft)
     with col2:
-        cliente_email = st.text_input("Email (opcional)", value=default_email, key=f"cliente_email_{reset_key}")
-        cliente_vehiculo = st.text_input("Vehículo", value=default_vehiculo, placeholder="Ej: Hyundai Santa Fe 2006", key=f"cliente_vehiculo_{reset_key}")
+        cliente_email = st.text_input("Email (opcional)", value=default_email, key=f"cliente_email_{reset_key}", on_change=_autosave_draft)
+        cliente_vehiculo = st.text_input("Vehículo", value=default_vehiculo, placeholder="Ej: Hyundai Santa Fe 2006", key=f"cliente_vehiculo_{reset_key}", on_change=_autosave_draft)
 
     col3, col4, col5 = st.columns(3)
     with col3:
-        cliente_cilindrada = st.text_input("Cilindrada/Motor", value=default_cilindrada, placeholder="Ej: V6 3.5L", key=f"cliente_cilindrada_{reset_key}")
+        cliente_cilindrada = st.text_input("Cilindrada/Motor", value=default_cilindrada, placeholder="Ej: V6 3.5L", key=f"cliente_cilindrada_{reset_key}", on_change=_autosave_draft)
     with col4:
-        cliente_ano = st.text_input("Año del Vehículo", value=default_ano, key=f"cliente_ano_{reset_key}")
+        cliente_ano = st.text_input("Año del Vehículo", value=default_ano, key=f"cliente_ano_{reset_key}", on_change=_autosave_draft)
     with col5:
-        cliente_vin = st.text_input("Nro. VIN (opcional)", value=default_vin, key=f"cliente_vin_{reset_key}")
+        cliente_vin = st.text_input("Nro. VIN (opcional)", value=default_vin, key=f"cliente_vin_{reset_key}", on_change=_autosave_draft)
 
     # Dirección y C.I./RIF
     col7, col8 = st.columns(2)
     with col7:
-        cliente_direccion = st.text_input("Dirección (opcional)", value=default_direccion, key=f"cliente_direccion_{reset_key}")
+        cliente_direccion = st.text_input("Dirección (opcional)", value=default_direccion, key=f"cliente_direccion_{reset_key}", on_change=_autosave_draft)
     with col8:
-        cliente_ci_rif = st.text_input("C.I. / RIF (opcional)", value=default_ci_rif, key=f"cliente_ci_rif_{reset_key}")
+        cliente_ci_rif = st.text_input("C.I. / RIF (opcional)", value=default_ci_rif, key=f"cliente_ci_rif_{reset_key}", on_change=_autosave_draft)
     
     st.markdown("---")
     
@@ -1277,14 +1325,14 @@ def render_analyst_panel():
     # Fila 1: Descripción y N° Parte
     item_col1, item_col2 = st.columns(2)
     with item_col1:
-        item_descripcion = st.text_input("Descripción del Repuesto", value=default_descripcion, key=f"item_descripcion_{reset_key}", placeholder="Ej: Bomba de gasolina")
+        item_descripcion = st.text_input("Descripción del Repuesto", value=default_descripcion, key=f"item_descripcion_{reset_key}", placeholder="Ej: Bomba de gasolina", on_change=_autosave_draft)
     with item_col2:
-        item_parte = st.text_input("N° de Parte", value=default_parte, key=f"item_parte_{reset_key}", placeholder="Ej: 12345-ABC")
+        item_parte = st.text_input("N° de Parte", value=default_parte, key=f"item_parte_{reset_key}", placeholder="Ej: 12345-ABC", on_change=_autosave_draft)
     
     # Fila 2: Marca (texto libre), Garantía (desde BD), Cantidad (1-1000)
     item_col3, item_col4, item_col5 = st.columns(3)
     with item_col3:
-        item_marca = st.text_input("Marca", value=default_marca, placeholder="Ej: TOYOTA, BOSCH, DENSO...", key=f"item_marca_{reset_key}")
+        item_marca = st.text_input("Marca", value=default_marca, placeholder="Ej: TOYOTA, BOSCH, DENSO...", key=f"item_marca_{reset_key}", on_change=_autosave_draft)
     with item_col4:
         # Encontrar índice de garantía por defecto
         garantia_index = config["garantias"].index(default_garantia) if default_garantia and default_garantia in config["garantias"] else 0
@@ -1433,9 +1481,9 @@ def render_analyst_panel():
     
     cost_col1, cost_col2, cost_col3 = st.columns(3)
     with cost_col1:
-        costo_fob = st.number_input("Costo FOB ($)", min_value=0.0, value=default_fob, step=1.0, placeholder="Ej: $50", key=f"costo_fob_{reset_key}") or 0.0
+        costo_fob = st.number_input("Costo FOB ($)", min_value=0.0, value=default_fob, step=1.0, placeholder="Ej: $50", key=f"costo_fob_{reset_key}", on_change=_autosave_draft) or 0.0
     with cost_col2:
-        costo_handling = st.number_input("Handling ($)", min_value=0.0, value=default_handling, step=1.0, placeholder="Ej: $25", key=f"costo_handling_{reset_key}") or 0.0
+        costo_handling = st.number_input("Handling ($)", min_value=0.0, value=default_handling, step=1.0, placeholder="Ej: $25", key=f"costo_handling_{reset_key}", on_change=_autosave_draft) or 0.0
     with cost_col3:
         # MANEJO - Selectbox desde Admin
         manejo_idx_default = config["manejo_options"].index(default_manejo) if default_manejo and default_manejo in config["manejo_options"] else 0
@@ -1463,7 +1511,7 @@ def render_analyst_panel():
                                     key=f"utilidad_select_{reset_key}")
         factor_utilidad = config["utilidad_factors"][utilidad_idx]
     with cost_col6:
-        costo_envio = st.number_input("Envío ($)", min_value=0.0, value=default_envio, step=1.0, placeholder="Ej: $100", key=f"costo_envio_{reset_key}") or 0.0
+        costo_envio = st.number_input("Envío ($)", min_value=0.0, value=default_envio, step=1.0, placeholder="Ej: $100", key=f"costo_envio_{reset_key}", on_change=_autosave_draft) or 0.0
     
     # TAX - Valor fijo desde Admin (NO seleccionable)
     tax_porcentaje = config["tax_percentage"]
