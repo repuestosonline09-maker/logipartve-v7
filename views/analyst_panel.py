@@ -301,14 +301,10 @@ def render_analyst_panel():
     
     # ══ FUNCIÓN DE AUTO-GUARDADO DE BORRADOR ══════════════════════════════════
     def _autosave_draft():
-        """Guarda el borrador actual en BD. Se llama desde on_change de cada campo.
-        Solo actúa en modo nueva cotización (no edición, no copia)."""
+        """Guarda el borrador en session_state (sin BD). Se llama desde on_change de cada campo.
+        Solo actúa en modo nueva cotización (no edición, no copia).
+        La escritura a BD ocurre al agregar un ítem o al presionar GENERAR COTIZACIÓN."""
         try:
-            _cur_user = AuthManager.get_current_user()
-            _uid  = _cur_user.get('user_id') if _cur_user else None
-            _uname = _cur_user.get('username', '') if _cur_user else ''
-            if not _uid:
-                return
             # No guardar en modo edición ni copia
             if (st.session_state.get('editing_mode', False) or
                     st.session_state.get('copying_mode', False)):
@@ -336,12 +332,12 @@ def render_analyst_panel():
                 'handling':    st.session_state.get(f'costo_handling_{_irk}', 0),
                 'envio':       st.session_state.get(f'costo_envio_{_irk}', 0),
             }
-            _payload = {
-                'cliente':       _cliente_snap,
-                'items':         st.session_state.get('cotizacion_items', []),
+            # Guardar solo en session_state (sin BD, sin rerun extra)
+            st.session_state['_draft_snapshot'] = {
+                'cliente':          _cliente_snap,
+                'items':            st.session_state.get('cotizacion_items', []),
                 'item_en_progreso': _item_progreso,
             }
-            DBManager.save_draft(_uid, _uname, _payload)
         except Exception:
             pass  # El auto-guardado nunca debe interrumpir el flujo
     # ══════════════════════════════════════════════════════════════════════════
@@ -2005,6 +2001,17 @@ def render_analyst_panel():
                                 st.error("❌ Error al actualizar la cotización en la base de datos")
                     else:
                         # Modo creación normal
+                        # Guardar borrador en BD al presionar GENERAR COTIZACIÓN
+                        if user_id and username:
+                            try:
+                                _draft_payload_gen = {
+                                    'cliente': st.session_state.get('cliente_datos', {}),
+                                    'items':   st.session_state.get('cotizacion_items', []),
+                                }
+                                DBManager.save_draft(user_id, username, _draft_payload_gen)
+                                st.session_state._draft_saved_at = time.time()
+                            except Exception:
+                                pass  # El auto-guardado nunca debe interrumpir el flujo
                         # Activar la vista previa de cotización en el mismo render
                         st.session_state.mostrar_cotizacion = True
                         # No necesita st.rerun(): el flag se lee más abajo en el mismo render
