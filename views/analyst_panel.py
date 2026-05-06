@@ -437,18 +437,24 @@ def render_analyst_panel():
         _d_vehiculo= _d.get('client_vehicle', '') or ''
         _d_fecha   = _d.get('updated_at', '')
         _d_fecha_str = str(_d_fecha)[:16] if _d_fecha else 'fecha desconocida'
+        # Construir las partes del resumen fuera del f-string para evitar HTML crudo
+        _banner_vehiculo = f' | Veh\u00edculo: <strong>{_d_vehiculo}</strong>' if _d_vehiculo else ''
+        if _d_items > 0:
+            _s = 's' if _d_items != 1 else ''
+            _banner_items = f' | <strong>{_d_items} \u00edtem{_s}</strong> guardado{_s}'
+        else:
+            _banner_items = ' | Formulario en progreso'
+        _parte_prog = _d.get('draft_data', {}).get('item_en_progreso', {}).get('parte', '')
+        _banner_parte = f' | N\u00b0 Parte en progreso: <strong>{_parte_prog}</strong>' if _parte_prog else ''
         st.markdown(
             f"""
             <div style="background:#FFF3CD;border:2px solid #FFC107;border-radius:8px;
                         padding:14px 18px;margin:8px 0 16px 0;">
                 <span style="font-size:1.1rem;font-weight:700;color:#856404;">
-                    ⚠️ Tienes un borrador sin terminar — {_d_fecha_str}
+                    ⚠️ Tienes un borrador sin terminar &mdash; {_d_fecha_str}
                 </span><br>
                 <span style="color:#533f03;">
-                    Cliente: <strong>{_d_cliente}</strong>
-                    {'| Vehículo: <strong>' + _d_vehiculo + '</strong>' if _d_vehiculo else ''}
-                    {('| <strong>' + str(_d_items) + ' ítem' + ('s' if _d_items != 1 else '') + '</strong> guardado' + ('s' if _d_items != 1 else '')) if _d_items > 0 else '| Formulario en progreso'}
-                    {('| N° Parte en progreso: <strong>' + str(_d.get('draft_data', {}).get('item_en_progreso', {}).get('parte', '')) + '</strong>') if _d.get('draft_data', {}).get('item_en_progreso', {}).get('parte') else ''}
+                    Cliente: <strong>{_d_cliente}</strong>{_banner_vehiculo}{_banner_items}{_banner_parte}
                 </span>
             </div>
             """,
