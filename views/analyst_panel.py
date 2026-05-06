@@ -426,8 +426,24 @@ def render_analyst_panel():
             and not st.session_state.get('draft_discarded', False)):
         st.session_state.draft_checked = True
         _draft_info = DBManager.load_draft(user_id)
-        if _draft_info and (_draft_info.get('items_count', 0) > 0 or _draft_info.get('draft_data', {}).get('cliente', {})):
-            st.session_state._pending_draft = _draft_info
+        if _draft_info:
+            # Solo mostrar el banner si el borrador tiene ítems O datos de cliente con nombre real
+            _d_cliente_check = _draft_info.get('draft_data', {}).get('cliente', {})
+            _d_nombre_check  = str(_d_cliente_check.get('nombre', '') or '').strip()
+            _d_vehiculo_check = str(_d_cliente_check.get('vehiculo', '') or '').strip()
+            _tiene_contenido = (
+                _draft_info.get('items_count', 0) > 0
+                or (len(_d_nombre_check) >= 3 and not _d_nombre_check.isdigit())
+                or len(_d_vehiculo_check) >= 3
+            )
+            if _tiene_contenido:
+                st.session_state._pending_draft = _draft_info
+            else:
+                # Borrador vacío o solo con número de teléfono — descartarlo silenciosamente
+                try:
+                    DBManager.delete_draft(user_id)
+                except Exception:
+                    pass
 
     # Mostrar banner de borrador pendiente si existe
     if st.session_state.get('_pending_draft') and not st.session_state.get('draft_recovered', False):
@@ -462,10 +478,20 @@ def render_analyst_panel():
         )
         _col_rec, _col_des = st.columns(2)
         with _col_rec:
-            if st.button("🔄 RECUPERAR BORRADOR", type="primary", use_container_width=True):
+            if st.button("🔄 RECUPERAR BORRADOR", type="primary", use_container_width=True,
+                         key="btn_recuperar_borrador"):
                 _draft_data = _d.get('draft_data', {})
-                # Restaurar datos del cliente
-                st.session_state.cliente_datos = _draft_data.get('cliente', {})
+                # Limpiar caracteres de control del cliente recuperado
+                _cli_rec = _draft_data.get('cliente', {})
+                import unicodedata as _ud
+                def _clean_draft_str(v):
+                    return ''.join(
+                        ch for ch in str(v or '')
+                        if _ud.category(ch) not in ('Cc', 'Cf') and ord(ch) >= 32
+                    ).strip()
+                _cli_rec_clean = {k: _clean_draft_str(v) for k, v in _cli_rec.items()}
+                # Restaurar datos del cliente (ya limpios)
+                st.session_state.cliente_datos = _cli_rec_clean
                 # Restaurar ítems
                 st.session_state.cotizacion_items = _draft_data.get('items', [])
                 # Limpiar flags
@@ -476,7 +502,8 @@ def render_analyst_panel():
                 st.session_state.cliente_reset_counter = st.session_state.get('cliente_reset_counter', 0) + 1
                 st.rerun()
         with _col_des:
-            if st.button("🗑️ DESCARTAR", type="secondary", use_container_width=True):
+            if st.button("🗑️ DESCARTAR", type="secondary", use_container_width=True,
+                         key="btn_descartar_borrador"):
                 DBManager.delete_draft(user_id)
                 st.session_state._pending_draft  = None
                 st.session_state.draft_discarded = True
@@ -853,8 +880,9 @@ def render_analyst_panel():
     reset_key = st.session_state.cliente_reset_counter
     
     # ── AUTOCOMPLETADO: valores por defecto ──────────────────────────────────
-    # En modo edición O copia, cargar desde cliente_datos. En modo normal, vacío.
-    _usar_datos_guardados = editing_mode or copying_mode
+    # En modo edición, copia O borrador recuperado, cargar desde cliente_datos.
+    _draft_recovered = st.session_state.get('draft_recovered', False)
+    _usar_datos_guardados = editing_mode or copying_mode or _draft_recovered
     default_nombre    = st.session_state.cliente_datos.get('nombre', '')     if _usar_datos_guardados else ''
     default_telefono  = st.session_state.cliente_datos.get('telefono', '')   if _usar_datos_guardados else ''
     default_email     = st.session_state.cliente_datos.get('email', '')      if _usar_datos_guardados else ''
