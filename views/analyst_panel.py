@@ -1641,6 +1641,10 @@ def render_analyst_panel():
     # El diferencial de redondeo se suma visualmente a la utilidad (no modifica el factor)
     utilidad_total_con_redondeo = utilidad_total + redondeo_total
 
+    # Factor real de utilidad (back-calculate con redondeo incluido)
+    # factor_real = precio_usd_redondeado / fob_total  (solo informativo, no modifica nada)
+    factor_real = round(precio_usd_total_redondeado / fob_total, 4) if fob_total > 0 else factor_utilidad
+
     # Calcular valores UNITARIOS para mostrar
     costo_impuesto = costo_impuesto_total / item_cantidad if item_cantidad > 0 else 0
     utilidad_calculada = utilidad_total_con_redondeo / item_cantidad if item_cantidad > 0 else 0
@@ -1661,7 +1665,12 @@ def render_analyst_panel():
     with calc_col1:
         st.metric(f"Impuesto Int. ({impuesto_porcentaje}%)", f"${costo_impuesto:.2f}")
     with calc_col2:
-        st.metric(f"Utilidad (Factor {factor_utilidad})", f"${utilidad_calculada:.2f}")
+        st.metric(
+            f"Utilidad (Factor {factor_utilidad})",
+            f"${utilidad_calculada:.2f}",
+            delta=f"Factor real: ×{factor_real}",
+            delta_color="off"
+        )
     with calc_col3:
         st.metric(f"TAX ({tax_porcentaje}%)", f"${costo_tax:.2f}")
     with calc_col4:
