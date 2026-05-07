@@ -1631,23 +1631,33 @@ def render_analyst_panel():
     else:
         iva_total = 0
         precio_bs_total = precio_bs_total_sin_iva
-    
+
+    # PASO 9: REDONDEO AL MÚLTIPLO DE 5 MÁS CERCANO HACIA ARRIBA (solo precio USD total)
+    # Ejemplo: $198.22 → $200.00  |  $201.01 → $205.00  |  $200.00 → $200.00
+    import math as _math
+    _multiplo = 5
+    precio_usd_total_redondeado = _math.ceil(precio_usd_total / _multiplo) * _multiplo
+    redondeo_total = precio_usd_total_redondeado - precio_usd_total  # siempre >= 0
+    # El diferencial de redondeo se suma visualmente a la utilidad (no modifica el factor)
+    utilidad_total_con_redondeo = utilidad_total + redondeo_total
+
     # Calcular valores UNITARIOS para mostrar
     costo_impuesto = costo_impuesto_total / item_cantidad if item_cantidad > 0 else 0
-    utilidad_calculada = utilidad_total / item_cantidad if item_cantidad > 0 else 0
+    utilidad_calculada = utilidad_total_con_redondeo / item_cantidad if item_cantidad > 0 else 0
     costo_tax = costo_tax_total / item_cantidad if item_cantidad > 0 else 0
     diferencial_valor = diferencial_total / item_cantidad if item_cantidad > 0 else 0
     iva_valor = iva_total / item_cantidad if item_cantidad > 0 else 0
-    precio_usd = precio_usd_total / item_cantidad if item_cantidad > 0 else 0
+    redondeo_unitario = redondeo_total / item_cantidad if item_cantidad > 0 else 0
+    precio_usd = precio_usd_total_redondeado / item_cantidad if item_cantidad > 0 else 0
     precio_bs = precio_bs_total / item_cantidad if item_cantidad > 0 else 0
     precio_bs_sin_iva = precio_bs_total_sin_iva / item_cantidad if item_cantidad > 0 else 0
     
     # Mostrar cálculos intermedios
     if aplicar_iva == "SÍ":
-        calc_col1, calc_col2, calc_col3, calc_col4, calc_col5 = st.columns(5)
+        calc_col1, calc_col2, calc_col3, calc_col4, calc_col5, calc_col6 = st.columns(6)
     else:
-        calc_col1, calc_col2, calc_col3, calc_col4 = st.columns(4)
-    
+        calc_col1, calc_col2, calc_col3, calc_col4, calc_col5 = st.columns(5)
+
     with calc_col1:
         st.metric(f"Impuesto Int. ({impuesto_porcentaje}%)", f"${costo_impuesto:.2f}")
     with calc_col2:
@@ -1656,9 +1666,11 @@ def render_analyst_panel():
         st.metric(f"TAX ({tax_porcentaje}%)", f"${costo_tax:.2f}")
     with calc_col4:
         st.metric(f"Diferencial ({diferencial_porcentaje}%)", f"${diferencial_valor:.2f}")
-    
+    with calc_col5:
+        st.metric("↑ Redondeo (×5)", f"${redondeo_unitario:.2f}")
+
     if aplicar_iva == "SÍ":
-        with calc_col5:
+        with calc_col6:
             st.metric(f"IVA ({iva_porcentaje}%)", f"${iva_valor:.2f}")
     
     st.markdown("---")
@@ -1676,8 +1688,8 @@ def render_analyst_panel():
         else:
             st.metric("🇻🇪 PRECIO Bs (sin IVA)", f"${precio_bs:.2f}")
     
-    # Costo total (ya calculado)
-    costo_total_usd = precio_usd_total
+    # Costo total (ya calculado — precio USD usa el valor redondeado)
+    costo_total_usd = precio_usd_total_redondeado
     costo_total_bs = precio_bs_total
     
     if aplicar_iva == "SÍ":
@@ -1747,7 +1759,7 @@ def render_analyst_panel():
                     "costo_impuesto": costo_impuesto_total,
                     "impuesto_porcentaje": impuesto_porcentaje,
                     "factor_utilidad": factor_utilidad,
-                    "utilidad_valor": utilidad_total,
+                    "utilidad_valor": utilidad_total_con_redondeo,
                     "costo_envio": costo_envio,
                     "costo_tax": costo_tax_total,
                     "tax_porcentaje": tax_porcentaje,
@@ -1756,12 +1768,13 @@ def render_analyst_panel():
                     "aplicar_iva": aplicar_iva == "SÍ",
                     "iva_porcentaje": iva_porcentaje,
                     "iva_valor": iva_total,
-                    "precio_usd": precio_usd_total,
+                    "precio_usd": precio_usd_total_redondeado,
                     "precio_bs": precio_bs_total,
                     "costo_unitario": precio_usd,
                     "costo_total": costo_total_usd,
                     "costo_total_bs": costo_total_bs,
-                    "fob_total": fob_total
+                    "fob_total": fob_total,
+                    "redondeo_valor": redondeo_total
                 }
                 # Protección adicional antes de append o actualizar
                 try:
@@ -1899,7 +1912,7 @@ def render_analyst_panel():
                             "costo_impuesto": costo_impuesto_total,
                             "impuesto_porcentaje": impuesto_porcentaje,
                             "factor_utilidad": factor_utilidad,
-                            "utilidad_valor": utilidad_total,
+                            "utilidad_valor": utilidad_total_con_redondeo,
                             "costo_envio": costo_envio,
                             "costo_tax": costo_tax_total,
                             "tax_porcentaje": tax_porcentaje,
@@ -1908,12 +1921,13 @@ def render_analyst_panel():
                             "aplicar_iva": aplicar_iva == "SÍ",
                             "iva_porcentaje": iva_porcentaje,
                             "iva_valor": iva_total,
-                            "precio_usd": precio_usd_total,
+                            "precio_usd": precio_usd_total_redondeado,
                             "precio_bs": precio_bs_total,
                             "costo_unitario": precio_usd,
                             "costo_total": costo_total_usd,
                             "fob_total": fob_total,
-                            "costo_total_bs": costo_total_bs
+                            "costo_total_bs": costo_total_bs,
+                            "redondeo_valor": redondeo_total
                         }
                         # ── Inserción inteligente: actualizar o agregar según contexto ──
                         if not isinstance(st.session_state.cotizacion_items, list):
