@@ -1879,7 +1879,29 @@ class DBManager:
             conn = DBManager.get_connection()
             cursor = conn.cursor()
             is_postgres = DBManager.USE_POSTGRES
-            
+
+            # ══ CAPA 3: PROTECCIÓN CONTRA SOBREESCRITURA ══════════════════════════════
+            # Verificar que la cotización exista y que su estado sea 'draft'.
+            # Si ya fue aprobada o cancelada, rechazar la inserción de ítems.
+            # Esto evita que un analista sobreescriba una cotización ya cerrada.
+            if is_postgres:
+                cursor.execute("SELECT id, status FROM quotes WHERE id = %s", (quote_id,))
+            else:
+                cursor.execute("SELECT id, status FROM quotes WHERE id = ?", (quote_id,))
+            _existing_quote = cursor.fetchone()
+            if _existing_quote is None:
+                print(f"❌ BLINDAJE: No existe cotización con id={quote_id}. Inserción bloqueada.")
+                cursor.close()
+                DBManager.release_connection(conn)
+                return False
+            _q_status = _existing_quote['status'] if isinstance(_existing_quote, dict) else _existing_quote[1]
+            if _q_status in ('approved', 'cancelled'):
+                print(f"❌ BLINDAJE: Cotización id={quote_id} está en estado '{_q_status}'. Inserción bloqueada.")
+                cursor.close()
+                DBManager.release_connection(conn)
+                return False
+            # ══════════════════════════════════════════════════════════════════
+
             for item in items:
                 description = item.get('descripcion', '') or item.get('description', '')
                 part_number = item.get('parte', '') or item.get('part_number', '')

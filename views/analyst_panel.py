@@ -869,7 +869,142 @@ def render_analyst_panel():
         st.success(f"🔢 **Número de Cotización:** {next_quote_number}")
     
     st.markdown("---")
-    
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # BLINDAJE: Si la cotización ya fue guardada exitosamente, mostrar SOLO el
+    # panel de éxito con los botones PDF / PNG / NUEVA COTIZACIÓN.
+    # El formulario completo queda BLOQUEADO hasta que el analista presione
+    # NUEVA COTIZACIÓN. Esto evita que se sobreescriban datos accidentalmente.
+    # ══════════════════════════════════════════════════════════════════════════
+    if st.session_state.get('cotizacion_guardada', False):
+        _saved_num_display = st.session_state.get('saved_quote_number', '—')
+        st.success(f"✅ **Cotización {_saved_num_display} guardada exitosamente.** Genera el PDF o PNG y luego inicia una nueva cotización.")
+        st.markdown("---")
+
+        # ── Botones PDF / PNG / NUEVA COTIZACIÓN ──────────────────────────────
+        _bc1, _bc2, _bc3 = st.columns(3)
+
+        with _bc1:
+            if st.button("📅 GENERAR PDF", use_container_width=True, type="secondary", key="btn_pdf_blindaje"):
+                if st.session_state.get('saved_quote_number'):
+                    try:
+                        clean_text = _clean_text_gen
+                        _cli_b = st.session_state.get('cliente_datos', {})
+                        _items_b = st.session_state.get('cotizacion_items', [])
+                        _qdata_b = {
+                            'quote_number': st.session_state.saved_quote_number,
+                            'analyst_name': st.session_state.get('full_name', full_name),
+                            'client': {
+                                'nombre':    clean_text(_cli_b.get('nombre', '')),
+                                'telefono':  clean_text(_cli_b.get('telefono', '')),
+                                'email':     clean_text(_cli_b.get('email', '')),
+                                'vehiculo':  clean_text(_cli_b.get('vehiculo', '')),
+                                'motor':     clean_text(_cli_b.get('cilindrada', '')),
+                                'año':       clean_text(str(_cli_b.get('ano', ''))),
+                                'vin':       clean_text(_cli_b.get('vin', '')),
+                                'direccion': clean_text(_cli_b.get('direccion', '')),
+                                'ci_rif':    clean_text(_cli_b.get('ci_rif', '')),
+                            },
+                            'items': _items_b,
+                            'sub_total':    st.session_state.get('_saved_sub_total', 0),
+                            'iva_total':    st.session_state.get('_saved_iva_total', 0),
+                            'total_a_pagar':st.session_state.get('_saved_total_a_pagar', 0),
+                            'abona_ya':     st.session_state.get('_saved_abona_ya', 0),
+                            'y_en_entrega': st.session_state.get('_saved_y_en_entrega', 0),
+                            'total_usd':    st.session_state.get('_saved_total_usd', 0),
+                            'total_bs':     st.session_state.get('_saved_total_bs', 0),
+                            'terminos_condiciones': config.get('terms_conditions', ''),
+                        }
+                        _now_b = now_caracas_naive()
+                        _out_dir_b = f'/home/ubuntu/cotizaciones_guardadas/{_now_b.strftime("%Y")}/{_now_b.strftime("%m")}'
+                        os.makedirs(_out_dir_b, exist_ok=True)
+                        _pdf_fn_b = f"cotizacion_{st.session_state.saved_quote_number}.pdf"
+                        _pdf_path_b = f"{_out_dir_b}/{_pdf_fn_b}"
+                        if PDFQuoteGenerator.generate(_qdata_b, _pdf_path_b):
+                            with open(_pdf_path_b, 'rb') as _f:
+                                st.download_button("📅 Descargar PDF", data=_f, file_name=_pdf_fn_b, mime="application/pdf", use_container_width=True)
+                            st.success("✅ PDF generado")
+                        else:
+                            st.error("❌ Error al generar PDF")
+                    except Exception as _e:
+                        st.error(f"❌ Error: {str(_e)}")
+
+        with _bc2:
+            if st.button("🖼️ GENERAR PNG", use_container_width=True, type="secondary", key="btn_png_blindaje"):
+                if st.session_state.get('saved_quote_number'):
+                    try:
+                        clean_text = _clean_text_gen
+                        _cli_b = st.session_state.get('cliente_datos', {})
+                        _items_b = st.session_state.get('cotizacion_items', [])
+                        _qdata_b = {
+                            'quote_number': st.session_state.saved_quote_number,
+                            'analyst_name': st.session_state.get('full_name', full_name),
+                            'client': {
+                                'nombre':    clean_text(_cli_b.get('nombre', '')),
+                                'telefono':  clean_text(_cli_b.get('telefono', '')),
+                                'email':     clean_text(_cli_b.get('email', '')),
+                                'vehiculo':  clean_text(_cli_b.get('vehiculo', '')),
+                                'motor':     clean_text(_cli_b.get('cilindrada', '')),
+                                'año':       clean_text(str(_cli_b.get('ano', ''))),
+                                'vin':       clean_text(_cli_b.get('vin', '')),
+                                'direccion': clean_text(_cli_b.get('direccion', '')),
+                                'ci_rif':    clean_text(_cli_b.get('ci_rif', '')),
+                            },
+                            'items': _items_b,
+                            'sub_total':    st.session_state.get('_saved_sub_total', 0),
+                            'iva_total':    st.session_state.get('_saved_iva_total', 0),
+                            'total_a_pagar':st.session_state.get('_saved_total_a_pagar', 0),
+                            'abona_ya':     st.session_state.get('_saved_abona_ya', 0),
+                            'y_en_entrega': st.session_state.get('_saved_y_en_entrega', 0),
+                            'total_usd':    st.session_state.get('_saved_total_usd', 0),
+                            'total_bs':     st.session_state.get('_saved_total_bs', 0),
+                            'terminos_condiciones': config.get('terms_conditions', ''),
+                        }
+                        _now_b = now_caracas_naive()
+                        _out_dir_b = f'/home/ubuntu/cotizaciones_guardadas/{_now_b.strftime("%Y")}/{_now_b.strftime("%m")}'
+                        os.makedirs(_out_dir_b, exist_ok=True)
+                        _png_fn_b = f"cotizacion_{st.session_state.saved_quote_number}.png"
+                        _png_path_b = f"{_out_dir_b}/{_png_fn_b}"
+                        from services.document_generation.png_generator import PNGQuoteGenerator
+                        if PNGQuoteGenerator.generate(_qdata_b, _png_path_b):
+                            with open(_png_path_b, 'rb') as _f:
+                                st.download_button("🖼️ Descargar PNG", data=_f, file_name=_png_fn_b, mime="image/png", use_container_width=True)
+                            st.success("✅ PNG generado")
+                        else:
+                            st.error("❌ Error al generar PNG")
+                    except Exception as _e:
+                        st.error(f"❌ Error: {str(_e)}")
+
+        with _bc3:
+            if st.button("🆕 NUEVA COTIZACIÓN", use_container_width=True, type="primary", key="btn_nueva_cot_blindaje"):
+                try:
+                    _keys_blindaje = [
+                        'cotizacion_items', 'cliente_datos',
+                        'mostrar_cotizacion', 'saved_quote_number', 'saved_quote_id',
+                        'cotizacion_guardada', 'show_save_success',
+                        'editing_mode', 'editing_quote_id', 'editing_quote_number',
+                        'editing_quote_data', 'editing_data_loaded',
+                        'editing_item_index', 'editing_item_data',
+                        'item_links', 'limpiar_campos_item', 'cotizacion_aplica_iva',
+                        'guardando_en_progreso',
+                        '_saved_sub_total', '_saved_iva_total', '_saved_total_a_pagar',
+                        '_saved_abona_ya', '_saved_y_en_entrega', '_saved_total_usd', '_saved_total_bs',
+                    ]
+                    for _k in _keys_blindaje:
+                        st.session_state.pop(_k, None)
+                    st.session_state.item_links = []
+                    st.session_state.cotizacion_items = []
+                    st.session_state.cliente_datos = {}
+                    st.session_state.cliente_reset_counter = st.session_state.get('cliente_reset_counter', 0) + 1
+                    st.session_state.item_reset_counter = st.session_state.get('item_reset_counter', 0) + 1
+                    st.session_state.scroll_to_top = True
+                    st.rerun()
+                except Exception as _e:
+                    st.error(f"❌ Error al crear nueva cotización: {str(_e)}")
+
+        # El formulario NO se renderiza mientras cotizacion_guardada=True
+        return
+
     # ==========================================
     # SECCIÓN 1: DATOS DEL CLIENTE
     # ================================    # Inicializar contador de reset para formulario del cliente
@@ -2744,7 +2879,22 @@ Cash | Zelle | Binance | Depósito Bancario Cta Divisas 🤝"""
                                         # Invalidar caché del número de cotización para que el siguiente render muestre el nuevo número
                                         _nqn_cache_key_clear = f'_next_quote_number_cache_{user_id}'
                                         st.session_state.pop(_nqn_cache_key_clear, None)
-                                        # ═══════════════════════════════════════════════
+                                        # ═════════════════════════════════════════════
+
+                                        # ══ GUARDAR TOTALES PARA EL PANEL DE BLINDAJE ══
+                                        # Estos valores se usan en los botones PDF/PNG del panel
+                                        # de éxito que reemplaza al formulario post-guardado.
+                                        try:
+                                            st.session_state['_saved_sub_total']     = sub_total
+                                            st.session_state['_saved_iva_total']     = iva_total
+                                            st.session_state['_saved_total_a_pagar'] = total_a_pagar
+                                            st.session_state['_saved_abona_ya']      = abona_ya
+                                            st.session_state['_saved_y_en_entrega']  = y_en_entrega
+                                            st.session_state['_saved_total_usd']     = total_cotizacion_usd
+                                            st.session_state['_saved_total_bs']      = total_cotizacion_bs
+                                        except Exception:
+                                            pass
+                                        # ═════════════════════════════════════════════
 
                                         st.rerun()
                                     else:
