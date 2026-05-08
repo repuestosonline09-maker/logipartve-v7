@@ -2300,7 +2300,15 @@ def render_analyst_panel():
         y_en_entrega = total_a_pagar - abona_ya
         
         # Y en la Entrega USD = Total USD - USD Abono (equivale a Envío + TAX de todos los ítems)
+        # REDONDEO USD: usd_abono se redondea al múltiplo de 5 hacia arriba
+        # usd_entrega se recalcula como diferencia para que la suma siempre cuadre exactamente
+        import math as _math
+        usd_abono = _math.ceil(usd_abono / 5) * 5
         usd_entrega = total_usd_divisas - usd_abono
+        # Si usd_entrega quedó negativo (caso extremo: abono > total), ajustar
+        if usd_entrega < 0:
+            usd_abono = total_usd_divisas
+            usd_entrega = 0
         
         # Mostrar totales
         st.markdown("### 📊 Totales de la Cotización")
