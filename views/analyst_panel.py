@@ -3023,16 +3023,45 @@ Cash | Zelle | Binance | Depósito Bancario Cta Divisas 🤝"""
                                         # Estos valores se usan en los botones PDF/PNG del panel
                                         # de éxito que reemplaza al formulario post-guardado.
                                         try:
+                                            import math as _math_save
+                                            # Recalcular usd_abono y usd_entrega con redondeo
+                                            # para que el mensaje USD del panel blindaje muestre
+                                            # siempre múltiplos de 5
+                                            _usd_abono_raw = sum(
+                                                it.get('fob_total', 0) +
+                                                it.get('costo_handling', 0) +
+                                                it.get('costo_manejo', 0) +
+                                                it.get('costo_impuesto', 0) +
+                                                it.get('utilidad_valor', 0)
+                                                for it in items
+                                            )
+                                            _total_usd_div = sum(
+                                                it.get('fob_total', 0) +
+                                                it.get('costo_handling', 0) +
+                                                it.get('costo_manejo', 0) +
+                                                it.get('costo_impuesto', 0) +
+                                                it.get('utilidad_valor', 0) +
+                                                it.get('costo_envio', 0) +
+                                                it.get('costo_tax', 0)
+                                                for it in items
+                                            )
+                                            _total_usd_div_r = _math_save.ceil(_total_usd_div / 5) * 5
+                                            _usd_abono_r     = _math_save.ceil(_usd_abono_raw / 5) * 5
+                                            _usd_entrega_r   = _total_usd_div_r - _usd_abono_r
+                                            if _usd_entrega_r < 0:
+                                                _usd_abono_r   = _total_usd_div_r
+                                                _usd_entrega_r = 0
+
                                             st.session_state['_saved_sub_total']     = sub_total
                                             st.session_state['_saved_iva_total']     = iva_total
                                             st.session_state['_saved_total_a_pagar'] = total_a_pagar
                                             st.session_state['_saved_abona_ya']      = abona_ya
                                             st.session_state['_saved_y_en_entrega']  = y_en_entrega
-                                            st.session_state['_saved_total_usd']     = total_cotizacion_usd
+                                            st.session_state['_saved_total_usd']     = _total_usd_div_r
                                             st.session_state['_saved_total_bs']      = total_cotizacion_bs
-                                            # Valores para los botones de mensajes USD/BCV del panel blindaje
-                                            st.session_state['_saved_usd_abono']     = usd_abono
-                                            st.session_state['_saved_usd_entrega']   = usd_entrega
+                                            # Valores redondeados para el mensaje USD del panel blindaje
+                                            st.session_state['_saved_usd_abono']     = _usd_abono_r
+                                            st.session_state['_saved_usd_entrega']   = _usd_entrega_r
                                         except Exception:
                                             pass
                                         # ═════════════════════════════════════════════
