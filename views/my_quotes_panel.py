@@ -723,7 +723,14 @@ def _show_acciones(quote_id: int):
 
             _total_usd += _total_item
             _usd_abono += max(0.0, _abono_item)
+        # Redondeo al múltiplo de 5 hacia arriba (igual que en el formulario de cotización)
+        import math as _math_mq
+        _total_usd   = _math_mq.ceil(_total_usd / 5) * 5
+        _usd_abono   = _math_mq.ceil(_usd_abono / 5) * 5
         _usd_entrega = _total_usd - _usd_abono
+        if _usd_entrega < 0:
+            _usd_abono   = _total_usd
+            _usd_entrega = 0
 
         with st.container():
             st.markdown("""
