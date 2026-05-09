@@ -1002,6 +1002,143 @@ def render_analyst_panel():
                 except Exception as _e:
                     st.error(f"❌ Error al crear nueva cotización: {str(_e)}")
 
+        # ── Botones de mensajes USD y BCV (fila 2 del panel de blindaje) ─────────
+        _saved_total_usd  = st.session_state.get('_saved_total_usd', 0)
+        _saved_usd_abono  = st.session_state.get('_saved_usd_abono', 0)
+        _saved_usd_entrega = st.session_state.get('_saved_usd_entrega', 0)
+
+        st.markdown("---")
+        _bm1, _bm2 = st.columns(2)
+        with _bm1:
+            if st.button("📋 Copiar Mensaje Pago USD", use_container_width=True, type="secondary", key="btn_popup_usd_blindaje"):
+                st.session_state['mostrar_popup_usd_b'] = not st.session_state.get('mostrar_popup_usd_b', False)
+                st.session_state['mostrar_popup_bcv_b'] = False
+        with _bm2:
+            if st.button("📋 Copiar Mensaje BCV", use_container_width=True, type="secondary", key="btn_popup_bcv_blindaje"):
+                st.session_state['mostrar_popup_bcv_b'] = not st.session_state.get('mostrar_popup_bcv_b', False)
+                st.session_state['mostrar_popup_usd_b'] = False
+
+        # ── Pop-up Mensaje USD (panel blindaje) ───────────────────────────────────
+        if st.session_state.get('mostrar_popup_usd_b', False):
+            st.markdown("---")
+            with st.container():
+                st.markdown("""
+                <div style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+                            border: 2px solid #00d4aa;
+                            border-radius: 16px;
+                            padding: 24px;
+                            margin: 8px 0;">
+                    <h3 style="color: #00d4aa; text-align: center; margin-bottom: 16px; font-size: 1.1rem;">
+                        📲 Mensaje listo para WhatsApp / Instagram
+                    </h3>
+                </div>
+                """, unsafe_allow_html=True)
+                _msg_usd_b = (
+                    f"✨ ¡Optimiza tu compra con nosotros! ✨\n\n"
+                    f"💡 ¿Sabías que al realizar tu pago en divisas, puedes acceder a un beneficio especial en el valor total de tus repuestos? "
+                    f"Es nuestra forma de recompensar tu confianza y compromiso. 🙌\n\n"
+                    f"🔑 Esta opción te brinda la oportunidad de asegurar tus piezas con una ventaja adicional, "
+                    f"manteniendo la transparencia y responsabilidad que nos caracterizan.\n\n"
+                    f"📋 Si decides aprovechar esta facilidad, tu presupuesto quedaría en:\n\n"
+                    f"━━━━━━━━━━━━━━━━━━━━\n"
+                    f"💵 *Total a Pagar en USD:*  ${_saved_total_usd:.2f}\n"
+                    f"✅ *Monto a Abonar:*         ${_saved_usd_abono:.2f}\n"
+                    f"🚚 *Y en la Entrega:*        ${_saved_usd_entrega:.2f}\n"
+                    f"━━━━━━━━━━━━━━━━━━━━\n\n"
+                    f"💳 *Formas de pago que te ofrecemos:*\n"
+                    f"Cash | Zelle | Binance | Depósito Bancario Cta Divisas 🤝"
+                )
+                st.text_area("Mensaje generado:", value=_msg_usd_b, height=320,
+                             key="textarea_usd_blindaje",
+                             help="Selecciona todo el texto y cópialo, o usa el botón de abajo.")
+                _txt_usd_b_js = json.dumps(_msg_usd_b)
+                st.components.v1.html(
+                    "<script>"
+                    f"var _tUSD = {_txt_usd_b_js};"
+                    "function copiarUSD_b() {"
+                    "  navigator.clipboard.writeText(_tUSD).then(function() {"
+                    "    var btn = document.getElementById('copy_usd_b');"
+                    "    btn.innerHTML = '&#9989; &iexcl;Copiado!';"
+                    "    btn.style.background = '#00d4aa'; btn.style.color = '#000';"
+                    "    setTimeout(function() {"
+                    "      btn.innerHTML = '&#128203; Copiar al Portapapeles';"
+                    "      btn.style.background = '#0f3460'; btn.style.color = '#fff';"
+                    "    }, 2500);"
+                    "  }).catch(function() {"
+                    "    document.getElementById('copy_usd_b').innerHTML = '&#9888; Selecciona manualmente (Ctrl+A, Ctrl+C)';"
+                    "  });"
+                    "}"
+                    "</script>"
+                    "<button id='copy_usd_b' onclick='copiarUSD_b()'"
+                    " style='width:100%;padding:12px;font-size:1rem;font-weight:bold;"
+                    "background:#0f3460;color:white;border:2px solid #00d4aa;"
+                    "border-radius:8px;cursor:pointer;margin-top:8px;'>"
+                    "&#128203; Copiar al Portapapeles"
+                    "</button>",
+                    height=70
+                )
+                _cc1, _cc2, _cc3 = st.columns([1, 2, 1])
+                with _cc2:
+                    if st.button("✖ Cerrar", use_container_width=True, key="btn_cerrar_usd_b"):
+                        st.session_state['mostrar_popup_usd_b'] = False
+
+        # ── Pop-up Mensaje BCV (panel blindaje) ───────────────────────────────────
+        if st.session_state.get('mostrar_popup_bcv_b', False):
+            st.markdown("---")
+            with st.container():
+                st.markdown("""
+                <div style="background: linear-gradient(135deg, #1a2e1a 0%, #163e16 50%, #0f6030 100%);
+                            border: 2px solid #00d4aa;
+                            border-radius: 16px;
+                            padding: 24px;
+                            margin: 8px 0;">
+                    <h3 style="color: #00d4aa; text-align: center; margin-bottom: 16px; font-size: 1.1rem;">
+                        📲 Mensaje listo para WhatsApp / Instagram
+                    </h3>
+                </div>
+                """, unsafe_allow_html=True)
+                _msg_bcv_b = (
+                    "✅ En la parte central tiene el detalle de la(s) pieza(s). "
+                    "⏱️ Tiempo de entrega y garantía en VZLA.\n\n"
+                    "✅ En la parte inferior derecha puede ver el costo total en sus manos a tasa BCV "
+                    "💵 y la forma de pago si desea ordenarlo(s).\n\n"
+                    "Estaré atento. 👀\n\n"
+                    "Muchas Gracias! 😊🙌"
+                )
+                st.text_area("Mensaje generado:", value=_msg_bcv_b, height=200,
+                             key="textarea_bcv_blindaje",
+                             help="Usa el botón de abajo para copiarlo al portapapeles.")
+                _txt_bcv_b_js = json.dumps(_msg_bcv_b)
+                st.components.v1.html(
+                    "<script>"
+                    f"var _tBCV = {_txt_bcv_b_js};"
+                    "function copiarBCV_b() {"
+                    "  navigator.clipboard.writeText(_tBCV).then(function() {"
+                    "    var btn = document.getElementById('copy_bcv_b');"
+                    "    btn.innerHTML = '&#9989; &iexcl;Copiado!';"
+                    "    btn.style.background = '#00d4aa'; btn.style.color = '#000';"
+                    "    setTimeout(function() {"
+                    "      btn.innerHTML = '&#128203; Copiar al Portapapeles';"
+                    "      btn.style.background = '#0f6030'; btn.style.color = '#fff';"
+                    "    }, 2500);"
+                    "  }).catch(function() {"
+                    "    document.getElementById('copy_bcv_b').innerHTML = '&#9888; Selecciona manualmente (Ctrl+A, Ctrl+C)';"
+                    "  });"
+                    "}"
+                    "</script>"
+                    "<button id='copy_bcv_b' onclick='copiarBCV_b()'"
+                    " style='width:100%;padding:12px;font-size:1rem;font-weight:bold;"
+                    "background:#0f6030;color:white;border:2px solid #00d4aa;"
+                    "border-radius:8px;cursor:pointer;margin-top:8px;'>"
+                    "&#128203; Copiar al Portapapeles"
+                    "</button>",
+                    height=70
+                )
+                _cc1b, _cc2b, _cc3b = st.columns([1, 2, 1])
+                with _cc2b:
+                    if st.button("❖ Cerrar", use_container_width=True, key="btn_cerrar_bcv_b"):
+                        st.session_state['mostrar_popup_bcv_b'] = False
+
         # El formulario NO se renderiza mientras cotizacion_guardada=True
         return
 
@@ -2892,6 +3029,9 @@ Cash | Zelle | Binance | Depósito Bancario Cta Divisas 🤝"""
                                             st.session_state['_saved_y_en_entrega']  = y_en_entrega
                                             st.session_state['_saved_total_usd']     = total_cotizacion_usd
                                             st.session_state['_saved_total_bs']      = total_cotizacion_bs
+                                            # Valores para los botones de mensajes USD/BCV del panel blindaje
+                                            st.session_state['_saved_usd_abono']     = usd_abono
+                                            st.session_state['_saved_usd_entrega']   = usd_entrega
                                         except Exception:
                                             pass
                                         # ═════════════════════════════════════════════
