@@ -965,8 +965,9 @@ def render_analyst_panel():
                         os.makedirs(_out_dir_b, exist_ok=True)
                         _png_fn_b = f"cotizacion_{st.session_state.saved_quote_number}.png"
                         _png_path_b = f"{_out_dir_b}/{_png_fn_b}"
-                        from services.document_generation.png_generator import PNGQuoteGenerator
-                        if PNGQuoteGenerator.generate(_qdata_b, _png_path_b):
+                        from services.document_generation.png_generator import PNGQuoteGenerator as _PNGGen_b
+                        _png_gen_b = _PNGGen_b()
+                        if _png_gen_b.generate_quote_png_from_data(_qdata_b, _png_path_b):
                             with open(_png_path_b, 'rb') as _f:
                                 st.download_button("🖼️ Descargar PNG", data=_f, file_name=_png_fn_b, mime="image/png", use_container_width=True)
                             st.success("✅ PNG generado")
