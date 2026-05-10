@@ -1787,7 +1787,45 @@ class DBManager:
             if not quote_number or not analyst_id:
                 print("Error: quote_number y analyst_id son obligatorios")
                 return None
-            
+
+            # ── PROTECCIÓN ANTI-DUPLICADO POR DOBLE CLIC ─────────────────────────────
+            # Si en los últimos 15 segundos este analista ya guardó una cotización
+            # con el mismo cliente y vehículo, retornamos el ID existente sin insertar.
+            try:
+                _conn_chk = DBManager.get_connection()
+                _cur_chk  = _conn_chk.cursor()
+                if DBManager.USE_POSTGRES:
+                    _cur_chk.execute("""
+                        SELECT id, quote_number FROM quotes
+                        WHERE analyst_id = %s
+                          AND client_phone = %s
+                          AND client_vehicle = %s
+                          AND created_at >= NOW() - INTERVAL '15 seconds'
+                        ORDER BY created_at DESC
+                        LIMIT 1
+                    """, (analyst_id, client_phone, client_vehicle))
+                else:
+                    _cur_chk.execute("""
+                        SELECT id, quote_number FROM quotes
+                        WHERE analyst_id = ?
+                          AND client_phone = ?
+                          AND client_vehicle = ?
+                          AND created_at >= datetime('now', '-15 seconds')
+                        ORDER BY created_at DESC
+                        LIMIT 1
+                    """, (analyst_id, client_phone, client_vehicle))
+                _dup = _cur_chk.fetchone()
+                _cur_chk.close()
+                DBManager.release_connection(_conn_chk)
+                if _dup:
+                    _dup_id  = _dup['id'] if isinstance(_dup, dict) else _dup[0]
+                    _dup_num = _dup['quote_number'] if isinstance(_dup, dict) else _dup[1]
+                    print(f"⚠️ Anti-duplicado: cotización {_dup_num} (ID {_dup_id}) ya existe para este analista/cliente en los últimos 15s. Retornando ID existente.")
+                    return _dup_id
+            except Exception as _dup_err:
+                print(f"[Anti-duplicado] Verificación falló (no bloquea): {_dup_err}")
+            # ─────────────────────────────────────────────────────────────────────────
+
             # Insertar cotización con hora de Caracas (UTC-4)
             created_at_caracas = now_caracas_naive()
             if is_postgres:
