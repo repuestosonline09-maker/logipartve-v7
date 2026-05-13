@@ -2509,19 +2509,14 @@ def render_analyst_panel():
         for item in items:
             cantidad = item.get('cantidad', 1)
             
-            # Sub-Total = TODOS los costos (FOB + Handling + Manejo + Imp.Int + Utilidad + Envío + TAX + Diferencial)
-            # Es decir, el precio completo SIN IVA
-            sub_total_item = (
-                item.get('fob_total', 0) +
-                item.get('costo_handling', 0) +
-                item.get('costo_manejo', 0) +
-                item.get('costo_impuesto', 0) +
-                item.get('utilidad_valor', 0) +
-                item.get('costo_envio', 0) +
-                item.get('costo_tax', 0) +
-                item.get('diferencial_valor', 0)
-            )
-            sub_total += sub_total_item
+            # Sub-Total = precio_bs del ítem (precio con diferencial, sin IVA)
+            # IMPORTANTE: usar precio_bs es la única fuente de verdad correcta porque:
+            # 1. Es exactamente lo que el PDF muestra en la columna TOTAL de cada ítem
+            # 2. Garantiza que UNIT + TOTAL + SUBTOTAL siempre cuadren entre sí
+            # 3. Evita discrepancias cuando los campos individuales (fob_total, costo_tax, etc.)
+            #    no están guardados en la BD (cotizaciones antiguas)
+            _precio_bs_item = float(item.get('precio_bs', 0) or item.get('costo_total_bs', 0) or item.get('costo_total', 0) or 0)
+            sub_total += _precio_bs_item
             
             # IVA - YA VIENE CALCULADO CON CANTIDAD
             if item.get('aplicar_iva', False):
