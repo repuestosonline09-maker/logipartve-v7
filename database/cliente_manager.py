@@ -575,3 +575,125 @@ def detectar_duplicados() -> list:
             except Exception:
                 pass
         return []
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# BLOQUE 7: SINCRONIZACIÓN CLIENTE → COTIZACIÓN
+# ─────────────────────────────────────────────────────────────────────────────
+
+def sincronizar_datos_cliente_en_cotizacion(quote: dict) -> dict:
+    """
+    Enriquece los datos de una cotización con la información más actualizada
+    del directorio de clientes (tabla 'clientes').
+
+    Lógica:
+    - Busca en 'clientes' un registro cuyo nombre normalizado coincida con
+      el nombre del cliente de la cotización.
+    - Si lo encuentra, completa los campos vacíos (client_cedula, client_address,
+      client_phone, client_email) con los valores del directorio.
+    - Si los campos ya tienen valor en la cotización, NO los sobreescribe.
+    - También actualiza la tabla 'quotes' en BD para que la cotización quede
+      sincronizada de forma permanente.
+    - Retorna el dict 'quote' enriquecido (nunca falla: en caso de error
+      devuelve el quote original sin modificar).
+
+    Args:
+        quote: dict con los datos de la cotización (resultado de get_quote_by_id)
+
+    Returns:
+        dict con los datos de la cotización, potencialmente enriquecidos.
+    """
+    if not quote:
+        return quote
+
+    nombre_cot = (quote.get('client_name') or '').strip()
+    if not nombre_cot or len(nombre_cot) < 3:
+        return quote
+
+    # Campos que pueden sincronizarse desde el directorio
+    CAMPOS_SYNC = [
+        ('ci_rif',    'client_cedula'),   # (campo en clientes, campo en quotes)
+        ('direccion', 'client_address'),
+        ('telefono',  'client_phone'),
+    ]
+
+    conn = None
+    try:
+        conn = DBManager.get_connection()
+        cursor = conn.cursor()
+        is_postgres = DBManager.USE_POSTGRES
+
+        # Buscar cliente por nombre normalizado
+        cursor.execute(
+            "SELECT id, nombre, telefono, direccion, ci_rif FROM clientes ORDER BY nombre ASC LIMIT 500"
+        )
+        rows = cursor.fetchall()
+
+        nombre_norm = normalizar(nombre_cot)
+        cliente_encontrado = None
+        for row in rows:
+            nombre_val = _row(row, 'nombre', 1) or ''
+            if normalizar(nombre_val) == nombre_norm:
+                cliente_encontrado = {
+                    'id':        _row(row, 'id', 0),
+                    'nombre':    nombre_val,
+                    'telefono':  _row(row, 'telefono', 2) or '',
+                    'direccion': _row(row, 'direccion', 3) or '',
+                    'ci_rif':    _row(row, 'ci_rif', 4) or '',
+                }
+                break
+
+        if not cliente_encontrado:
+            cursor.close()
+            conn.close()
+            return quote
+
+        # Determinar qué campos necesitan actualizarse en la cotización
+        campos_a_actualizar = {}
+        for campo_cli, campo_quote in CAMPOS_SYNC:
+            valor_cli   = (cliente_encontrado.get(campo_cli) or '').strip()
+            valor_quote = (quote.get(campo_quote) or '').strip()
+            # Solo actualizar si el directorio tiene el dato y la cotización no lo tiene
+            if valor_cli and not valor_quote:
+                campos_a_actualizar[campo_quote] = valor_cli
+
+        if not campos_a_actualizar:
+            cursor.close()
+            conn.close()
+            return quote  # Nada que sincronizar
+
+        # Actualizar la cotización en BD
+        quote_id = quote.get('id')
+        if quote_id:
+            set_clauses = ', '.join(
+                f"{col} = {'%s' if is_postgres else '?'}"
+                for col in campos_a_actualizar.keys()
+            )
+            valores = list(campos_a_actualizar.values()) + [quote_id]
+            sql = f"UPDATE quotes SET {set_clauses} WHERE id = {'%s' if is_postgres else '?'}"
+            cursor.execute(sql, valores)
+            conn.commit()
+            print(f"✅ Cotización ID={quote_id} sincronizada con cliente '{nombre_cot}': {list(campos_a_actualizar.keys())}")
+
+        cursor.close()
+        conn.close()
+
+        # Enriquecer el dict en memoria para que la validación lo vea de inmediato
+        quote = dict(quote)
+        for campo_quote, valor in campos_a_actualizar.items():
+            quote[campo_quote] = valor
+
+        return quote
+
+    except Exception as e:
+        print(f"⚠️ Error en sincronizar_datos_cliente_en_cotizacion: {e}")
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            try:
+                conn.close()
+            except Exception:
+                pass
+        return quote  # Devolver el original sin modificar

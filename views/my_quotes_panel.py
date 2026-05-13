@@ -15,6 +15,7 @@ import tempfile
 from datetime import datetime, timedelta
 from database.db_manager import DBManager
 from services.auth_manager import AuthManager
+from database.cliente_manager import sincronizar_datos_cliente_en_cotizacion
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -431,6 +432,12 @@ def _show_quote_readonly(quote_id: int):
     if not quote:
         st.error("❌ Cotización no encontrada")
         return
+
+    # ── SINCRONIZACIÓN AUTOMÁTICA CON DIRECTORIO DE CLIENTES ─────────────────
+    # Completa campos vacíos de la cotización con datos actualizados del directorio.
+    if quote.get('status') == 'draft':
+        quote = sincronizar_datos_cliente_en_cotizacion(quote)
+    # ─────────────────────────────────────────────────────────────────────────
 
     items = DBManager.get_quote_items(quote_id)
 
@@ -1170,6 +1177,14 @@ def _show_aprobar_orden(quote_id: int):
         st.error("❌ Cotización no encontrada")
         st.session_state.pop('mq_aprobar_id', None)
         return
+
+    # ── SINCRONIZACIÓN AUTOMÁTICA CON DIRECTORIO DE CLIENTES ─────────────────
+    # Si la cotización tiene campos vacíos (cédula, dirección, teléfono) pero
+    # el directorio de clientes tiene esos datos actualizados, se completan
+    # automáticamente antes de validar. Esto permite que una actualización
+    # hecha desde el Panel Administrativo → Clientes sea efectiva de inmediato.
+    quote = sincronizar_datos_cliente_en_cotizacion(quote)
+    # ─────────────────────────────────────────────────────────────────────────
 
     st.markdown("---")
     paso = st.session_state.get('mq_aprobar_paso', 1)
