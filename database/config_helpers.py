@@ -148,14 +148,21 @@ class ConfigHelpers:
 
     @staticmethod
     def get_diferencial() -> float:
-        """Obtiene el diferencial desde la configuración."""
-        # Primero intentar con la clave que usa el panel de administración
-        value = _get_config_with_retry('exchange_differential')
+        """Obtiene el diferencial desde la configuración.
+        
+        IMPORTANTE: Lee primero la clave 'diferencial' (usada por analyst_panel al guardar)
+        y luego 'exchange_differential' como fallback. Esto garantiza que AMBOS flujos
+        (guardar desde Panel Analista y regenerar desde MIS COTIZACIONES) usen el mismo
+        valor de diferencial, evitando discrepancias en el monto en Bolívares.
+        """
+        # Leer primero 'diferencial' — es la clave que usa analyst_panel al calcular precio_bs
+        # y que tiene el valor correcto configurado por el administrador
+        value = _get_config_with_retry('diferencial')
         if not value:
-            # Fallback a la clave legacy
-            value = _get_config_with_retry('diferencial')
+            # Fallback a la clave del panel de administración
+            value = _get_config_with_retry('exchange_differential')
         if not value:
-            value = _get_defaults().get('exchange_differential', '45.0')
+            value = _get_defaults().get('diferencial', '45.0')
         try:
             return float(value)
         except ValueError:
