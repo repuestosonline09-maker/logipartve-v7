@@ -1971,7 +1971,16 @@ class DBManager:
                 aplicar_iva = bool(item.get('aplicar_iva', False))
                 iva_porcentaje = float(item.get('iva_porcentaje', 0.0) or 0.0)
                 iva_valor = float(item.get('iva_valor', 0.0) or 0.0)
-                
+
+                # Campos de precio calculado — guardar para evitar recalcular con diferencial distinto
+                # Estos campos son la fuente de verdad para regenerar PDF/PNG desde MIS COTIZACIONES
+                utilidad_valor       = float(item.get('utilidad_valor', 0.0) or 0.0)
+                diferencial_pct_item = float(item.get('diferencial_porcentaje', 0.0) or 0.0)
+                diferencial_val_item = float(item.get('diferencial_valor', 0.0) or 0.0)
+                fob_total_item       = float(item.get('fob_total', 0.0) or 0.0)
+                precio_usd_item      = float(item.get('precio_usd', 0.0) or item.get('costo_total', 0.0) or total_cost or 0.0)
+                precio_bs_item       = float(item.get('precio_bs', 0.0) or item.get('costo_total_bs', 0.0) or 0.0)
+
                 if is_postgres:
                     cursor.execute("""
                         INSERT INTO quote_items (
@@ -1980,15 +1989,19 @@ class DBManager:
                             fabricacion, tiempo_entrega, page_url,
                             international_handling, national_handling, shipping_cost,
                             tax_percentage, profit_factor,
-                            aplicar_iva, iva_porcentaje, iva_valor
-                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                            aplicar_iva, iva_porcentaje, iva_valor,
+                            utilidad_valor, diferencial_porcentaje, diferencial_valor,
+                            fob_total, precio_usd, precio_bs
+                        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                     """, (
                         quote_id, description, part_number, marca, garantia,
                         quantity, unit_cost, total_cost, envio_tipo, origen,
                         fabricacion, tiempo_entrega, page_url,
                         costo_handling, costo_manejo, costo_envio,
                         impuesto_porcentaje, factor_utilidad,
-                        aplicar_iva, iva_porcentaje, iva_valor
+                        aplicar_iva, iva_porcentaje, iva_valor,
+                        utilidad_valor, diferencial_pct_item, diferencial_val_item,
+                        fob_total_item, precio_usd_item, precio_bs_item
                     ))
                 else:
                     cursor.execute("""
@@ -1998,15 +2011,19 @@ class DBManager:
                             fabricacion, tiempo_entrega, page_url,
                             international_handling, national_handling, shipping_cost,
                             tax_percentage, profit_factor,
-                            aplicar_iva, iva_porcentaje, iva_valor
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            aplicar_iva, iva_porcentaje, iva_valor,
+                            utilidad_valor, diferencial_porcentaje, diferencial_valor,
+                            fob_total, precio_usd, precio_bs
+                        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                     """, (
                         quote_id, description, part_number, marca, garantia,
                         quantity, unit_cost, total_cost, envio_tipo, origen,
                         fabricacion, tiempo_entrega, page_url,
                         costo_handling, costo_manejo, costo_envio,
                         impuesto_porcentaje, factor_utilidad,
-                        aplicar_iva, iva_porcentaje, iva_valor
+                        aplicar_iva, iva_porcentaje, iva_valor,
+                        utilidad_valor, diferencial_pct_item, diferencial_val_item,
+                        fob_total_item, precio_usd_item, precio_bs_item
                     ))
             
             conn.commit()
