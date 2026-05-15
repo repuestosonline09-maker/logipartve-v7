@@ -577,7 +577,13 @@ def show_system_configuration():
             )
             submit_diff = st.form_submit_button("💾 Guardar Diferencial", use_container_width=True)
             if submit_diff:
-                DBManager.set_config('exchange_differential', str(int(exchange_diff)), "Diferencial BCV vs Paralelo - Porcentaje diario", st.session_state.user_id)
+                # Actualizar AMBAS claves simultáneamente para mantener consistencia
+                # 'diferencial' es usada por analyst_panel al calcular precio_bs
+                # 'exchange_differential' es la clave del panel de administración
+                # Ambas deben tener siempre el mismo valor
+                _diff_str = str(int(exchange_diff))
+                DBManager.set_config('exchange_differential', _diff_str, "Diferencial BCV vs Paralelo - Porcentaje diario", st.session_state.user_id)
+                DBManager.set_config('diferencial', _diff_str, "Diferencial BCV vs Paralelo - clave unificada", st.session_state.user_id)
                 st.success(f"✅ Diferencial actualizado a {int(exchange_diff)}%")
                 DBManager.log_activity(st.session_state.user_id, "update_config", f"Actualizó diferencial a {int(exchange_diff)}%")
                 st.session_state.pop('_config_cache_ts', None)  # Invalidar caché
