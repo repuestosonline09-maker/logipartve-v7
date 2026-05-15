@@ -104,9 +104,17 @@ def _adaptar_quote_para_generadores(qd: dict) -> dict:
             precio_usd = base_tax + costo_tax
 
         # precio_bs = precio CON diferencial, SIN IVA
-        # Este es el precio final que ve el cliente en la tabla (igual que columna AH del Excel)
-        dif_val   = precio_usd * (dif_pct / 100)
-        precio_bs = precio_usd + dif_val
+        # PRIORIDAD: usar el precio_bs guardado en BD (fuente de verdad exacta del analista)
+        # Solo recalcular si el campo no fue guardado (cotizaciones antiguas con precio_bs=0)
+        _precio_bs_guardado = float(item.get('precio_bs', 0) or 0)
+        if _precio_bs_guardado > 0:
+            # Usar el valor exacto guardado por el analista al crear la cotización
+            precio_bs = _precio_bs_guardado
+            dif_val   = precio_bs - precio_usd
+        else:
+            # Fallback para cotizaciones antiguas sin precio_bs guardado
+            dif_val   = precio_usd * (dif_pct / 100)
+            precio_bs = precio_usd + dif_val
 
         # Recuperar campos IVA guardados en la BD
         _aplicar_iva  = bool(item.get('aplicar_iva', False))
