@@ -990,6 +990,8 @@ def render_analyst_panel():
                         'guardando_en_progreso',
                         '_saved_sub_total', '_saved_iva_total', '_saved_total_a_pagar',
                         '_saved_abona_ya', '_saved_y_en_entrega', '_saved_total_usd', '_saved_total_bs',
+                        # Cerrar paneles de mensajes WhatsApp/BCV al iniciar nueva cotización
+                        'mostrar_popup_usd_b', 'mostrar_popup_bcv_b',
                     ]
                     for _k in _keys_blindaje:
                         st.session_state.pop(_k, None)
@@ -3273,6 +3275,8 @@ Cash | Zelle | Binance | Depósito Bancario Cta Divisas 🤝"""
                         'item_links', 'limpiar_campos_item',
                         'cotizacion_aplica_iva',  # Resetear IVA a NO por defecto
                         'guardando_en_progreso',  # Resetear protección anti-duplicado
+                        # Cerrar paneles de mensajes WhatsApp/BCV al iniciar nueva cotización
+                        'mostrar_popup_usd', 'mostrar_popup_bcv',
                     ]
                     for _k in _keys_to_clear_nueva:
                         if _k in st.session_state:
