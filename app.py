@@ -164,32 +164,10 @@ def main():
         st.session_state.countries_migration_executed = True
 
     if not AuthManager.is_logged_in():
-        # ── Restauración de sesión desde cookie ──────────────────────────────
-        # IMPORTANTE: El CookieController necesita 2 reruns para leer la cookie:
-        #   Rerun 1: el componente JS se inicializa y dispara un rerun automático
-        #   Rerun 2: la cookie ya está disponible y se puede leer
-        # Para evitar mostrar el login prematuramente durante esos 2 reruns,
-        # usamos la bandera _session_restore_pending.
-        restore_result = restore_session_from_cookie()
+        restore_session_from_cookie()
 
-        if not AuthManager.is_logged_in():
-            # Verificar si estamos en el primer rerun del CookieController
-            # (cuando devuelve vacío pero aún no ha terminado de cargar)
-            if st.session_state.get('_session_restore_pending', False):
-                # Segundo rerun: si sigue sin sesión, mostrar login
-                st.session_state._session_restore_pending = False
-                show_login()
-            elif not restore_result:
-                # Primer rerun: marcar como pendiente y esperar el rerun del componente
-                st.session_state._session_restore_pending = True
-                # No mostrar login todavía — el CookieController hará rerun automático
-                st.stop()
-            else:
-                show_login()
-        else:
-            # Sesión restaurada exitosamente
-            st.session_state._session_restore_pending = False
-            show_main_app()
+    if not AuthManager.is_logged_in():
+        show_login()
     else:
         show_main_app()
 
