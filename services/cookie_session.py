@@ -158,12 +158,9 @@ def restore_session_from_cookie() -> bool:
         raw_cookie = ctrl.get(COOKIE_NAME)
 
         if not raw_cookie:
-            # Mostrar mensaje amigable mientras el componente carga la cookie
-            # Esto evita que el analista vea la pantalla de login y se confunda
-            if not st.session_state.get('_cookie_first_check_done', False):
-                st.session_state._cookie_first_check_done = True
-                st.info("🔄 Restaurando sesión... un momento por favor.")
             print("[CookieSession] No hay cookie de sesión (o aún no cargó el componente)")
+            # Indicar al llamador que el componente aún puede estar cargando
+            # (no hay cookie válida en este rerun, pero puede haberla en el siguiente)
             return False
 
         # Decodificar base64
