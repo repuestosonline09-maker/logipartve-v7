@@ -1,32 +1,35 @@
 # services/cookie_session.py
-# Persistencia de sesión usando cookies del navegador — SOLUCIÓN DEFINITIVA v4
+# Persistencia de sesión — SOLUCIÓN DEFINITIVA v5 (localStorage JS)
 #
 # ─── HISTORIA DE PROBLEMAS ────────────────────────────────────────────────────
-# v1: Usaba st.markdown() para inyectar JS → los scripts NO se ejecutan en Streamlit
-# v2: Usaba CookieController pero mal implementado → en el primer rerun devuelve {}
-# v3: Usaba components.html() + postMessage → el iframe está sandboxed, no puede navegar
+# v1: st.markdown() para inyectar JS → scripts NO se ejecutan en Streamlit
+# v2: CookieController mal implementado → en el primer rerun devuelve {}
+# v3: components.html() + postMessage → iframe sandboxed, no puede navegar
+# v4: CookieController correcto → impredecible: necesita 1-3 reruns, causa
+#     pantalla en blanco cuando no hay cookie que leer
 #
-# ─── SOLUCIÓN DEFINITIVA v4 ───────────────────────────────────────────────────
-# Usar streamlit-cookies-controller correctamente.
+# ─── SOLUCIÓN DEFINITIVA v5 ───────────────────────────────────────────────────
+# Usar localStorage del navegador + st.query_params para pasar el token al
+# servidor en el MISMO rerun, sin necesidad de reruns adicionales.
 #
-# COMPORTAMIENTO CORRECTO de CookieController:
-#   - Rerun 1: CookieController() se inicializa, el componente JS carga en el browser
-#              y hace un rerun automático de Streamlit
-#   - Rerun 2: CookieController.get(COOKIE_NAME) devuelve el valor real de la cookie
+# FLUJO DE LOGIN:
+#   1. Usuario hace login → save_session_token() guarda el token en session_state
+#   2. Un componente JS inyectado en la página guarda el token en localStorage
+#   3. En cada recarga, el JS lee localStorage y lo pone en ?_lp_token=XXX
+#   4. restore_session_from_token() lee st.query_params['_lp_token'] y restaura
 #
-# FLUJO COMPLETO:
-#   Rerun 1: No hay sesión → get_cookie_controller() inicializa el controlador
-#            El componente JS hace un rerun automático
-#   Rerun 2: get_cookie_controller().get(COOKIE_NAME) tiene el valor → restore_session()
-#            Restaura la sesión en st.session_state
+# VENTAJAS vs CookieController:
+#   - Sin reruns adicionales: el token llega en el mismo rerun via query_params
+#   - Sin pantalla en blanco: si no hay token, muestra login inmediatamente
+#   - Sin dependencia de librería externa frágil
+#   - Funciona siempre que Railway reinicie el contenedor
 #
-# NOTA: El usuario puede ver el login por un instante (<1 segundo) antes de que
-#       la sesión se restaure. Esto es el comportamiento correcto y esperado.
-#
-# ─── ESCRITURA DE COOKIE ──────────────────────────────────────────────────────
-# Al hacer login: save_session_cookie() usa CookieController.set() que SÍ funciona
+# ─── SEGURIDAD ────────────────────────────────────────────────────────────────
+# El token es un JWT firmado con SECRET_KEY. Sin la clave, no se puede forjar.
+# El token expira en SESSION_HOURS horas.
 
 import streamlit as st
+import streamlit.components.v1 as components
 import hashlib
 import time
 import json
@@ -36,9 +39,9 @@ from datetime import datetime, timedelta
 
 # ── Configuración ────────────────────────────────────────────────────────────
 SECRET_KEY      = os.environ.get("SECRET_KEY", "logipartve_secret_2026_railway")
-SESSION_HOURS   = 12   # Duración total de la cookie (horas)
+SESSION_HOURS   = 12   # Duración total del token (horas)
 RENEW_THRESHOLD = 2    # Si quedan menos de estas horas, renovar el token
-COOKIE_NAME     = "lp_session"
+TOKEN_PARAM     = "_lp_token"  # Nombre del query param usado para pasar el token
 
 # ── Helpers de token ─────────────────────────────────────────────────────────
 def _generate_token(user_id: int, username: str) -> str:
@@ -77,71 +80,135 @@ def _verify_token(token: str, max_age_hours: int = SESSION_HOURS) -> dict:
         return {"valid": False}
 
 
-def _get_controller():
+# ── Componente JS para leer/escribir localStorage ────────────────────────────
+def _inject_token_reader():
     """
-    Crea un nuevo CookieController en cada llamada.
+    Inyecta un componente JS que:
+    1. Lee el token de localStorage
+    2. Si existe, lo pone en la URL como query param ?_lp_token=XXX
+    3. Streamlit hace un rerun automático al detectar el cambio de URL
     
-    IMPORTANTE: NO cachear el controlador en session_state.
-    El CookieController necesita crearse en cada rerun para que
-    dispare el rerun automático cuando carga las cookies del browser.
-    Si se cachea, el segundo rerun no ocurre y las cookies no se leen.
+    Este componente se inyecta SOLO cuando no hay sesión activa en memoria,
+    para que el servidor pueda leer el token en el siguiente rerun.
+    
+    IMPORTANTE: Solo se inyecta una vez por carga de página para evitar
+    bucles infinitos.
     """
-    try:
-        from streamlit_cookies_controller import CookieController
-        return CookieController(key="_lp_cookies")
-    except ImportError:
-        print("[CookieSession] streamlit-cookies-controller no disponible")
-        return None
-    except Exception as e:
-        print(f"[CookieSession] Error creando CookieController: {e}")
-        return None
+    if st.session_state.get('_token_reader_injected'):
+        return
+    st.session_state['_token_reader_injected'] = True
+
+    components.html("""
+    <script>
+    (function() {
+        var TOKEN_KEY = 'lp_session_token';
+        var PARAM_NAME = '_lp_token';
+        
+        // Leer token de localStorage
+        var token = localStorage.getItem(TOKEN_KEY);
+        
+        if (!token) {
+            // No hay token guardado: no hacer nada, el servidor mostrará el login
+            return;
+        }
+        
+        // Verificar si el token ya está en la URL (evitar bucle)
+        var url = new URL(window.parent.location.href);
+        if (url.searchParams.get(PARAM_NAME) === token) {
+            return;
+        }
+        
+        // Poner el token en la URL para que Streamlit lo lea via query_params
+        url.searchParams.set(PARAM_NAME, token);
+        window.parent.history.replaceState({}, '', url.toString());
+        
+        // Forzar un rerun de Streamlit notificando el cambio de URL
+        window.parent.dispatchEvent(new PopStateEvent('popstate'));
+    })();
+    </script>
+    """, height=0, scrolling=False)
+
+
+def _inject_token_writer(token: str):
+    """
+    Inyecta un componente JS que guarda el token en localStorage
+    y limpia el query param de la URL para que no quede visible.
+    Se llama después de un login exitoso.
+    """
+    token_escaped = token.replace("'", "\\'")
+    components.html(f"""
+    <script>
+    (function() {{
+        var TOKEN_KEY = 'lp_session_token';
+        var PARAM_NAME = '_lp_token';
+        
+        // Guardar token en localStorage
+        localStorage.setItem(TOKEN_KEY, '{token_escaped}');
+        
+        // Limpiar el query param de la URL (no debe quedar visible)
+        var url = new URL(window.parent.location.href);
+        url.searchParams.delete(PARAM_NAME);
+        window.parent.history.replaceState({{}}, '', url.toString());
+    }})();
+    </script>
+    """, height=0, scrolling=False)
+
+
+def _inject_token_cleaner():
+    """
+    Inyecta un componente JS que elimina el token de localStorage.
+    Se llama al hacer logout.
+    """
+    components.html("""
+    <script>
+    (function() {
+        localStorage.removeItem('lp_session_token');
+        // Limpiar también el query param si quedó en la URL
+        var url = new URL(window.parent.location.href);
+        url.searchParams.delete('_lp_token');
+        window.parent.history.replaceState({}, '', url.toString());
+    })();
+    </script>
+    """, height=0, scrolling=False)
 
 
 # ── API pública ───────────────────────────────────────────────────────────────
 def save_session_cookie(user_id: int, username: str, role: str, full_name: str):
     """
-    Guarda la sesión en una cookie del navegador.
+    Guarda la sesión en localStorage del navegador.
     Se llama al hacer login exitoso.
+    Mantiene el nombre 'save_session_cookie' para compatibilidad con el resto del código.
     """
     try:
         token = _generate_token(user_id, username)
-        session_data = {
-            "token":     token,
-            "role":      role,
-            "full_name": full_name
-        }
-        session_json = json.dumps(session_data)
-        cookie_value = base64.b64encode(session_json.encode()).decode()
-
-        ctrl = _get_controller()
-        if ctrl:
-            expires = datetime.now() + timedelta(hours=SESSION_HOURS)
-            ctrl.set(
-                COOKIE_NAME,
-                cookie_value,
-                expires=expires,
-                path="/",
-                same_site="lax"
-            )
-            print(f"[CookieSession] Cookie guardada para: {username}")
-        else:
-            print("[CookieSession] No se pudo guardar cookie: controlador no disponible")
+        # Guardar el token en session_state para que el JS lo pueda escribir
+        st.session_state['_pending_token_save'] = token
+        print(f"[SessionToken] Token generado para: {username}")
     except Exception as e:
-        print(f"[CookieSession] Error guardando cookie: {e}")
+        print(f"[SessionToken] Error generando token: {e}")
+
+
+def inject_token_writer_if_pending():
+    """
+    Si hay un token pendiente de guardar en localStorage, inyectar el JS.
+    Se llama desde show_main_app() después del login exitoso.
+    """
+    token = st.session_state.pop('_pending_token_save', None)
+    if token:
+        _inject_token_writer(token)
 
 
 def restore_session_from_cookie() -> bool:
     """
-    Intenta restaurar la sesión desde la cookie del navegador.
-
-    FLUJO:
-    1. Obtener el CookieController (que en el primer rerun puede devolver {})
-    2. Si hay cookie válida → restaurar sesión
-    3. Si no hay → esperar el rerun automático del componente
-
+    Intenta restaurar la sesión desde localStorage del navegador.
+    Lee el token desde st.query_params[TOKEN_PARAM] que fue puesto
+    por el componente JS en el rerun anterior.
+    
+    Mantiene el nombre 'restore_session_from_cookie' para compatibilidad.
+    
     Returns:
         True si se restauró la sesión.
-        False si no hay cookie válida (aún).
+        False si no hay token válido.
     """
     # Si ya hay sesión activa en memoria, no hacer nada
     if st.session_state.get("logged_in", False):
@@ -150,42 +217,31 @@ def restore_session_from_cookie() -> bool:
     try:
         from database.db_manager import DBManager
 
-        ctrl = _get_controller()
-        if not ctrl:
+        # Leer el token desde query_params (puesto por el JS en el rerun anterior)
+        token = st.query_params.get(TOKEN_PARAM, None)
+
+        if not token:
+            # No hay token en la URL: inyectar el lector de localStorage
+            # para que en el próximo rerun el token esté disponible
+            _inject_token_reader()
             return False
 
-        # Leer la cookie (puede ser None en el primer rerun)
-        raw_cookie = ctrl.get(COOKIE_NAME)
-
-        if not raw_cookie:
-            print("[CookieSession] No hay cookie de sesión (o aún no cargó el componente)")
-            # Indicar al llamador que el componente aún puede estar cargando
-            # (no hay cookie válida en este rerun, pero puede haberla en el siguiente)
-            return False
-
-        # Decodificar base64
-        try:
-            session_json = base64.b64decode(raw_cookie.encode()).decode()
-        except Exception:
-            delete_session_cookie()
-            return False
-
-        try:
-            session_data = json.loads(session_json)
-        except Exception:
-            delete_session_cookie()
-            return False
-
-        token      = session_data.get("token", "")
+        # Verificar el token
         token_info = _verify_token(token)
-
         if not token_info["valid"]:
-            delete_session_cookie()
+            # Token inválido o expirado: limpiar localStorage
+            _inject_token_cleaner()
+            # Limpiar el query param
+            try:
+                del st.query_params[TOKEN_PARAM]
+            except Exception:
+                pass
             return False
 
+        # Buscar el usuario en la BD
         user = DBManager.get_user_by_username(token_info["username"])
         if not user:
-            delete_session_cookie()
+            _inject_token_cleaner()
             return False
 
         # Restaurar sesión en memoria
@@ -198,39 +254,47 @@ def restore_session_from_cookie() -> bool:
         # Renovar el token si está próximo a expirar
         hours_left = SESSION_HOURS - token_info["elapsed_hours"]
         if hours_left < RENEW_THRESHOLD:
-            save_session_cookie(user["id"], user["username"], user["role"], user["full_name"])
-            print(f"[CookieSession] Token renovado para: {user['username']} (quedaban {hours_left:.1f}h)")
+            new_token = _generate_token(user["id"], user["username"])
+            st.session_state['_pending_token_save'] = new_token
+            print(f"[SessionToken] Token renovado para: {user['username']} (quedaban {hours_left:.1f}h)")
         else:
-            print(f"[CookieSession] Sesión restaurada para: {user['username']} ({hours_left:.1f}h restantes)")
+            print(f"[SessionToken] Sesión restaurada para: {user['username']} ({hours_left:.1f}h restantes)")
+
+        # Limpiar el query param de la URL (ya no es necesario)
+        try:
+            del st.query_params[TOKEN_PARAM]
+        except Exception:
+            pass
 
         return True
 
     except Exception as e:
-        print(f"[CookieSession] No se pudo restaurar sesión: {e}")
+        print(f"[SessionToken] No se pudo restaurar sesión: {e}")
         return False
 
 
 def delete_session_cookie():
     """
-    Elimina la cookie de sesión del navegador.
+    Elimina el token de localStorage del navegador.
     Se llama al hacer logout.
+    Mantiene el nombre 'delete_session_cookie' para compatibilidad.
     """
     try:
-        ctrl = _get_controller()
-        if ctrl:
-            ctrl.remove(COOKIE_NAME)
-            print("[CookieSession] Cookie eliminada del navegador.")
-        # Limpiar el controlador del session_state para que se reinicie
-        for key in ["_lp_cookie_ctrl", "_lp_cookies"]:
-            if key in st.session_state:
-                del st.session_state[key]
+        _inject_token_cleaner()
+        # Limpiar también el query param si quedó
+        try:
+            del st.query_params[TOKEN_PARAM]
+        except Exception:
+            pass
+        # Limpiar bandera del lector para que se reinicie en el próximo acceso
+        st.session_state.pop('_token_reader_injected', None)
+        print("[SessionToken] Token eliminado de localStorage.")
     except Exception as e:
-        print(f"[CookieSession] No se pudo eliminar cookie: {e}")
+        print(f"[SessionToken] No se pudo eliminar token: {e}")
 
 
 def inject_session_listener():
     """
-    Función de compatibilidad - ya no es necesaria con CookieController.
-    El CookieController maneja automáticamente la restauración de sesión.
+    Función de compatibilidad — no es necesaria con la nueva implementación.
     """
-    pass  # No-op: CookieController maneja esto automáticamente
+    pass

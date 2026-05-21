@@ -16,7 +16,7 @@ st.set_page_config(
 from database.db_manager import DBManager
 from services.auth_manager import AuthManager
 from services.session_manager import SessionManager
-from services.cookie_session import restore_session_from_cookie, save_session_cookie, delete_session_cookie
+from services.cookie_session import restore_session_from_cookie, save_session_cookie, delete_session_cookie, inject_token_writer_if_pending
 import os
 import sys
 from datetime import datetime, timedelta, timezone
@@ -167,8 +167,10 @@ def main():
         restored = restore_session_from_cookie()
 
     if not AuthManager.is_logged_in():
-        # Sin sesión válida: mostrar pantalla de login directamente.
-        # El CookieController ya intentó restaurar la sesión arriba.
+        # Sin sesión válida: mostrar pantalla de login.
+        # restore_session_from_cookie() ya intentó leer el token de
+        # localStorage via query_params. Si no hay token válido, el
+        # componente JS fue inyectado para intentarlo en el próximo rerun.
         show_login()
     else:
         show_main_app()
@@ -182,6 +184,8 @@ def main():
 
 # ── APLICACIÓN PRINCIPAL ───────────────────────────────────────────────────
 def show_main_app():
+    # Guardar token en localStorage si hay uno pendiente (post-login o renovación)
+    inject_token_writer_if_pending()
     SessionManager.check_and_refresh_session()
     show_header()
 
