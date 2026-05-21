@@ -167,34 +167,10 @@ def main():
         restored = restore_session_from_cookie()
 
     if not AuthManager.is_logged_in():
-        # CORRECCIÓN v5: Un solo intento seguro para el CookieController.
-        #
-        # PROBLEMA DEL v4: El contador de 3 reintentos con st.stop() causaba
-        # pantalla en blanco permanente cuando el CookieController NO dispara
-        # un rerun automático (ocurre cuando no hay cookie que leer).
-        #
-        # SOLUCIÓN v5: Solo esperar 1 rerun adicional. Si después del segundo
-        # intento tampoco hay sesión, mostrar el login normalmente.
-        # Esto cubre el caso de Railway reiniciando (donde el CookieController
-        # sí dispara un rerun automático) sin bloquear a usuarios sin cookie.
-        if not st.session_state.get('_cookie_wait_done', False):
-            # Primer intento: marcar que ya esperamos y detener el render
-            # para que el CookieController tenga tiempo de cargar la cookie.
-            st.session_state['_cookie_wait_done'] = True
-            st.markdown(
-                '<div style="text-align:center;padding:3rem;color:#888;font-size:1rem;">'
-                'Iniciando LogiPartVE Pro…</div>',
-                unsafe_allow_html=True
-            )
-            st.stop()  # Esperar el rerun automático del CookieController
-        else:
-            # Segundo intento: si aún no hay sesión, mostrar login normalmente.
-            # Resetear la bandera para que el próximo acceso funcione igual.
-            st.session_state['_cookie_wait_done'] = False
-            show_login()
+        # Sin sesión válida: mostrar pantalla de login directamente.
+        # El CookieController ya intentó restaurar la sesión arriba.
+        show_login()
     else:
-        # Sesión activa: resetear la bandera para el próximo ciclo
-        st.session_state['_cookie_wait_done'] = False
         show_main_app()
 
     st.markdown("""
