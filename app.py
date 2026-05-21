@@ -164,11 +164,42 @@ def main():
         st.session_state.countries_migration_executed = True
 
     if not AuthManager.is_logged_in():
-        restore_session_from_cookie()
+        restored = restore_session_from_cookie()
 
     if not AuthManager.is_logged_in():
-        show_login()
+        # CORRECCIÓN v3: Protección contra el primer rerun del CookieController.
+        #
+        # El CookieController necesita 2 reruns para leer la cookie:
+        #   Rerun 1: El componente JS se inicializa, devuelve None (aún no cargó)
+        #   Rerun 2: El componente devuelve el valor real de la cookie
+        #
+        # Sin esta protección, en el Rerun 1 el sistema muestra la pantalla de
+        # login aunque el usuario tenga sesión activa. El analista ve el login,
+        # se asusta y vuelve a entrar, perdiendo todo su trabajo.
+        #
+        # Con esta protección: en el Rerun 1 mostramos una pantalla de carga
+        # silenciosa y esperamos el Rerun 2 donde ya hay cookie válida.
+        #
+        # La bandera '_cookie_init_done' se resetea al hacer logout para que
+        # la próxima vez que el usuario entre sin sesión, vea el login normal.
+        if not st.session_state.get('_cookie_init_done', False):
+            # Primer rerun: el CookieController aún no cargó la cookie.
+            # Marcar como inicializado y esperar el rerun automático del componente.
+            st.session_state['_cookie_init_done'] = True
+            # Mostrar indicador de carga mínimo para que no parezca pantalla en blanco
+            st.markdown(
+                '<div style="text-align:center;padding:3rem;color:#888;font-size:1rem;">'  
+                'Iniciando LogiPartVE Pro…</div>',
+                unsafe_allow_html=True
+            )
+            st.stop()  # Esperar el rerun automático del CookieController
+        else:
+            # Rerun 2+: ya se intentó restaurar la cookie y no hay sesión válida.
+            # Mostrar el login normalmente.
+            show_login()
     else:
+        # Sesión activa: resetear la bandera para el próximo ciclo de login
+        st.session_state['_cookie_init_done'] = True
         show_main_app()
 
     st.markdown("""

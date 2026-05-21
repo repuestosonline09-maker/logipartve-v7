@@ -95,15 +95,15 @@ class SessionManager:
         keep_alive_html = """
         <script>
         (function() {
-            // Evitar inicializar múltiples veces en el mismo contexto
+            // Evitar inicializar múltiples veces en el mismo contexto de ventana
             if (window.__logipartveKA) return;
             window.__logipartveKA = true;
 
-            // ── Capa 1: Ping HTTP al servidor cada 20 segundos ──────────────
-            // Usa fetch con keepalive para que el proxy no cierre la conexión
+            // ── Capa 1: Ping HTTP al servidor cada 5 segundos ──────────────
+            // Reducido de 10s a 5s para mayor robustez contra proxies agresivos.
+            // Usa fetch con keepalive para que Railway/Nginx no cierren la conexión.
             function pingServer() {
                 try {
-                    // Hacer ping al servidor padre (no al iframe)
                     var targetUrl = window.parent.location.href;
                     window.parent.fetch(targetUrl, {
                         method: 'GET',
@@ -111,7 +111,6 @@ class SessionManager:
                         cache: 'no-store'
                     }).catch(function() {});
                 } catch(e) {
-                    // Si no podemos acceder al padre, hacer ping al propio iframe
                     try {
                         fetch(window.location.href, {
                             method: 'GET',
@@ -121,10 +120,9 @@ class SessionManager:
                     } catch(e2) {}
                 }
             }
-            setInterval(pingServer, 10000);  // Ping cada 10 segundos para mayor estabilidad
+            setInterval(pingServer, 5000);  // Ping cada 5 segundos
 
             // ── Capa 2: Detectar actividad del usuario ──────────────────────
-            // Registrar eventos en el documento padre
             try {
                 var parentDoc = window.parent.document;
                 var activityEvents = ['mousedown', 'mousemove', 'keypress',
@@ -136,22 +134,48 @@ class SessionManager:
                 });
             } catch(e) {}
 
-            // ── Capa 3: Reconexión automática si el WebSocket cae ───────────
+            // ── Capa 3: Reconexión inteligente si el WebSocket cae ──────────
+            // MEJORA v2: En lugar de recargar inmediatamente (que borra todo),
+            // espera 8 segundos para darle tiempo a Streamlit de reconectar solo.
+            // Si después de 8s sigue offline, intenta reconectar el WebSocket
+            // directamente antes de hacer reload completo.
+            var _offlineSince = null;
             var wsCheckInterval = setInterval(function() {
                 try {
                     var stRoot = window.parent.document.querySelector('[data-testid="stApp"]');
                     var offline = stRoot && stRoot.classList.contains('stApp--offline');
                     if (offline) {
-                        // Esperar 3 segundos y recargar para reconectar
-                        setTimeout(function() {
-                            window.parent.location.reload();
-                        }, 3000);
-                        clearInterval(wsCheckInterval);
+                        if (!_offlineSince) {
+                            _offlineSince = Date.now();
+                            console.log('[LogiPartVE] WebSocket caíyó, esperando reconexión automática...');
+                        } else if ((Date.now() - _offlineSince) > 8000) {
+                            // 8 segundos offline: intentar reconectar el WS de Streamlit
+                            console.log('[LogiPartVE] Reconectando WebSocket de Streamlit...');
+                            try {
+                                // Streamlit expone window.parent.streamlitReconnect en versiones recientes
+                                if (typeof window.parent.streamlitReconnect === 'function') {
+                                    window.parent.streamlitReconnect();
+                                    _offlineSince = null;
+                                } else {
+                                    // Fallback: reload completo como último recurso
+                                    window.parent.location.reload();
+                                }
+                            } catch(e) {
+                                window.parent.location.reload();
+                            }
+                            clearInterval(wsCheckInterval);
+                        }
+                    } else {
+                        // Volvió online: resetear el contador
+                        if (_offlineSince) {
+                            console.log('[LogiPartVE] WebSocket reconectado.');
+                            _offlineSince = null;
+                        }
                     }
                 } catch(e) {}
-            }, 10000);
+            }, 2000);  // Verificar cada 2 segundos si hay offline
 
-            console.log('[LogiPartVE] Keep-alive iniciado (ping cada 20s)');
+            console.log('[LogiPartVE] Keep-alive v2 iniciado (ping cada 5s, WS check cada 2s)');
         })();
         </script>
         """

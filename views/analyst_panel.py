@@ -301,9 +301,15 @@ def render_analyst_panel():
     
     # ══ FUNCIÓN DE AUTO-GUARDADO DE BORRADOR ══════════════════════════════════
     def _autosave_draft():
-        """Guarda el borrador en session_state (sin BD). Se llama desde on_change de cada campo.
+        """Guarda el borrador en session_state Y en BD (con throttle de 3s).
+        Se llama desde on_change de cada campo del formulario.
         Solo actúa en modo nueva cotización (no edición, no copia).
-        La escritura a BD ocurre al agregar un ítem o al presionar GENERAR COTIZACIÓN."""
+
+        CORRECCIÓN v2: Ahora guarda en BD en cada cambio (con throttle para
+        no saturar la BD) incluyendo el ítem en progreso. Esto garantiza que
+        si la app se reinicia, el analista no pierde nada de lo que estaba
+        escribiendo: ni el cliente, ni los ítems agregados, ni el ítem actual.
+        """
         try:
             # No guardar en modo edición ni copia
             if (st.session_state.get('editing_mode', False) or
@@ -332,12 +338,29 @@ def render_analyst_panel():
                 'handling':    st.session_state.get(f'costo_handling_{_irk}', 0),
                 'envio':       st.session_state.get(f'costo_envio_{_irk}', 0),
             }
-            # Guardar solo en session_state (sin BD, sin rerun extra)
-            st.session_state['_draft_snapshot'] = {
+            _draft_payload = {
                 'cliente':          _cliente_snap,
                 'items':            st.session_state.get('cotizacion_items', []),
                 'item_en_progreso': _item_progreso,
             }
+            # Guardar en session_state (instantáneo, sin rerun)
+            st.session_state['_draft_snapshot'] = _draft_payload
+            # ── GUARDAR EN BD con throttle de 3 segundos ─────────────────────
+            # Evita saturar la BD con una escritura por cada tecla presionada.
+            # Si han pasado más de 3 segundos desde el último guardado, escribe en BD.
+            _now_ts = time.time()
+            _last_db_save = st.session_state.get('_draft_last_db_save', 0)
+            _tiene_algo = (
+                any(str(v).strip() for v in _cliente_snap.values() if v)
+                or len(st.session_state.get('cotizacion_items', [])) > 0
+                or any(str(v).strip() for v in _item_progreso.values() if v)
+            )
+            if _tiene_algo and (_now_ts - _last_db_save) >= 3.0 and user_id and username:
+                try:
+                    DBManager.save_draft(user_id, username, _draft_payload)
+                    st.session_state['_draft_last_db_save'] = _now_ts
+                except Exception:
+                    pass  # El auto-guardado nunca debe interrumpir el flujo
         except Exception:
             pass  # El auto-guardado nunca debe interrumpir el flujo
     # ══════════════════════════════════════════════════════════════════════════
@@ -494,12 +517,19 @@ def render_analyst_panel():
                 st.session_state.cliente_datos = _cli_rec_clean
                 # Restaurar ítems
                 st.session_state.cotizacion_items = _draft_data.get('items', [])
+                # CORRECCIÓN v2: Restaurar también el ítem en progreso
+                # Si el analista estaba llenando un ítem cuando la app se cayó,
+                # ese ítem se restaura en el formulario para que no pierda nada.
+                _item_prog_rec = _draft_data.get('item_en_progreso', {})
+                if _item_prog_rec and any(str(v).strip() for v in _item_prog_rec.values() if v):
+                    st.session_state['_recovered_item_en_progreso'] = _item_prog_rec
                 # Limpiar flags
                 st.session_state.draft_recovered  = True
                 st.session_state._pending_draft    = None
                 st.session_state.draft_checked     = False
                 # Forzar re-render de widgets con los datos recuperados
                 st.session_state.cliente_reset_counter = st.session_state.get('cliente_reset_counter', 0) + 1
+                st.session_state.item_reset_counter = st.session_state.get('item_reset_counter', 0) + 1
                 st.rerun()
         with _col_des:
             if st.button("🗑️ DESCARTAR", type="secondary", use_container_width=True,
@@ -1610,9 +1640,11 @@ def render_analyst_panel():
         default_impuesto_pct = editing_item_data.get('impuesto_porcentaje', config["impuesto_options"][0])
         default_utilidad = editing_item_data.get('factor_utilidad', config["utilidad_factors"][0])
     else:
-        default_descripcion = ''
-        default_parte = ''
-        default_marca = ''
+        # CORRECCIÓN v2: Si hay un ítem en progreso recuperado del borrador, usarlo como default
+        _rip = st.session_state.pop('_recovered_item_en_progreso', None)
+        default_descripcion = _rip.get('descripcion', '') if _rip else ''
+        default_parte = _rip.get('parte', '') if _rip else ''
+        default_marca = _rip.get('marca', '') if _rip else ''
         default_link = ''
         default_garantia = None
         default_cantidad = None
@@ -1620,9 +1652,9 @@ def render_analyst_panel():
         default_envio_tipo = None
         default_tiempo = None
         default_fabricacion = None
-        default_fob = None
-        default_handling = None
-        default_envio = None
+        default_fob = float(_rip.get('fob', 0)) if _rip and _rip.get('fob') else None
+        default_handling = float(_rip.get('handling', 0)) if _rip and _rip.get('handling') else None
+        default_envio = float(_rip.get('envio', 0)) if _rip and _rip.get('envio') else None
         default_manejo = None
         default_impuesto_pct = None
         default_utilidad = None
