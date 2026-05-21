@@ -1,0 +1,27 @@
+# railway.toml — Configuración de despliegue para LogiPartVE Pro
+# Objetivo: evitar que Railway "duerma" el contenedor y cause cierres de sesión
+# involuntarios en los analistas.
+#
+# PROBLEMA RESUELTO:
+# Railway en el Hobby Plan puede "dormir" contenedores sin tráfico por ~15 min.
+# Cuando el contenedor duerme y se reactiva, el session_state de Streamlit
+# se borra completamente y los analistas pierden su trabajo.
+#
+# SOLUCIÓN:
+# 1. healthcheckPath: Railway hace ping al servidor cada 30s para mantenerlo vivo
+# 2. restartPolicyType ON_FAILURE: solo reinicia si hay error real, no por inactividad
+# 3. sleepApplication false: desactiva el modo sleep del contenedor
+
+[deploy]
+# Health check: Railway hace ping a esta ruta para verificar que el servidor está vivo.
+# Esto también previene que el contenedor entre en modo sleep por inactividad.
+healthcheckPath = "/"
+healthcheckTimeout = 30
+
+# Solo reiniciar si hay un error real (no por inactividad o timeout)
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5
+
+# Desactivar el modo sleep del contenedor
+# (Railway Hobby Plan puede dormir contenedores sin tráfico)
+sleepApplication = false
