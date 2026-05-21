@@ -314,13 +314,13 @@ def show_main_app():
 
         st.markdown("---")
 
-        def do_logout():
-            AuthManager.logout()
-            # Limpiar menú guardado al cerrar sesión
-            st.session_state.pop('selected_menu', None)
-
+        # CORRECCIÓN v2: Patrón directo en lugar de on_click para evitar
+        # el doble disparo del logout que generaba 2 registros en la BD
+        # y confundía a los analistas con múltiples eventos de cierre de sesión.
         if st.button("🚪 Cerrar Sesión", use_container_width=True,
-                     key="btn_cerrar_sesion", on_click=do_logout):
+                     key="btn_cerrar_sesion"):
+            AuthManager.logout()
+            st.session_state.pop('selected_menu', None)
             st.rerun()
     # ── CONTENIDO PRINCIPAL ────────────────────────────────────────────────────
     if selected_menu == "🏠 Dashboard":
