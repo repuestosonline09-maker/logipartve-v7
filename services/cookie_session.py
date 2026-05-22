@@ -118,12 +118,9 @@ def _inject_token_reader():
             return;
         }
         
-        // Poner el token en la URL para que Streamlit lo lea via query_params
+        // Poner el token en la URL y navegar para forzar rerun de Streamlit
         url.searchParams.set(PARAM_NAME, token);
-        window.parent.history.replaceState({}, '', url.toString());
-        
-        // Forzar un rerun de Streamlit notificando el cambio de URL
-        window.parent.dispatchEvent(new PopStateEvent('popstate'));
+        window.parent.location.href = url.toString();
     })();
     </script>
     """, height=0, scrolling=False)
