@@ -239,7 +239,8 @@ def buscar_clientes(query: str, limite: int = 10) -> list:
             )
         rows = cursor.fetchall()
         cursor.close()
-        conn.close()
+        DBManager.release_connection(conn)
+        conn = None
         # Segunda pasada: filtrar por nombre normalizado (sin acentos)
         # Esto captura casos como 'Maria' encontrando 'María'
         resultados = []
@@ -258,39 +259,36 @@ def buscar_clientes(query: str, limite: int = 10) -> list:
                 break
         # Si el LIKE no encontró nada (posible diferencia de acentos), hacer
         # búsqueda de respaldo por nombre normalizado en toda la tabla
+        # IMPORTANTE: reusar la misma conexión (conn) para no agotar el pool
         if not resultados:
-            conn2 = DBManager.get_connection()
-            cursor2 = conn2.cursor()
-            if is_postgres:
+            try:
+                cursor2 = conn.cursor()
                 cursor2.execute(
-                    "SELECT id, nombre, telefono, direccion, ci_rif FROM clientes ORDER BY nombre ASC"
+                    "SELECT id, nombre, telefono, direccion, ci_rif FROM clientes ORDER BY nombre ASC LIMIT 2000"
                 )
-            else:
-                cursor2.execute(
-                    "SELECT id, nombre, telefono, direccion, ci_rif FROM clientes ORDER BY nombre ASC"
-                )
-            all_rows = cursor2.fetchall()
-            cursor2.close()
-            conn2.close()
-            for row in all_rows:
-                nombre_val = _row(row, 'nombre', 1) or ''
-                nombre_norm = normalizar(nombre_val)
-                if query_norm in nombre_norm:
-                    resultados.append({
-                        'id':        _row(row, 'id', 0),
-                        'nombre':    nombre_val,
-                        'telefono':  _row(row, 'telefono', 2) or '',
-                        'direccion': _row(row, 'direccion', 3) or '',
-                        'ci_rif':    _row(row, 'ci_rif', 4) or '',
-                    })
-                if len(resultados) >= limite:
-                    break
+                all_rows = cursor2.fetchall()
+                cursor2.close()
+                for row in all_rows:
+                    nombre_val = _row(row, 'nombre', 1) or ''
+                    nombre_norm = normalizar(nombre_val)
+                    if query_norm in nombre_norm:
+                        resultados.append({
+                            'id':        _row(row, 'id', 0),
+                            'nombre':    nombre_val,
+                            'telefono':  _row(row, 'telefono', 2) or '',
+                            'direccion': _row(row, 'direccion', 3) or '',
+                            'ci_rif':    _row(row, 'ci_rif', 4) or '',
+                        })
+                    if len(resultados) >= limite:
+                        break
+            except Exception as e2:
+                print(f"❌ Error en búsqueda de respaldo: {e2}")
         return resultados
     except Exception as e:
         print(f"❌ Error buscando clientes: {e}")
         if conn:
             try:
-                conn.close()
+                DBManager.release_connection(conn)
             except Exception:
                 pass
         return []
@@ -320,7 +318,8 @@ def buscar_por_telefono_o_cedula(telefono: str = '', ci_rif: str = '') -> list:
         )
         rows = cursor.fetchall()
         cursor.close()
-        conn.close()
+        DBManager.release_connection(conn)
+        conn = None
         resultados = []
         for row in rows:
             tel_bd = normalizar_numero(_row(row, 'telefono', 2) or '')
@@ -341,7 +340,7 @@ def buscar_por_telefono_o_cedula(telefono: str = '', ci_rif: str = '') -> list:
         print(f"❌ Error en buscar_por_telefono_o_cedula: {e}")
         if conn:
             try:
-                conn.close()
+                DBManager.release_connection(conn)
             except Exception:
                 pass
         return []
