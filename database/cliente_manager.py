@@ -207,6 +207,56 @@ def buscar_clientes(query: str, limite: int = 10) -> list:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# BLOQUE 3B: BÚSQUEDA POR TELÉFONO O CÉDULA (anti-duplicado preventivo)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def buscar_por_telefono_o_cedula(telefono: str = '', ci_rif: str = '') -> list:
+    """
+    Busca clientes que tengan el mismo teléfono O la misma cédula/RIF.
+    Usado para prevenir duplicados antes de crear un nuevo cliente.
+    Retorna lista de dicts con: id, nombre, telefono, direccion, ci_rif, coincide_por
+    """
+    tel_norm = normalizar(telefono.strip()) if telefono else ''
+    ci_norm  = normalizar(ci_rif.strip())   if ci_rif   else ''
+    if not tel_norm and not ci_norm:
+        return []
+    conn = None
+    try:
+        conn = DBManager.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT id, nombre, telefono, direccion, ci_rif FROM clientes ORDER BY nombre ASC LIMIT 500"
+        )
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        resultados = []
+        for row in rows:
+            tel_bd = normalizar(_row(row, 'telefono', 2) or '')
+            ci_bd  = normalizar(_row(row, 'ci_rif', 4)  or '')
+            coincide_tel = tel_norm and tel_bd and tel_norm == tel_bd
+            coincide_ci  = ci_norm  and ci_bd  and ci_norm  == ci_bd
+            if coincide_tel or coincide_ci:
+                resultados.append({
+                    'id':          _row(row, 'id', 0),
+                    'nombre':      _row(row, 'nombre', 1) or '',
+                    'telefono':    _row(row, 'telefono', 2) or '',
+                    'direccion':   _row(row, 'direccion', 3) or '',
+                    'ci_rif':      _row(row, 'ci_rif', 4) or '',
+                    'coincide_por': 'teléfono' if coincide_tel else 'cédula/RIF',
+                })
+        return resultados
+    except Exception as e:
+        print(f"❌ Error en buscar_por_telefono_o_cedula: {e}")
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+        return []
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # BLOQUE 4: GUARDAR O ACTUALIZAR CLIENTE
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -246,13 +296,15 @@ def guardar_o_actualizar(datos: dict) -> dict:
         conn = DBManager.get_connection()
         cursor = conn.cursor()
 
-        # Buscar cliente existente por nombre normalizado
+        # Buscar cliente existente: primero por nombre, luego por teléfono o cédula
         cursor.execute(
             "SELECT id, nombre, telefono, direccion, ci_rif FROM clientes ORDER BY nombre ASC LIMIT 500"
         )
         rows = cursor.fetchall()
 
         cliente_existente = None
+
+        # Paso 1: buscar por nombre normalizado (lógica original)
         for row in rows:
             nombre_bd = _row(row, 'nombre', 1) or ''
             if normalizar(nombre_bd) == nombre_norm:
@@ -264,6 +316,28 @@ def guardar_o_actualizar(datos: dict) -> dict:
                     'ci_rif':    _row(row, 'ci_rif', 4) or '',
                 }
                 break
+
+        # Paso 2: si no encontró por nombre, buscar por teléfono o cédula
+        # Esto evita crear duplicados cuando el nombre tiene pequeñas variaciones
+        if not cliente_existente and (telefono or ci_rif):
+            tel_norm_local = normalizar(telefono) if telefono else ''
+            ci_norm_local  = normalizar(ci_rif)   if ci_rif   else ''
+            for row in rows:
+                tel_bd = normalizar(_row(row, 'telefono', 2) or '')
+                ci_bd  = normalizar(_row(row, 'ci_rif', 4)  or '')
+                coincide_tel = tel_norm_local and tel_bd and tel_norm_local == tel_bd
+                coincide_ci  = ci_norm_local  and ci_bd  and ci_norm_local  == ci_bd
+                if coincide_tel or coincide_ci:
+                    nombre_bd = _row(row, 'nombre', 1) or ''
+                    cliente_existente = {
+                        'id':        _row(row, 'id', 0),
+                        'nombre':    nombre_bd,
+                        'telefono':  _row(row, 'telefono', 2) or '',
+                        'direccion': _row(row, 'direccion', 3) or '',
+                        'ci_rif':    _row(row, 'ci_rif', 4) or '',
+                    }
+                    print(f"⚠️ Duplicado prevenido: cliente encontrado por {'teléfono' if coincide_tel else 'cédula'} — '{nombre_bd}' se actualizará en lugar de crear nuevo registro.")
+                    break
 
         if cliente_existente:
             # Actualizar solo los campos que traen datos nuevos

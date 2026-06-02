@@ -19,7 +19,7 @@ from services.auth_manager import AuthManager
 from services.quote_numbering import QuoteNumberingService
 from database.cliente_manager import (
     init_clientes_table, buscar_clientes, guardar_o_actualizar,
-    es_nombre_real, detectar_duplicados
+    es_nombre_real, detectar_duplicados, buscar_por_telefono_o_cedula
 )
 try:
     from services.document_generation import PDFQuoteGenerator, PNGQuoteGenerator, clean_text as _clean_text_gen
@@ -1444,10 +1444,37 @@ def render_analyst_panel():
                 )
 
         cliente_telefono = st.text_input("Teléfono", value=default_telefono, key=f"cliente_telefono_{reset_key}", on_change=_autosave_draft)
+        # ── VALIDACIÓN ANTI-DUPLICADO: TELÉFONO ──────────────────────────────────
+        # Si el analista escribe un teléfono que ya existe en BD, mostrar alerta y bloquear
+        _tel_actual = st.session_state.get(f'cliente_telefono_{reset_key}', '').strip()
+        _tel_dup_key = f'dup_tel_resultado_{reset_key}'
+        if len(_tel_actual) >= 7 and _tel_actual != st.session_state.get(f'_last_tel_check_{reset_key}', ''):
+            st.session_state[f'_last_tel_check_{reset_key}'] = _tel_actual
+            _dup_tel = buscar_por_telefono_o_cedula(telefono=_tel_actual)
+            # Excluir el cliente actualmente seleccionado (para no alertar en modo edición)
+            _id_sel = (st.session_state.get('ac_seleccionado') or {}).get('id')
+            _dup_tel = [c for c in _dup_tel if c.get('id') != _id_sel]
+            st.session_state[_tel_dup_key] = _dup_tel
+        _dup_tel_result = st.session_state.get(_tel_dup_key, [])
+        if _dup_tel_result:
+            _dup_cli = _dup_tel_result[0]
+            st.markdown(
+                f"""
+                <div style='background:#fff3e0;border-left:4px solid #e65100;
+                            padding:10px 14px;border-radius:6px;margin:6px 0;'>
+                <b>🚫 TELÉFONO DUPLICADO — Ya existe este cliente en la base de datos:</b><br>
+                <b>{_dup_cli.get('nombre','—')}</b> | Tel: {_dup_cli.get('telefono','—')} | C.I.: {_dup_cli.get('ci_rif','—') or '—'}<br>
+                <small>Selecciona el cliente existente usando el buscador de nombre, o verifica el número.</small>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+            st.session_state['_bloquear_por_dup_tel'] = True
+        else:
+            st.session_state['_bloquear_por_dup_tel'] = False
     with col2:
         cliente_email = st.text_input("Email (opcional)", value=default_email, key=f"cliente_email_{reset_key}", on_change=_autosave_draft)
         cliente_vehiculo = st.text_input("Vehículo", value=default_vehiculo, placeholder="Ej: Hyundai Santa Fe 2006", key=f"cliente_vehiculo_{reset_key}", on_change=_autosave_draft)
-
     col3, col4, col5 = st.columns(3)
     with col3:
         cliente_cilindrada = st.text_input("Cilindrada/Motor", value=default_cilindrada, placeholder="Ej: V6 3.5L", key=f"cliente_cilindrada_{reset_key}", on_change=_autosave_draft)
@@ -1455,13 +1482,38 @@ def render_analyst_panel():
         cliente_ano = st.text_input("Año del Vehículo", value=default_ano, key=f"cliente_ano_{reset_key}", on_change=_autosave_draft)
     with col5:
         cliente_vin = st.text_input("Nro. VIN (opcional)", value=default_vin, key=f"cliente_vin_{reset_key}", on_change=_autosave_draft)
-
     # Dirección y C.I./RIF
     col7, col8 = st.columns(2)
     with col7:
         cliente_direccion = st.text_input("Dirección (opcional)", value=default_direccion, key=f"cliente_direccion_{reset_key}", on_change=_autosave_draft)
     with col8:
         cliente_ci_rif = st.text_input("C.I. / RIF (opcional)", value=default_ci_rif, key=f"cliente_ci_rif_{reset_key}", on_change=_autosave_draft)
+        # ── VALIDACIÓN ANTI-DUPLICADO: CÉDULA/RIF ────────────────────────────────
+        _ci_actual = st.session_state.get(f'cliente_ci_rif_{reset_key}', '').strip()
+        _ci_dup_key = f'dup_ci_resultado_{reset_key}'
+        if len(_ci_actual) >= 5 and _ci_actual != st.session_state.get(f'_last_ci_check_{reset_key}', ''):
+            st.session_state[f'_last_ci_check_{reset_key}'] = _ci_actual
+            _dup_ci = buscar_por_telefono_o_cedula(ci_rif=_ci_actual)
+            _id_sel_ci = (st.session_state.get('ac_seleccionado') or {}).get('id')
+            _dup_ci = [c for c in _dup_ci if c.get('id') != _id_sel_ci]
+            st.session_state[_ci_dup_key] = _dup_ci
+        _dup_ci_result = st.session_state.get(_ci_dup_key, [])
+        if _dup_ci_result:
+            _dup_ci_cli = _dup_ci_result[0]
+            st.markdown(
+                f"""
+                <div style='background:#fff3e0;border-left:4px solid #e65100;
+                            padding:10px 14px;border-radius:6px;margin:6px 0;'>
+                <b>🚫 CÉDULA/RIF DUPLICADO — Ya existe este cliente en la base de datos:</b><br>
+                <b>{_dup_ci_cli.get('nombre','—')}</b> | C.I.: {_dup_ci_cli.get('ci_rif','—')} | Tel: {_dup_ci_cli.get('telefono','—') or '—'}<br>
+                <small>Selecciona el cliente existente usando el buscador de nombre, o verifica la cédula.</small>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+            st.session_state['_bloquear_por_dup_ci'] = True
+        else:
+            st.session_state['_bloquear_por_dup_ci'] = False
     
     st.markdown("---")
     
@@ -2826,6 +2878,10 @@ Cash | Zelle | Binance | Depósito Bancario Cta Divisas 🤝"""
                     return True
                 _copy_sin_cambios = _items_son_iguales(_original_snap, _current_items)
 
+            # Determinar si hay bloqueo por cliente duplicado (teléfono o cédula)
+            _bloquear_dup_tel = st.session_state.get('_bloquear_por_dup_tel', False)
+            _bloquear_dup_ci  = st.session_state.get('_bloquear_por_dup_ci',  False)
+            _bloquear_por_dup = _bloquear_dup_tel or _bloquear_dup_ci
             # Determinar label y estado del botón (UN SOLO render con una sola key)
             if _btn_disabled:
                 _guardar_label    = "✅ COTIZACIÓN GUARDADA" if _ya_guardada else "⏳ Guardando..."
@@ -2833,10 +2889,12 @@ Cash | Zelle | Binance | Depósito Bancario Cta Divisas 🤝"""
             elif _copy_sin_cambios:
                 _guardar_label    = "📋 COPIA SIN CAMBIOS — Modifica al menos un ítem"
                 _guardar_disabled = True
+            elif _bloquear_por_dup:
+                _guardar_label    = "🚫 CLIENTE DUPLICADO — Resuelve el conflicto antes de guardar"
+                _guardar_disabled = True
             else:
                 _guardar_label    = button_label
                 _guardar_disabled = False
-
             if _copy_sin_cambios and not _btn_disabled:
                 st.warning("⚠️ Esta cotización es idéntica a la original **#" +
                            st.session_state.get('copying_from_number','') +
