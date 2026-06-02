@@ -434,6 +434,11 @@ def render_analyst_panel():
             st.session_state.item_links = []
             st.session_state.cotizacion_items = []
             st.session_state.cliente_datos = {}
+            # Limpiar el ID del cliente activo para que la validación anti-duplicado
+            # funcione correctamente en la nueva cotización
+            st.session_state.pop('_cliente_activo_id', None)
+            st.session_state['_bloquear_por_dup_tel'] = False
+            st.session_state['_bloquear_por_dup_ci']  = False
             st.rerun()
     else:
         st.title("📋 Nueva Cotización")
@@ -1205,6 +1210,19 @@ def render_analyst_panel():
         default_telefono  = _ac.get('telefono', default_telefono)
         default_direccion = _ac.get('direccion', default_direccion)
         default_ci_rif    = _ac.get('ci_rif', default_ci_rif)
+        # ── CORRECCIÓN ANTI-DUPLICADO FALSO POSITIVO ─────────────────────────
+        # Guardar el ID del cliente seleccionado ANTES de borrar ac_seleccionado.
+        # La validación anti-duplicado lo usará para excluir a este cliente
+        # y no mostrar alertas cuando el analista lo selecciona del buscador.
+        _nuevo_reset = st.session_state.get('cliente_reset_counter', 0) + 1
+        st.session_state['_cliente_activo_id'] = _ac.get('id')
+        # Limpiar cachés de duplicados del nuevo reset_key para que no hereden
+        # resultados del render anterior
+        st.session_state.pop(f'dup_tel_resultado_{_nuevo_reset}', None)
+        st.session_state.pop(f'dup_ci_resultado_{_nuevo_reset}', None)
+        st.session_state['_bloquear_por_dup_tel'] = False
+        st.session_state['_bloquear_por_dup_ci']  = False
+        # ─────────────────────────────────────────────────────────────────────
         # Incrementar reset_key para forzar re-render de los widgets con nuevos valores
         st.session_state.cliente_reset_counter += 1
         reset_key = st.session_state.cliente_reset_counter
@@ -1451,8 +1469,10 @@ def render_analyst_panel():
         if len(_tel_actual) >= 7 and _tel_actual != st.session_state.get(f'_last_tel_check_{reset_key}', ''):
             st.session_state[f'_last_tel_check_{reset_key}'] = _tel_actual
             _dup_tel = buscar_por_telefono_o_cedula(telefono=_tel_actual)
-            # Excluir el cliente actualmente seleccionado (para no alertar en modo edición)
-            _id_sel = (st.session_state.get('ac_seleccionado') or {}).get('id')
+            # Excluir el cliente actualmente activo.
+            # NOTA: ac_seleccionado ya es None en este punto del render;
+            # usamos _cliente_activo_id que se guarda antes de borrarlo.
+            _id_sel = st.session_state.get('_cliente_activo_id')
             _dup_tel = [c for c in _dup_tel if c.get('id') != _id_sel]
             st.session_state[_tel_dup_key] = _dup_tel
         _dup_tel_result = st.session_state.get(_tel_dup_key, [])
@@ -1494,7 +1514,8 @@ def render_analyst_panel():
         if len(_ci_actual) >= 5 and _ci_actual != st.session_state.get(f'_last_ci_check_{reset_key}', ''):
             st.session_state[f'_last_ci_check_{reset_key}'] = _ci_actual
             _dup_ci = buscar_por_telefono_o_cedula(ci_rif=_ci_actual)
-            _id_sel_ci = (st.session_state.get('ac_seleccionado') or {}).get('id')
+            # Excluir el cliente actualmente activo (mismo razonamiento que teléfono)
+            _id_sel_ci = st.session_state.get('_cliente_activo_id')
             _dup_ci = [c for c in _dup_ci if c.get('id') != _id_sel_ci]
             st.session_state[_ci_dup_key] = _dup_ci
         _dup_ci_result = st.session_state.get(_ci_dup_key, [])
