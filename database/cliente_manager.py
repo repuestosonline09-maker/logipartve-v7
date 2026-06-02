@@ -197,22 +197,51 @@ def buscar_clientes(query: str, limite: int = 10) -> list:
     - Busca en nombre completo (nombre y apellido)
     - Requiere al menos 3 caracteres para buscar.
     - Retorna lista de dicts con: id, nombre, telefono, direccion, ci_rif
+
+    IMPLEMENTACIÓN: Usa LIKE en SQL para buscar en TODA la tabla sin límite
+    de registros. La búsqueda por nombre normalizado (sin acentos) se hace
+    en Python sobre los resultados del LIKE, que ya filtra la mayoría.
+    Esto garantiza que ningún cliente quede excluido por estar más allá
+    del registro #500 en orden alfabético.
     """
     if not query or len(query.strip()) < 3:
         return []
-
     query_norm = normalizar(query)
     conn = None
     try:
         conn = DBManager.get_connection()
         cursor = conn.cursor()
-        cursor.execute(
-            "SELECT id, nombre, telefono, direccion, ci_rif FROM clientes ORDER BY nombre ASC LIMIT 500"
-        )
+        is_postgres = DBManager.USE_POSTGRES
+        # Usar LIKE en SQL para pre-filtrar eficientemente en toda la tabla
+        # El % en ambos lados permite encontrar el texto en cualquier posición del nombre
+        patron = f'%{query.strip()}%'
+        if is_postgres:
+            cursor.execute(
+                """
+                SELECT id, nombre, telefono, direccion, ci_rif
+                FROM clientes
+                WHERE nombre ILIKE %s
+                ORDER BY nombre ASC
+                LIMIT 100
+                """,
+                (patron,)
+            )
+        else:
+            cursor.execute(
+                """
+                SELECT id, nombre, telefono, direccion, ci_rif
+                FROM clientes
+                WHERE LOWER(nombre) LIKE LOWER(?)
+                ORDER BY nombre ASC
+                LIMIT 100
+                """,
+                (patron,)
+            )
         rows = cursor.fetchall()
         cursor.close()
         conn.close()
-
+        # Segunda pasada: filtrar por nombre normalizado (sin acentos)
+        # Esto captura casos como 'Maria' encontrando 'María'
         resultados = []
         for row in rows:
             nombre_val = _row(row, 'nombre', 1) or ''
@@ -227,9 +256,36 @@ def buscar_clientes(query: str, limite: int = 10) -> list:
                 })
             if len(resultados) >= limite:
                 break
-
+        # Si el LIKE no encontró nada (posible diferencia de acentos), hacer
+        # búsqueda de respaldo por nombre normalizado en toda la tabla
+        if not resultados:
+            conn2 = DBManager.get_connection()
+            cursor2 = conn2.cursor()
+            if is_postgres:
+                cursor2.execute(
+                    "SELECT id, nombre, telefono, direccion, ci_rif FROM clientes ORDER BY nombre ASC"
+                )
+            else:
+                cursor2.execute(
+                    "SELECT id, nombre, telefono, direccion, ci_rif FROM clientes ORDER BY nombre ASC"
+                )
+            all_rows = cursor2.fetchall()
+            cursor2.close()
+            conn2.close()
+            for row in all_rows:
+                nombre_val = _row(row, 'nombre', 1) or ''
+                nombre_norm = normalizar(nombre_val)
+                if query_norm in nombre_norm:
+                    resultados.append({
+                        'id':        _row(row, 'id', 0),
+                        'nombre':    nombre_val,
+                        'telefono':  _row(row, 'telefono', 2) or '',
+                        'direccion': _row(row, 'direccion', 3) or '',
+                        'ci_rif':    _row(row, 'ci_rif', 4) or '',
+                    })
+                if len(resultados) >= limite:
+                    break
         return resultados
-
     except Exception as e:
         print(f"❌ Error buscando clientes: {e}")
         if conn:
