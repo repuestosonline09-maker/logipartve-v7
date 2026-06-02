@@ -129,6 +129,40 @@ def normalizar(texto: str) -> str:
     return ''.join(c for c in nfkd if not unicodedata.combining(c))
 
 
+def normalizar_numero(valor: str) -> str:
+    """
+    Normaliza un número de cédula o teléfono para comparación sin importar
+    el formato en que fue escrito.
+
+    Reglas aplicadas:
+      1. Elimina espacios, puntos, guiones, paréntesis y barras.
+      2. Para TELÉFONOS venezolanos: elimina el '0' inicial si el resultado
+         tiene 11 dígitos (ej: 04142382548 → 4142382548), para que
+         '04142382548' y '4142382548' sean considerados iguales.
+      3. Para CÉDULAS: elimina prefijos V, E, J, G (ej: 'V-6220606' → '6220606')
+         y normaliza '6.220.606' → '6220606'.
+
+    Ejemplos:
+      '04142382548'  → '4142382548'
+      '0414-238-2548'→ '4142382548'
+      '6.220.606'    → '6220606'
+      'V-6.220.606'  → '6220606'
+      'J-12345678-9' → '123456789'
+    """
+    if not valor:
+        return ''
+    v = valor.strip().upper()
+    # Eliminar prefijos de cédula venezolana (V, E, J, G, P)
+    v = re.sub(r'^[VEJGP][-.]?', '', v)
+    # Eliminar todos los caracteres no numéricos (puntos, guiones, espacios, paréntesis)
+    v = re.sub(r'[^0-9]', '', v)
+    # Para teléfonos venezolanos: quitar el 0 inicial si tiene 11 dígitos
+    # (0414... → 414...) para que '04142382548' y '4142382548' sean iguales
+    if len(v) == 11 and v.startswith('0'):
+        v = v[1:]
+    return v
+
+
 def es_nombre_real(texto: str) -> bool:
     """
     Retorna True si el texto parece un nombre real (solo letras, espacios y
@@ -216,8 +250,9 @@ def buscar_por_telefono_o_cedula(telefono: str = '', ci_rif: str = '') -> list:
     Usado para prevenir duplicados antes de crear un nuevo cliente.
     Retorna lista de dicts con: id, nombre, telefono, direccion, ci_rif, coincide_por
     """
-    tel_norm = normalizar(telefono.strip()) if telefono else ''
-    ci_norm  = normalizar(ci_rif.strip())   if ci_rif   else ''
+    # Usar normalizar_numero para comparación robusta (ignora puntos, guiones, cero inicial)
+    tel_norm = normalizar_numero(telefono) if telefono else ''
+    ci_norm  = normalizar_numero(ci_rif)   if ci_rif   else ''
     if not tel_norm and not ci_norm:
         return []
     conn = None
@@ -232,8 +267,8 @@ def buscar_por_telefono_o_cedula(telefono: str = '', ci_rif: str = '') -> list:
         conn.close()
         resultados = []
         for row in rows:
-            tel_bd = normalizar(_row(row, 'telefono', 2) or '')
-            ci_bd  = normalizar(_row(row, 'ci_rif', 4)  or '')
+            tel_bd = normalizar_numero(_row(row, 'telefono', 2) or '')
+            ci_bd  = normalizar_numero(_row(row, 'ci_rif', 4)  or '')
             coincide_tel = tel_norm and tel_bd and tel_norm == tel_bd
             coincide_ci  = ci_norm  and ci_bd  and ci_norm  == ci_bd
             if coincide_tel or coincide_ci:
@@ -318,13 +353,13 @@ def guardar_o_actualizar(datos: dict) -> dict:
                 break
 
         # Paso 2: si no encontró por nombre, buscar por teléfono o cédula
-        # Esto evita crear duplicados cuando el nombre tiene pequeñas variaciones
+        # Usa normalizar_numero para ignorar puntos, guiones y cero inicial
         if not cliente_existente and (telefono or ci_rif):
-            tel_norm_local = normalizar(telefono) if telefono else ''
-            ci_norm_local  = normalizar(ci_rif)   if ci_rif   else ''
+            tel_norm_local = normalizar_numero(telefono) if telefono else ''
+            ci_norm_local  = normalizar_numero(ci_rif)   if ci_rif   else ''
             for row in rows:
-                tel_bd = normalizar(_row(row, 'telefono', 2) or '')
-                ci_bd  = normalizar(_row(row, 'ci_rif', 4)  or '')
+                tel_bd = normalizar_numero(_row(row, 'telefono', 2) or '')
+                ci_bd  = normalizar_numero(_row(row, 'ci_rif', 4)  or '')
                 coincide_tel = tel_norm_local and tel_bd and tel_norm_local == tel_bd
                 coincide_ci  = ci_norm_local  and ci_bd  and ci_norm_local  == ci_bd
                 if coincide_tel or coincide_ci:
@@ -623,11 +658,12 @@ def detectar_duplicados() -> list:
         conn.close()
 
         # Agrupar por (ci_rif normalizado, telefono normalizado)
+        # Usa normalizar_numero para que '6.220.606' y '6220606' sean la misma clave
         grupos = {}
         for row in rows:
             ci_val  = _row(row, 'ci_rif', 4) or ''
             tel_val = _row(row, 'telefono', 2) or ''
-            clave = (normalizar(ci_val), normalizar(tel_val))
+            clave = (normalizar_numero(ci_val), normalizar_numero(tel_val))
             if clave not in grupos:
                 grupos[clave] = []
             grupos[clave].append({
