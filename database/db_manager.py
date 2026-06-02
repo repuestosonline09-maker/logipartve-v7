@@ -58,8 +58,8 @@ class DBManager:
                     database_url = os.getenv("DATABASE_URL")
                     try:
                         cls._pg_pool = pg_pool.ThreadedConnectionPool(
-                            minconn=1,    # Mínimo 1 conexión siempre activa
-                            maxconn=10,   # Máximo 10 conexiones simultáneas
+                            minconn=2,    # Mínimo 1 conexión siempre activa
+                            maxconn=20,   # Máximo 10 conexiones simultáneas
                             dsn=database_url,
                             cursor_factory=RealDictCursor,
                             connect_timeout=5,
@@ -68,7 +68,7 @@ class DBManager:
                             keepalives_interval=10,
                             keepalives_count=5,
                         )
-                        print("[DBManager] Pool de conexiones PostgreSQL creado (min=1, max=10)")
+                        print("[DBManager] Pool de conexiones PostgreSQL creado (min=2, max=20)")
                     except Exception as e:
                         print(f"[DBManager] Error creando pool: {e}")
                         raise
@@ -88,6 +88,29 @@ class DBManager:
                         pass
                     conn = DBManager._get_pg_pool().getconn()
                 conn.autocommit = False
+                # PARCHE ANTI-FUGA: sobreescribir conn.close() para que devuelva
+                # la conexión al pool en lugar de cerrarla físicamente.
+                # Esto corrige automáticamente todas las funciones que usan
+                # conn.close() en lugar de release_connection(conn).
+                if not hasattr(conn, '_lp_patched'):
+                    _pool_ref = DBManager._get_pg_pool()
+                    _orig_close = conn.close.__func__ if hasattr(conn.close, '__func__') else None
+                    def _safe_close(c=conn, p=_pool_ref):
+                        if not c.closed:
+                            try:
+                                c.rollback()
+                            except Exception:
+                                pass
+                        try:
+                            p.putconn(c)
+                        except Exception:
+                            try:
+                                import psycopg2 as _pg2
+                                _pg2.extensions.connection.close(c)
+                            except Exception:
+                                pass
+                    conn.close = _safe_close
+                    conn._lp_patched = True
                 return conn
             except Exception as e:
                 print(f"[DBManager] Pool no disponible, conexión directa: {e}")
