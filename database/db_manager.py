@@ -21,6 +21,82 @@ except ImportError:
 from typing import Optional, List, Dict, Any
 import bcrypt
 
+
+class PooledConnection:
+    """
+    Wrapper sobre psycopg2.connection que redirige close() a putconn().
+    
+    Esto resuelve el problema de fugas de conexión en todas las funciones
+    que usan conn.close() en lugar de DBManager.release_connection(conn),
+    sin necesidad de modificar cada función individualmente.
+    
+    Uso transparente: se comporta exactamente como una conexión psycopg2 normal.
+    """
+    __slots__ = ('_conn', '_pool', '_returned')
+    
+    def __init__(self, conn, pool):
+        object.__setattr__(self, '_conn', conn)
+        object.__setattr__(self, '_pool', pool)
+        object.__setattr__(self, '_returned', False)
+    
+    def close(self):
+        """Devuelve la conexión al pool en lugar de cerrarla físicamente."""
+        if not object.__getattribute__(self, '_returned'):
+            object.__setattr__(self, '_returned', True)
+            conn = object.__getattribute__(self, '_conn')
+            pool = object.__getattribute__(self, '_pool')
+            try:
+                if not conn.closed:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+                pool.putconn(conn)
+            except Exception:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+    
+    def __getattr__(self, name):
+        """Delega todos los demás atributos a la conexión real."""
+        return getattr(object.__getattribute__(self, '_conn'), name)
+    
+    def __setattr__(self, name, value):
+        if name in ('_conn', '_pool', '_returned'):
+            object.__setattr__(self, name, value)
+        else:
+            setattr(object.__getattribute__(self, '_conn'), name, value)
+    
+    def __enter__(self):
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+        return False
+    
+    def cursor(self, *args, **kwargs):
+        return object.__getattribute__(self, '_conn').cursor(*args, **kwargs)
+    
+    def commit(self):
+        return object.__getattribute__(self, '_conn').commit()
+    
+    def rollback(self):
+        return object.__getattribute__(self, '_conn').rollback()
+    
+    @property
+    def closed(self):
+        return object.__getattribute__(self, '_conn').closed
+    
+    @property
+    def autocommit(self):
+        return object.__getattribute__(self, '_conn').autocommit
+    
+    @autocommit.setter
+    def autocommit(self, value):
+        object.__getattribute__(self, '_conn').autocommit = value
+
+
 class DBManager:
     """
     Gestor de base de datos para LogiPartVE Pro v7.5
@@ -88,30 +164,9 @@ class DBManager:
                         pass
                     conn = DBManager._get_pg_pool().getconn()
                 conn.autocommit = False
-                # PARCHE ANTI-FUGA: sobreescribir conn.close() para que devuelva
-                # la conexión al pool en lugar de cerrarla físicamente.
-                # Esto corrige automáticamente todas las funciones que usan
-                # conn.close() en lugar de release_connection(conn).
-                if not hasattr(conn, '_lp_patched'):
-                    _pool_ref = DBManager._get_pg_pool()
-                    _orig_close = conn.close.__func__ if hasattr(conn.close, '__func__') else None
-                    def _safe_close(c=conn, p=_pool_ref):
-                        if not c.closed:
-                            try:
-                                c.rollback()
-                            except Exception:
-                                pass
-                        try:
-                            p.putconn(c)
-                        except Exception:
-                            try:
-                                import psycopg2 as _pg2
-                                _pg2.extensions.connection.close(c)
-                            except Exception:
-                                pass
-                    conn.close = _safe_close
-                    conn._lp_patched = True
-                return conn
+                # Envolver en PooledConnection para que conn.close() devuelva
+                # la conexión al pool automáticamente (solución definitiva).
+                return PooledConnection(conn, DBManager._get_pg_pool())
             except Exception as e:
                 print(f"[DBManager] Pool no disponible, conexión directa: {e}")
                 # Fallback: conexión directa si el pool está agotado
@@ -126,16 +181,28 @@ class DBManager:
 
     @staticmethod
     def release_connection(conn):
-        """Devuelve una conexión al pool. Llamar después de cada operación."""
+        """Devuelve una conexión al pool. Idempotente y seguro de llamar múltiples veces."""
+        if conn is None:
+            return
+        # Si es un PooledConnection, usar su método close() que ya hace putconn
+        if isinstance(conn, PooledConnection):
+            conn.close()
+            return
+        # Conexión directa (fallback cuando el pool estaba agotado)
         if DBManager.USE_POSTGRES and DBManager._pg_pool is not None:
             try:
+                if not conn.closed:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
                 DBManager._get_pg_pool().putconn(conn)
             except Exception:
                 try:
                     conn.close()
                 except Exception:
                     pass
-    
+
     @staticmethod
     def init_database():
         """Inicializa todas las tablas de la base de datos."""
