@@ -455,19 +455,19 @@ def render_analyst_panel():
         st.session_state.draft_checked = True
         _draft_info = DBManager.load_draft(user_id)
         if _draft_info:
-            # Solo mostrar el banner si el borrador tiene ítems O datos de cliente con nombre real
-            _d_cliente_check = _draft_info.get('draft_data', {}).get('cliente', {})
-            _d_nombre_check  = str(_d_cliente_check.get('nombre', '') or '').strip()
+            # Mostrar el banner si el borrador tiene ítems O datos de cliente con contenido.
+            # NOTA: el nombre puede ser un número de teléfono (flujo válido cuando no se
+            # tiene el nombre del cliente al momento de cotizar). Si hay ítems, SIEMPRE mostrar.
+            _d_cliente_check  = _draft_info.get('draft_data', {}).get('cliente', {})
+            _d_nombre_check   = str(_d_cliente_check.get('nombre', '') or '').strip()
             _d_vehiculo_check = str(_d_cliente_check.get('vehiculo', '') or '').strip()
-            _tiene_contenido = (
-                _draft_info.get('items_count', 0) > 0
-                or (len(_d_nombre_check) >= 3 and not _d_nombre_check.isdigit())
-                or len(_d_vehiculo_check) >= 3
-            )
+            _tiene_items      = _draft_info.get('items_count', 0) > 0
+            _tiene_cliente    = len(_d_nombre_check) >= 3 or len(_d_vehiculo_check) >= 3
+            _tiene_contenido  = _tiene_items or _tiene_cliente
             if _tiene_contenido:
                 st.session_state._pending_draft = _draft_info
             else:
-                # Borrador vacío o solo con número de teléfono — descartarlo silenciosamente
+                # Borrador completamente vacío — descartarlo silenciosamente
                 try:
                     DBManager.delete_draft(user_id)
                 except Exception:
@@ -1466,7 +1466,13 @@ def render_analyst_panel():
         # Si el analista escribe un teléfono que ya existe en BD, mostrar alerta y bloquear
         _tel_actual = st.session_state.get(f'cliente_telefono_{reset_key}', '').strip()
         _tel_dup_key = f'dup_tel_resultado_{reset_key}'
-        if len(_tel_actual) >= 7 and _tel_actual != st.session_state.get(f'_last_tel_check_{reset_key}', ''):
+        # Verificar si el nombre del cliente es un número de teléfono (flujo válido:
+        # el analista usa el teléfono como nombre temporal cuando no tiene el nombre real)
+        _nombre_para_dup = st.session_state.get(f'cliente_nombre_{reset_key}', '').strip()
+        _nombre_es_telefono = _nombre_para_dup.replace('-', '').replace(' ', '').isdigit() and len(_nombre_para_dup) >= 7
+        if (not _nombre_es_telefono
+                and len(_tel_actual) >= 7
+                and _tel_actual != st.session_state.get(f'_last_tel_check_{reset_key}', '')):
             st.session_state[f'_last_tel_check_{reset_key}'] = _tel_actual
             _dup_tel = buscar_por_telefono_o_cedula(telefono=_tel_actual)
             # Excluir el cliente actualmente activo.
@@ -1475,6 +1481,9 @@ def render_analyst_panel():
             _id_sel = st.session_state.get('_cliente_activo_id')
             _dup_tel = [c for c in _dup_tel if c.get('id') != _id_sel]
             st.session_state[_tel_dup_key] = _dup_tel
+        elif _nombre_es_telefono:
+            # Nombre es teléfono temporal — limpiar cualquier alerta previa
+            st.session_state[_tel_dup_key] = []
         _dup_tel_result = st.session_state.get(_tel_dup_key, [])
         if _dup_tel_result:
             _dup_cli = _dup_tel_result[0]
