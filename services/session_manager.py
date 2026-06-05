@@ -135,11 +135,14 @@ class SessionManager:
             } catch(e) {}
 
             // ── Capa 3: Reconexión inteligente si el WebSocket cae ──────────
-            // MEJORA v2: En lugar de recargar inmediatamente (que borra todo),
-            // espera 8 segundos para darle tiempo a Streamlit de reconectar solo.
-            // Si después de 8s sigue offline, intenta reconectar el WebSocket
-            // directamente antes de hacer reload completo.
+            // MEJORA v3: Elimina el reload() que destruía st.session_state y
+            // causaba cierres de sesión. Ahora usa reintentos de reconexión WS
+            // sin recargar la página. Si el WS no vuelve, espera indefinidamente
+            // en lugar de hacer reload (el token en localStorage garantiza la
+            // restauración automática si el usuario recarga manualmente).
             var _offlineSince = null;
+            var _reconnectAttempts = 0;
+            var MAX_RECONNECT_ATTEMPTS = 5;
             var wsCheckInterval = setInterval(function() {
                 try {
                     var stRoot = window.parent.document.querySelector('[data-testid="stApp"]');
@@ -147,35 +150,45 @@ class SessionManager:
                     if (offline) {
                         if (!_offlineSince) {
                             _offlineSince = Date.now();
-                            console.log('[LogiPartVE] WebSocket caíyó, esperando reconexión automática...');
-                        } else if ((Date.now() - _offlineSince) > 8000) {
-                            // 8 segundos offline: intentar reconectar el WS de Streamlit
-                            console.log('[LogiPartVE] Reconectando WebSocket de Streamlit...');
-                            try {
-                                // Streamlit expone window.parent.streamlitReconnect en versiones recientes
-                                if (typeof window.parent.streamlitReconnect === 'function') {
-                                    window.parent.streamlitReconnect();
-                                    _offlineSince = null;
-                                } else {
-                                    // Fallback: reload completo como último recurso
-                                    window.parent.location.reload();
+                            _reconnectAttempts = 0;
+                            console.log('[LogiPartVE] WebSocket caído, iniciando reconexión inteligente...');
+                        } else if ((Date.now() - _offlineSince) > 5000) {
+                            if (_reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+                                _reconnectAttempts++;
+                                console.log('[LogiPartVE] Intento de reconexión WS #' + _reconnectAttempts);
+                                try {
+                                    // Método 1: API oficial de Streamlit
+                                    if (typeof window.parent.streamlitReconnect === 'function') {
+                                        window.parent.streamlitReconnect();
+                                    }
+                                    // Método 2: Fetch para mantener el proxy vivo
+                                    window.parent.fetch(window.parent.location.href, {
+                                        method: 'GET', cache: 'no-store', keepalive: true
+                                    }).catch(function() {});
+                                } catch(e) {
+                                    console.log('[LogiPartVE] Error en reconexión: ' + e);
                                 }
-                            } catch(e) {
-                                window.parent.location.reload();
+                                _offlineSince = Date.now(); // Resetear para el próximo intento
+                            } else {
+                                // Agotados los intentos: NO hacer reload (destruiría sesión)
+                                // Reiniciar ciclo de intentos y seguir esperando
+                                console.log('[LogiPartVE] Reiniciando ciclo de reconexión...');
+                                _offlineSince = Date.now();
+                                _reconnectAttempts = 0;
                             }
-                            clearInterval(wsCheckInterval);
                         }
                     } else {
-                        // Volvió online: resetear el contador
+                        // Volvió online: resetear contadores
                         if (_offlineSince) {
-                            console.log('[LogiPartVE] WebSocket reconectado.');
+                            console.log('[LogiPartVE] WebSocket reconectado exitosamente.');
                             _offlineSince = null;
+                            _reconnectAttempts = 0;
                         }
                     }
                 } catch(e) {}
             }, 2000);  // Verificar cada 2 segundos si hay offline
 
-            console.log('[LogiPartVE] Keep-alive v2 iniciado (ping cada 5s, WS check cada 2s)');
+            console.log('[LogiPartVE] Keep-alive v3 iniciado (ping cada 5s, reconexión sin reload)');
         })();
         </script>
         """
