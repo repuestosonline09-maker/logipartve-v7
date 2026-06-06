@@ -258,20 +258,46 @@ def buscar_clientes(query: str, limite: int = 10) -> list:
             if len(resultados) >= limite:
                 break
         # Si el LIKE no encontró nada (posible diferencia de acentos), hacer
-        # búsqueda de respaldo por nombre normalizado en toda la tabla
-        # IMPORTANTE: reusar la misma conexión (conn) para no agotar el pool
+        # búsqueda de respaldo usando ILIKE con la versión sin acentos del query
+        # NOTA: conn ya fue liberada al pool arriba (conn = None), por lo que
+        # debemos abrir una nueva conexión para esta búsqueda de respaldo.
         if not resultados:
+            conn2 = None
             try:
-                cursor2 = conn.cursor()
-                cursor2.execute(
-                    "SELECT id, nombre, telefono, direccion, ci_rif FROM clientes ORDER BY nombre ASC LIMIT 2000"
-                )
+                # Construir patrón alternativo sin acentos para capturar 'Maria' → 'María'
+                patron_norm = f'%{query_norm}%'
+                conn2 = DBManager.get_connection()
+                cursor2 = conn2.cursor()
+                if DBManager.USE_POSTGRES:
+                    cursor2.execute(
+                        """
+                        SELECT id, nombre, telefono, direccion, ci_rif
+                        FROM clientes
+                        WHERE unaccent(LOWER(nombre)) ILIKE unaccent(LOWER(%s))
+                        ORDER BY nombre ASC
+                        LIMIT 100
+                        """,
+                        (patron_norm,)
+                    )
+                else:
+                    cursor2.execute(
+                        """
+                        SELECT id, nombre, telefono, direccion, ci_rif
+                        FROM clientes
+                        WHERE LOWER(nombre) LIKE LOWER(?)
+                        ORDER BY nombre ASC
+                        LIMIT 100
+                        """,
+                        (patron_norm,)
+                    )
                 all_rows = cursor2.fetchall()
                 cursor2.close()
+                DBManager.release_connection(conn2)
+                conn2 = None
                 for row in all_rows:
                     nombre_val = _row(row, 'nombre', 1) or ''
-                    nombre_norm = normalizar(nombre_val)
-                    if query_norm in nombre_norm:
+                    nombre_norm2 = normalizar(nombre_val)
+                    if query_norm in nombre_norm2:
                         resultados.append({
                             'id':        _row(row, 'id', 0),
                             'nombre':    nombre_val,
@@ -283,6 +309,11 @@ def buscar_clientes(query: str, limite: int = 10) -> list:
                         break
             except Exception as e2:
                 print(f"❌ Error en búsqueda de respaldo: {e2}")
+                if conn2:
+                    try:
+                        DBManager.release_connection(conn2)
+                    except Exception:
+                        pass
         return resultados
     except Exception as e:
         print(f"❌ Error buscando clientes: {e}")
@@ -313,8 +344,10 @@ def buscar_por_telefono_o_cedula(telefono: str = '', ci_rif: str = '') -> list:
     try:
         conn = DBManager.get_connection()
         cursor = conn.cursor()
+        # Cargar TODA la tabla (sin LIMIT) para no perder clientes en posición 501+
+        # La comparación se hace con normalizar_numero para ignorar puntos/guiones/cero
         cursor.execute(
-            "SELECT id, nombre, telefono, direccion, ci_rif FROM clientes ORDER BY nombre ASC LIMIT 500"
+            "SELECT id, nombre, telefono, direccion, ci_rif FROM clientes"
         )
         rows = cursor.fetchall()
         cursor.close()
@@ -385,17 +418,24 @@ def guardar_o_actualizar(datos: dict) -> dict:
     try:
         conn = DBManager.get_connection()
         cursor = conn.cursor()
-
-        # Buscar cliente existente: primero por nombre, luego por teléfono o cédula
-        cursor.execute(
-            "SELECT id, nombre, telefono, direccion, ci_rif FROM clientes ORDER BY nombre ASC LIMIT 500"
-        )
-        rows = cursor.fetchall()
+        is_postgres = DBManager.USE_POSTGRES
 
         cliente_existente = None
 
-        # Paso 1: buscar por nombre normalizado (lógica original)
-        for row in rows:
+        # Paso 1: buscar por nombre normalizado usando SQL directo (sin LIMIT)
+        # Esto garantiza que clientes en posición 501+ sean encontrados
+        if is_postgres:
+            cursor.execute(
+                "SELECT id, nombre, telefono, direccion, ci_rif FROM clientes WHERE nombre ILIKE %s ORDER BY id ASC",
+                (f'%{nombre.strip()}%',)
+            )
+        else:
+            cursor.execute(
+                "SELECT id, nombre, telefono, direccion, ci_rif FROM clientes WHERE LOWER(nombre) LIKE LOWER(?) ORDER BY id ASC",
+                (f'%{nombre.strip()}%',)
+            )
+        rows_nombre = cursor.fetchall()
+        for row in rows_nombre:
             nombre_bd = _row(row, 'nombre', 1) or ''
             if normalizar(nombre_bd) == nombre_norm:
                 cliente_existente = {
@@ -407,12 +447,17 @@ def guardar_o_actualizar(datos: dict) -> dict:
                 }
                 break
 
-        # Paso 2: si no encontró por nombre, buscar por teléfono o cédula
+        # Paso 2: si no encontró por nombre, buscar por teléfono o cédula (SQL directo, sin LIMIT)
         # Usa normalizar_numero para ignorar puntos, guiones y cero inicial
         if not cliente_existente and (telefono or ci_rif):
             tel_norm_local = normalizar_numero(telefono) if telefono else ''
             ci_norm_local  = normalizar_numero(ci_rif)   if ci_rif   else ''
-            for row in rows:
+            # Cargar solo los registros que tengan teléfono o cédula no vacíos
+            cursor.execute(
+                "SELECT id, nombre, telefono, direccion, ci_rif FROM clientes WHERE (telefono IS NOT NULL AND telefono != '') OR (ci_rif IS NOT NULL AND ci_rif != '')"
+            )
+            rows_tel = cursor.fetchall()
+            for row in rows_tel:
                 tel_bd = normalizar_numero(_row(row, 'telefono', 2) or '')
                 ci_bd  = normalizar_numero(_row(row, 'ci_rif', 4)  or '')
                 coincide_tel = tel_norm_local and tel_bd and tel_norm_local == tel_bd
@@ -788,13 +833,21 @@ def sincronizar_datos_cliente_en_cotizacion(quote: dict) -> dict:
         cursor = conn.cursor()
         is_postgres = DBManager.USE_POSTGRES
 
-        # Buscar cliente por nombre normalizado
-        cursor.execute(
-            "SELECT id, nombre, telefono, direccion, ci_rif FROM clientes ORDER BY nombre ASC LIMIT 500"
-        )
+        # Buscar cliente por nombre normalizado usando SQL directo (sin LIMIT)
+        # Esto garantiza que clientes en posición 501+ sean encontrados
+        nombre_norm = normalizar(nombre_cot)
+        if is_postgres:
+            cursor.execute(
+                "SELECT id, nombre, telefono, direccion, ci_rif FROM clientes WHERE nombre ILIKE %s ORDER BY id ASC",
+                (f'%{nombre_cot.strip()}%',)
+            )
+        else:
+            cursor.execute(
+                "SELECT id, nombre, telefono, direccion, ci_rif FROM clientes WHERE LOWER(nombre) LIKE LOWER(?) ORDER BY id ASC",
+                (f'%{nombre_cot.strip()}%',)
+            )
         rows = cursor.fetchall()
 
-        nombre_norm = normalizar(nombre_cot)
         cliente_encontrado = None
         for row in rows:
             nombre_val = _row(row, 'nombre', 1) or ''
