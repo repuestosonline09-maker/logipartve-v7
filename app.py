@@ -165,6 +165,8 @@ def main():
 
     if not AuthManager.is_logged_in():
         restored = restore_session_from_cookie()
+        if restored:
+            st.rerun()  # hotfix: forzar segundo rerun para completar restauración de sesión
 
     if not AuthManager.is_logged_in():
         # Sin sesión válida: mostrar pantalla de login.
