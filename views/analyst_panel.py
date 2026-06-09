@@ -228,6 +228,19 @@ def render_analyst_panel():
     # Se resetea solo cuando el analista inicia una NUEVA COTIZACIÓN.
     if 'guardando_en_progreso' not in st.session_state:
         st.session_state.guardando_en_progreso = False
+    # FIX: watchdog — si guardando_en_progreso está activo pero cotizacion_guardada
+    # es False, significa que el guardado falló sin liberar el flag (p.ej. locals())
+    # Detectarlo y liberarlo para que el botón vuelva a ser clickeable.
+    if (st.session_state.get('guardando_en_progreso', False) and
+            not st.session_state.get('cotizacion_guardada', False)):
+        # Incrementar contador de reruns con flag activo
+        _gep_count = st.session_state.get('_gep_rerun_count', 0) + 1
+        st.session_state['_gep_rerun_count'] = _gep_count
+        if _gep_count >= 2:  # Si lleva 2+ reruns atascado, liberar
+            st.session_state.guardando_en_progreso = False
+            st.session_state['_gep_rerun_count'] = 0
+    else:
+        st.session_state['_gep_rerun_count'] = 0
     # ── CACHÉ DE TARIFAS (TTL 5 min) ─────────────────────────────────────────
     # Evita 3 llamadas a BD en cada render. El admin puede forzar recarga
     # desde su panel (invalida '_tarifas_cache_ts' en session_state).
@@ -2953,6 +2966,7 @@ Cash | Zelle | Binance | Depósito Bancario Cta Divisas 🤝"""
                         
                         # Validar que las variables de totales existan
                         if 'total_cotizacion_bs' not in locals():
+                            st.session_state.guardando_en_progreso = False  # FIX: liberar flag
                             st.error("❌ Error: No se pudieron calcular los totales. Por favor, recarga la página.")
                         else:
                             print(f"📊 DEBUG - Actualizando cotización {editing_quote_number}")
@@ -3039,6 +3053,7 @@ Cash | Zelle | Binance | Depósito Bancario Cta Divisas 🤝"""
                             
                             # Validar que las variables de totales existan
                             if 'total_cotizacion_bs' not in locals():
+                                st.session_state.guardando_en_progreso = False  # FIX: liberar flag
                                 st.error("❌ Error: No se pudieron calcular los totales. Por favor, recarga la página.")
                             else:
                                 print(f"📊 DEBUG - Guardando cotización {final_quote_number}")
