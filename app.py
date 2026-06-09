@@ -299,6 +299,53 @@ def show_main_app():
             AuthManager.logout()
             st.session_state.pop('selected_menu', None)
             st.rerun()
+    # ── BARRA DE NAVEGACIÓN MÓVIL ───────────────────────────────────────────────────────────────────────────────────
+    # Visible solo en móvil (≤768px). Botones Streamlit nativos en columnas.
+    # Al hacer clic cambian selected_menu y hacen st.rerun() para sincronizar
+    # con el sidebar radio. Respeta la protección de edición activa.
+    _menu_actual = st.session_state.get('selected_menu', menu_options[default_idx])
+    _nav_labels = {
+        "🏠 Dashboard":               "🏠 Inicio",
+        "🏠 Mi Dashboard":            "🏠 Inicio",
+        "🔧 Panel de Administración": "🔧 Admin",
+        "📝 Crear Cotización":        "📝 Cotizar",
+        "📊 Mis Cotizaciones":        "📊 Mis Cot.",
+        "🔍 Diagnóstico del Sistema": "🔍 Diagnóst.",
+    }
+    _mob_cols = st.columns(len(menu_options))
+    for _mi, _mopt in enumerate(menu_options):
+        with _mob_cols[_mi]:
+            _mlbl = _nav_labels.get(_mopt, _mopt)
+            _mactive = (_mopt == _menu_actual)
+            if st.button(
+                _mlbl,
+                key=f"mobnav_{_mi}",
+                use_container_width=True,
+                type="primary" if _mactive else "secondary",
+                help=_mopt
+            ):
+                st.session_state.selected_menu = _mopt
+                st.session_state.menu_version = st.session_state.get('menu_version', 0) + 1
+                st.session_state.scroll_to_top = True
+                st.rerun()
+    # CSS: ocultar barra en desktop, compactar en móvil
+    st.markdown("""
+        <style>
+        @media (min-width: 769px) {
+            [data-testid="stHorizontalBlock"]:has(button[title]) {
+                display: none !important;
+            }
+        }
+        @media (max-width: 768px) {
+            [data-testid="stHorizontalBlock"]:has(button[title]) button {
+                font-size: 0.72rem !important;
+                padding: 0.3rem 0.2rem !important;
+                min-height: 2.2rem !important;
+            }
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
     # ── CONTENIDO PRINCIPAL ────────────────────────────────────────────────────
     if selected_menu == "🏠 Dashboard":
         show_admin_dashboard()
