@@ -2297,7 +2297,8 @@ class DBManager:
     @staticmethod
     def search_quotes(analyst_id: Optional[int], search_term: str, limit: int = 100) -> List[Dict[str, Any]]:
         """
-        Busca cotizaciones por número, nombre de cliente, teléfono o correo email.
+        Busca cotizaciones por número, nombre de cliente, teléfono, email,
+        vehículo, descripción de ítem, número de parte o marca.
         
         Args:
             analyst_id: ID del analista (None para buscar en todas)
@@ -2322,27 +2323,55 @@ class DBManager:
                         SELECT * FROM quotes
                         WHERE analyst_id = %s
                         AND (
-                            quote_number ILIKE %s
+                            quote_number   ILIKE %s
                             OR client_name  ILIKE %s
                             OR client_phone ILIKE %s
                             OR client_email ILIKE %s
+                            OR client_vehicle ILIKE %s
+                            OR EXISTS (
+                                SELECT 1 FROM quote_items qi
+                                WHERE qi.quote_id = quotes.id
+                                AND (
+                                    qi.description  ILIKE %s
+                                    OR qi.part_number ILIKE %s
+                                    OR qi.marca       ILIKE %s
+                                )
+                            )
                         )
                         ORDER BY created_at DESC
                         LIMIT %s
-                    """, (analyst_id, search_pattern, search_pattern, search_pattern, search_pattern, limit))
+                    """, (analyst_id,
+                          search_pattern, search_pattern, search_pattern, search_pattern,
+                          search_pattern,
+                          search_pattern, search_pattern, search_pattern,
+                          limit))
                 else:
                     cursor.execute("""
                         SELECT * FROM quotes
                         WHERE analyst_id = ?
                         AND (
-                            quote_number LIKE ?
+                            quote_number   LIKE ?
                             OR client_name  LIKE ?
                             OR client_phone LIKE ?
                             OR client_email LIKE ?
+                            OR client_vehicle LIKE ?
+                            OR EXISTS (
+                                SELECT 1 FROM quote_items qi
+                                WHERE qi.quote_id = quotes.id
+                                AND (
+                                    qi.description  LIKE ?
+                                    OR qi.part_number LIKE ?
+                                    OR qi.marca       LIKE ?
+                                )
+                            )
                         )
                         ORDER BY created_at DESC
                         LIMIT ?
-                    """, (analyst_id, search_pattern, search_pattern, search_pattern, search_pattern, limit))
+                    """, (analyst_id,
+                          search_pattern, search_pattern, search_pattern, search_pattern,
+                          search_pattern,
+                          search_pattern, search_pattern, search_pattern,
+                          limit))
             else:
                 # Buscar en todas las cotizaciones (administrador)
                 # Incluye: número de cotización, nombre, teléfono y email
@@ -2352,26 +2381,52 @@ class DBManager:
                         FROM quotes q
                         JOIN users u ON q.analyst_id = u.id
                         WHERE
-                            q.quote_number ILIKE %s
+                            q.quote_number   ILIKE %s
                             OR q.client_name  ILIKE %s
                             OR q.client_phone ILIKE %s
                             OR q.client_email ILIKE %s
+                            OR q.client_vehicle ILIKE %s
+                            OR EXISTS (
+                                SELECT 1 FROM quote_items qi
+                                WHERE qi.quote_id = q.id
+                                AND (
+                                    qi.description  ILIKE %s
+                                    OR qi.part_number ILIKE %s
+                                    OR qi.marca       ILIKE %s
+                                )
+                            )
                         ORDER BY q.created_at DESC
                         LIMIT %s
-                    """, (search_pattern, search_pattern, search_pattern, search_pattern, limit))
+                    """, (search_pattern, search_pattern, search_pattern, search_pattern,
+                          search_pattern,
+                          search_pattern, search_pattern, search_pattern,
+                          limit))
                 else:
                     cursor.execute("""
                         SELECT q.*, u.full_name as analyst_name
                         FROM quotes q
                         JOIN users u ON q.analyst_id = u.id
                         WHERE
-                            q.quote_number LIKE ?
+                            q.quote_number   LIKE ?
                             OR q.client_name  LIKE ?
                             OR q.client_phone LIKE ?
                             OR q.client_email LIKE ?
+                            OR q.client_vehicle LIKE ?
+                            OR EXISTS (
+                                SELECT 1 FROM quote_items qi
+                                WHERE qi.quote_id = q.id
+                                AND (
+                                    qi.description  LIKE ?
+                                    OR qi.part_number LIKE ?
+                                    OR qi.marca       LIKE ?
+                                )
+                            )
                         ORDER BY q.created_at DESC
                         LIMIT ?
-                    """, (search_pattern, search_pattern, search_pattern, search_pattern, limit))
+                    """, (search_pattern, search_pattern, search_pattern, search_pattern,
+                          search_pattern,
+                          search_pattern, search_pattern, search_pattern,
+                          limit))
             
             quotes = [dict(row) for row in cursor.fetchall()]
             cursor.close()

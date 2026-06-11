@@ -276,8 +276,8 @@ def render_my_quotes_panel():
     col1, col2, col3 = st.columns(3)
     with col1:
         search_term = st.text_input(
-            "Buscar por número, cliente, teléfono o email",
-            placeholder="Ej: 2026-30022-A, José, 0424..., cliente@gmail.com",
+            "Buscar por número, cliente, teléfono, email, vehículo, repuesto, N° parte o marca",
+            placeholder="Ej: 2026-30022-A, José, Jeep Liberty, Cajetin, Detroit Axle, 52128517AD",
             key=f"mq_search_{reset_key}"
         )
     with col2:
@@ -303,7 +303,7 @@ def render_my_quotes_panel():
     # no retornar — dejar que el flujo continúe para mostrar la orden.
     if not search_term or not search_term.strip():
         if not st.session_state.get('mq_ver_id'):
-            st.info("💡 Escribe el número de orden, nombre del cliente o teléfono para buscar.")
+            st.info("💡 Escribe el número de orden, nombre del cliente, teléfono, vehículo, descripción del repuesto, número de parte o marca para buscar.")
             return
 
     st.markdown("---")
