@@ -637,19 +637,48 @@ def _show_acciones(quote_id: int):
                          type="secondary", key=f"acc_gen_pdf_{quote_id}"):
                 _regenerar_pdf(quote_id)
 
-    # ── DESCARGAR PNG ───────────────────────────────────────────────────────────────────────────────
+    # ── DESCARGAR PNG (soporta multi-página) ────────────────────────────────────────────────────────
     with a4:
-        png_path = str(quote.get('jpeg_path') or '')
-        if png_path and os.path.exists(png_path):
-            with open(png_path, 'rb') as f:
-                st.download_button(
-                    label="🖼️ DESCARGAR PNG",
-                    data=f,
-                    file_name=f"cotizacion_{quote['quote_number']}.png",
-                    mime="image/png",
-                    use_container_width=True,
-                    key=f"acc_png_{quote_id}"
-                )
+        png_path_base = str(quote.get('jpeg_path') or '')
+        if png_path_base and os.path.exists(png_path_base):
+            # Detectar páginas adicionales (_p2, _p3, ...)
+            _base_sin_ext, _ext = os.path.splitext(png_path_base)
+            _rutas_png = [png_path_base]
+            _pg = 2
+            while True:
+                _ruta_extra = f"{_base_sin_ext}_p{_pg}{_ext}"
+                if os.path.exists(_ruta_extra):
+                    _rutas_png.append(_ruta_extra)
+                    _pg += 1
+                else:
+                    break
+            # También detectar si la primera página fue guardada con sufijo _p1
+            _ruta_p1 = f"{_base_sin_ext}_p1{_ext}"
+            if os.path.exists(_ruta_p1) and _ruta_p1 not in _rutas_png:
+                _rutas_png = [_ruta_p1] + _rutas_png[1:]
+
+            if len(_rutas_png) == 1:
+                with open(_rutas_png[0], 'rb') as f:
+                    st.download_button(
+                        label="🖼️ DESCARGAR PNG",
+                        data=f,
+                        file_name=f"cotizacion_{quote['quote_number']}.png",
+                        mime="image/png",
+                        use_container_width=True,
+                        key=f"acc_png_{quote_id}"
+                    )
+            else:
+                # Multi-página: un botón por página
+                for _i, _ruta in enumerate(_rutas_png, 1):
+                    with open(_ruta, 'rb') as f:
+                        st.download_button(
+                            label=f"🖼️ PNG Pág. {_i}",
+                            data=f,
+                            file_name=f"cotizacion_{quote['quote_number']}_p{_i}.png",
+                            mime="image/png",
+                            use_container_width=True,
+                            key=f"acc_png_{quote_id}_p{_i}"
+                        )
         else:
             if st.button("🖼️ GENERAR PNG", use_container_width=True,
                          type="secondary", key=f"acc_gen_png_{quote_id}"):
@@ -947,7 +976,11 @@ def _regenerar_pdf(quote_id: int):
 # REGENERAR PNG
 # ─────────────────────────────────────────────────────────────────────────────
 def _regenerar_png(quote_id: int):
-    """Regenera el PNG de una cotización y actualiza la BD."""
+    """
+    Regenera el/los PNG de una cotización y actualiza la BD.
+    Soporta cotizaciones multi-página: guarda la primera página en jpeg_path
+    y las páginas adicionales como _p2, _p3, etc. en el mismo directorio.
+    """
     try:
         from services.document_generation.png_generator import PNGQuoteGenerator
 
@@ -965,26 +998,45 @@ def _regenerar_png(quote_id: int):
         png_path = os.path.join(output_dir, f"cotizacion_{quote_number}.png")
 
         with st.spinner("⏳ Generando PNG..."):
-            # PNGQuoteGenerator se usa como INSTANCIA (no método estático)
             gen    = PNGQuoteGenerator()
             result = gen.generate_quote_png_from_data(datos, png_path)
 
-        if result and os.path.exists(png_path):
-            conn   = DBManager.get_connection()
-            cursor = conn.cursor()
-            if DBManager.USE_POSTGRES:
-                cursor.execute("UPDATE quotes SET jpeg_path = %s WHERE id = %s",
-                               (png_path, quote_id))
-            else:
-                cursor.execute("UPDATE quotes SET jpeg_path = ? WHERE id = ?",
-                               (png_path, quote_id))
-            conn.commit()
-            cursor.close()
-            conn.close()
-            st.success("✅ PNG generado. Haz clic en DESCARGAR PNG.")
-            st.rerun()
-        else:
+        # result puede ser: str (1 página) o list[str] (multi-página) o None
+        if result is None:
             st.error("❌ Error al generar el PNG")
+            return
+
+        # Normalizar a lista
+        if isinstance(result, str):
+            rutas = [result]
+        else:
+            rutas = result
+
+        # La primera página se guarda en jpeg_path (compatibilidad con BD existente)
+        primera_ruta = rutas[0] if rutas else None
+        if not primera_ruta or not os.path.exists(primera_ruta):
+            st.error("❌ Error al generar el PNG")
+            return
+
+        conn   = DBManager.get_connection()
+        cursor = conn.cursor()
+        if DBManager.USE_POSTGRES:
+            cursor.execute("UPDATE quotes SET jpeg_path = %s WHERE id = %s",
+                           (primera_ruta, quote_id))
+        else:
+            cursor.execute("UPDATE quotes SET jpeg_path = ? WHERE id = ?",
+                           (primera_ruta, quote_id))
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        total_paginas = len(rutas)
+        if total_paginas == 1:
+            st.success("✅ PNG generado. Haz clic en DESCARGAR PNG.")
+        else:
+            st.success(f"✅ PNG generado ({total_paginas} páginas). Haz clic en DESCARGAR PNG para obtener cada página.")
+        st.rerun()
+
     except Exception as e:
         import traceback
         st.error(f"❌ Error: {e}")
