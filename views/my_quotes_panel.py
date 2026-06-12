@@ -423,6 +423,10 @@ def render_my_quotes_panel():
     if st.session_state.get('mq_delete_id'):
         _show_delete_confirmation(st.session_state['mq_delete_id'])
 
+    # ── BLOQUE 7B: FLUJO REENVIAR ORDEN APROBADA ───────────────────
+    if st.session_state.get('mq_reenviar_id') == quote_id:
+        _show_reenviar_orden(quote_id)
+
     # ── BLOQUE 7: FLUJO ORDEN APROBADA (FASE 5) ────────────────────
     if st.session_state.get('mq_aprobar_id'):
         _show_aprobar_orden(st.session_state['mq_aprobar_id'])
@@ -577,7 +581,7 @@ def _show_acciones(quote_id: int):
         st.warning("⛔ Esta cotización está **anulada**. No se pueden realizar acciones sobre ella. Solo el administrador puede reactivarla si fuera necesario.")
         return
 
-    a1, a2, a3, a4, a5, a6, a7 = st.columns(7)
+    a1, a2, a3, a4, a5, a6, a7, a8 = st.columns(8)
 
     # ── EDITAR ────────────────────────────────────────────────────────────────────────────────────────
     with a1:
@@ -726,6 +730,15 @@ def _show_acciones(quote_id: int):
             st.rerun()
         if ya_aprobada:
             st.caption("🔒 Aprobada")
+
+    # ── REENVIAR ORDEN APROBADA ────────────────────────────────────────────────
+    with a8:
+        if ya_aprobada:
+            if st.button("📧 REENVIAR", use_container_width=True,
+                         type="secondary", key=f"acc_reenviar_{quote_id}"):
+                st.session_state[f'mq_reenviar_id'] = quote_id
+                st.rerun()
+            st.caption("Reenviar correo")
 
     # ── BOTONES MENSAJES USD y BCV ────────────────────────────────────────────
     st.markdown("---")
@@ -1414,6 +1427,44 @@ def _show_aprobar_orden(quote_id: int):
 # ─────────────────────────────────────────────────────────────────────────────
 # MOTOR DE ENVÍO — FASE 5
 # ─────────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# FLUJO REENVIAR ORDEN APROBADA
+# ─────────────────────────────────────────────────────────────────────────────
+def _show_reenviar_orden(quote_id: int):
+    """Muestra el diálogo de confirmación y reenvía el correo de orden aprobada."""
+    quote = DBManager.get_quote_by_id(quote_id)
+    if not quote:
+        st.error("❌ Cotización no encontrada")
+        st.session_state.pop('mq_reenviar_id', None)
+        return
+
+    quote_number = quote.get('quote_number', str(quote_id))
+
+    st.warning(
+        f"⚠️ **¿Reenviar el correo de Orden Aprobada #{quote_number}?** "
+        "Se regenerarán los PNG con el código actualizado y se enviará "
+        "nuevamente al equipo administrativo."
+    )
+
+    col_si, col_no = st.columns(2)
+    with col_si:
+        if st.button("✅ Sí, reenviar", type="primary",
+                     use_container_width=True, key=f"reenviar_si_{quote_id}"):
+            with st.spinner("⏳ Regenerando PNG y enviando correo..."):
+                exito, mensaje = _enviar_orden_aprobada(quote_id)
+            st.session_state.pop('mq_reenviar_id', None)
+            if exito:
+                st.success(f"✅ {mensaje}")
+            else:
+                st.error(f"❌ {mensaje}")
+            st.rerun()
+    with col_no:
+        if st.button("❌ Cancelar", type="secondary",
+                     use_container_width=True, key=f"reenviar_no_{quote_id}"):
+            st.session_state.pop('mq_reenviar_id', None)
+            st.rerun()
+
+
 def _enviar_orden_aprobada(quote_id: int):
     """
     Genera PNG cotización + PNG cuadro de costos, construye el correo
