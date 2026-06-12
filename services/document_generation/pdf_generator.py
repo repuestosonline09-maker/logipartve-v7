@@ -7,7 +7,7 @@ Soporte multi-página: 5 ítems por página, totales solo en la última hoja.
 from reportlab.lib.pagesizes import landscape, letter
 from reportlab.lib import colors
 from reportlab.lib.units import inch
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image, PageBreak
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image, PageBreak, KeepTogether
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from reportlab.pdfgen import canvas
@@ -569,24 +569,15 @@ def _build_totales_block(st, datos_cotizacion):
 # ─────────────────────────────────────────────────────────────────────────────
 # FUNCIÓN PRINCIPAL
 # ─────────────────────────────────────────────────────────────────────────────
-def generar_pdf_cotizacion(datos_cotizacion, output_path):
+def _generar_pagina_pdf(datos_cotizacion, items_slice, num_pagina, total_paginas,
+                        logos, st, output_path):
     """
-    Genera un PDF multi-página con el diseño International Freight.
-
-    Lógica de paginación:
-    - Cada página contiene: header + info doc + datos cliente + tabla de ítems
-    - Páginas intermedias: nota de continuación en lugar de totales
-    - Última página: Términos y Condiciones + Financial Summary (totales)
-    - El número de páginas se determina automáticamente según la cantidad de ítems.
-
-    Args:
-        datos_cotizacion: Diccionario con los datos de la cotización.
-        output_path: Ruta donde se guardará el PDF.
-
-    Returns:
-        str: Ruta del archivo PDF generado.
+    Genera un PDF de UNA SOLA PÁGINA con el contenido especificado.
+    Cada página se genera de forma independiente para garantizar que
+    el header siempre aparezca al inicio de cada hoja.
     """
-    # Márgenes fijos (el diseño ya está calibrado para 5 ítems por página)
+    es_ultima = (num_pagina == total_paginas)
+
     doc = SimpleDocTemplate(
         output_path,
         pagesize=landscape(letter),
@@ -595,6 +586,67 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
         topMargin=MARGEN_V,
         bottomMargin=MARGEN_V,
     )
+
+    story = []
+
+    # ── HEADER ──────────────────────────────────────────────────────────────
+    story.append(_build_header_block(st, logos))
+    story.append(Spacer(1, 0.01 * inch))
+
+    # ── INFO DOCUMENTO ───────────────────────────────────────────────────────
+    story.append(_build_info_doc(st, datos_cotizacion))
+    story.append(Spacer(1, 0.08 * inch))
+
+    # ── DATOS DEL CLIENTE ────────────────────────────────────────────────────
+    story.append(Paragraph("▼ DATOS DEL CLIENTE", st['seccion']))
+    story.append(_build_cliente_block(st, datos_cotizacion))
+    story.append(Spacer(1, 0.05 * inch))
+
+    # ── TABLA DE ÍTEMS ───────────────────────────────────────────────────────
+    item_offset = (num_pagina - 1) * ITEMS_POR_PAGINA
+    story.append(_build_items_table(st, items_slice, item_offset))
+    story.append(Spacer(1, 0.08 * inch))
+
+    # ── TOTALES o NOTA DE CONTINUACIÓN ──────────────────────────────────────
+    if es_ultima:
+        story.append(_build_totales_block(st, datos_cotizacion))
+    else:
+        story.append(_build_continua_block(st, num_pagina + 1))
+
+    story.append(Spacer(1, 0.08 * inch))
+
+    # ── PIE DE PÁGINA ────────────────────────────────────────────────────────
+    story.append(_build_footer_block(st))
+
+    # Generar con marca de agua
+    background = InternationalFreightBackground()
+    doc.build(
+        story,
+        onFirstPage=background.draw_watermark,
+        onLaterPages=background.draw_watermark,
+    )
+
+    return output_path
+
+
+def generar_pdf_cotizacion(datos_cotizacion, output_path):
+    """
+    Genera un PDF multi-página con el diseño International Freight.
+
+    Estrategia: cada página se genera como un PDF independiente de una sola
+    hoja y luego se fusionan en un único archivo. Esto garantiza que el
+    header completo aparezca al inicio de cada página sin interferencia
+    del motor de flujo de ReportLab.
+
+    Args:
+        datos_cotizacion: Diccionario con los datos de la cotización.
+        output_path: Ruta donde se guardará el PDF.
+
+    Returns:
+        str: Ruta del archivo PDF generado.
+    """
+    import tempfile
+    from pypdf import PdfWriter, PdfReader
 
     # Cargar logos una sola vez
     logos = {
@@ -606,65 +658,57 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
         'wa':   find_logo_path("LOGOWHATSAPP.png"),
     }
 
-    # Construir estilos
+    # Construir estilos una sola vez
     st = _build_styles()
 
-    # Obtener todos los ítems
+    # Obtener todos los ítems y dividir en páginas
     todos_items = datos_cotizacion.get('items', [])
-
-    # Dividir en páginas de ITEMS_POR_PAGINA ítems
     paginas = []
     for i in range(0, max(len(todos_items), 1), ITEMS_POR_PAGINA):
         paginas.append(todos_items[i:i + ITEMS_POR_PAGINA])
 
     total_paginas = len(paginas)
 
-    # ── Construir el story completo ──────────────────────────────────────────
-    story = []
+    if total_paginas == 1:
+        # ── Caso simple: una sola página (comportamiento original) ────────────
+        return _generar_pagina_pdf(
+            datos_cotizacion, paginas[0], 1, 1,
+            logos, st, output_path
+        )
 
-    for num_pagina, items_slice in enumerate(paginas, 1):
-        es_ultima = (num_pagina == total_paginas)
+    # ── Caso multi-página: generar cada hoja por separado y fusionar ──────────
+    writer = PdfWriter()
+    tmp_files = []
 
-        # ── HEADER ──────────────────────────────────────────────────────────
-        story.append(_build_header_block(st, logos))
-        story.append(Spacer(1, 0.01 * inch))
+    try:
+        for num_pagina, items_slice in enumerate(paginas, 1):
+            # Archivo temporal para esta página
+            tmp_fd, tmp_path = tempfile.mkstemp(suffix=f'_p{num_pagina}.pdf')
+            os.close(tmp_fd)
+            tmp_files.append(tmp_path)
 
-        # ── INFO DOCUMENTO ───────────────────────────────────────────────────
-        story.append(_build_info_doc(st, datos_cotizacion))
-        story.append(Spacer(1, 0.08 * inch))
+            # Generar la página individual
+            _generar_pagina_pdf(
+                datos_cotizacion, items_slice, num_pagina, total_paginas,
+                logos, st, tmp_path
+            )
 
-        # ── DATOS DEL CLIENTE ────────────────────────────────────────────────
-        story.append(Paragraph("▼ DATOS DEL CLIENTE", st['seccion']))
-        story.append(_build_cliente_block(st, datos_cotizacion))
-        story.append(Spacer(1, 0.05 * inch))
+            # Agregar la página al writer
+            reader = PdfReader(tmp_path)
+            for page in reader.pages:
+                writer.add_page(page)
 
-        # ── TABLA DE ÍTEMS ───────────────────────────────────────────────────
-        item_offset = (num_pagina - 1) * ITEMS_POR_PAGINA
-        story.append(_build_items_table(st, items_slice, item_offset))
-        story.append(Spacer(1, 0.08 * inch))
+        # Escribir el PDF fusionado final
+        with open(output_path, 'wb') as f:
+            writer.write(f)
 
-        # ── TOTALES o NOTA DE CONTINUACIÓN ──────────────────────────────────
-        if es_ultima:
-            story.append(_build_totales_block(st, datos_cotizacion))
-        else:
-            story.append(_build_continua_block(st, num_pagina + 1))
-
-        story.append(Spacer(1, 0.08 * inch))
-
-        # ── PIE DE PÁGINA ────────────────────────────────────────────────────
-        story.append(_build_footer_block(st))
-
-        # ── SALTO DE PÁGINA (excepto en la última) ───────────────────────────
-        if not es_ultima:
-            story.append(PageBreak())
-
-    # ── Generar PDF con marca de agua en todas las páginas ───────────────────
-    background = InternationalFreightBackground()
-    doc.build(
-        story,
-        onFirstPage=background.draw_watermark,
-        onLaterPages=background.draw_watermark,
-    )
+    finally:
+        # Limpiar archivos temporales
+        for tmp_path in tmp_files:
+            try:
+                os.unlink(tmp_path)
+            except Exception:
+                pass
 
     return output_path
 
