@@ -641,7 +641,7 @@ def _show_acciones(quote_id: int):
                          type="secondary", key=f"acc_gen_pdf_{quote_id}"):
                 _regenerar_pdf(quote_id)
 
-    # ── DESCARGAR PNG (soporta multi-página) ────────────────────────────────────────────────────────
+    # ── DESCARGAR / VER PNG (soporta multi-página) ─────────────────────────────────────────────────
     with a4:
         png_path_base = str(quote.get('jpeg_path') or '')
         if png_path_base and os.path.exists(png_path_base):
@@ -661,28 +661,17 @@ def _show_acciones(quote_id: int):
             if os.path.exists(_ruta_p1) and _ruta_p1 not in _rutas_png:
                 _rutas_png = [_ruta_p1] + _rutas_png[1:]
 
-            if len(_rutas_png) == 1:
-                with open(_rutas_png[0], 'rb') as f:
-                    st.download_button(
-                        label="🖼️ DESCARGAR PNG",
-                        data=f,
-                        file_name=f"cotizacion_{quote['quote_number']}.png",
-                        mime="image/png",
-                        use_container_width=True,
-                        key=f"acc_png_{quote_id}"
-                    )
-            else:
-                # Multi-página: un botón por página
-                for _i, _ruta in enumerate(_rutas_png, 1):
-                    with open(_ruta, 'rb') as f:
-                        st.download_button(
-                            label=f"🖼️ PNG Pág. {_i}",
-                            data=f,
-                            file_name=f"cotizacion_{quote['quote_number']}_p{_i}.png",
-                            mime="image/png",
-                            use_container_width=True,
-                            key=f"acc_png_{quote_id}_p{_i}"
-                        )
+            _total_pags = len(_rutas_png)
+            # Botón VER PNG (activa/desactiva el visor)
+            _ver_key = f'mq_ver_png_{quote_id}'
+            _ver_activo = st.session_state.get(_ver_key, False)
+            _lbl_ver = "🔒 CERRAR PNG" if _ver_activo else "👁️ VER PNG"
+            if st.button(_lbl_ver, use_container_width=True,
+                         type="secondary", key=f"acc_ver_png_{quote_id}"):
+                st.session_state[_ver_key] = not _ver_activo
+                st.rerun()
+            if _total_pags > 1:
+                st.caption(f"📄 {_total_pags} páginas")
         else:
             if st.button("🖼️ GENERAR PNG", use_container_width=True,
                          type="secondary", key=f"acc_gen_png_{quote_id}"):
@@ -937,6 +926,62 @@ def _show_acciones(quote_id: int):
                     st.session_state[f'mq_popup_bcv_{quote_id}'] = False
                     st.rerun()
     # ── FIN POP-UP MENSAJE BCV ────────────────────────────────────────────────
+
+    # ── VISOR PNG DE COTIZACIÓN (multi-página) ────────────────────────────────
+    _ver_png_key = f'mq_ver_png_{quote_id}'
+    if st.session_state.get(_ver_png_key, False):
+        png_path_base_v = str(quote.get('jpeg_path') or '')
+        if png_path_base_v and os.path.exists(png_path_base_v):
+            _base_v, _ext_v = os.path.splitext(png_path_base_v)
+            _rutas_v = [png_path_base_v]
+            _pg_v = 2
+            while True:
+                _extra_v = f"{_base_v}_p{_pg_v}{_ext_v}"
+                if os.path.exists(_extra_v):
+                    _rutas_v.append(_extra_v)
+                    _pg_v += 1
+                else:
+                    break
+            _ruta_p1_v = f"{_base_v}_p1{_ext_v}"
+            if os.path.exists(_ruta_p1_v) and _ruta_p1_v not in _rutas_v:
+                _rutas_v = [_ruta_p1_v] + _rutas_v[1:]
+
+            _total_v = len(_rutas_v)
+            st.markdown("---")
+            st.markdown(f"### 🖼️ Vista Previa PNG — {quote.get('quote_number', '')} ({_total_v} página{'s' if _total_v > 1 else ''})")
+
+            for _iv, _ruta_v in enumerate(_rutas_v, 1):
+                if os.path.exists(_ruta_v):
+                    if _total_v > 1:
+                        st.markdown(f"**Página {_iv} de {_total_v}**")
+                    st.image(_ruta_v, use_container_width=True)
+                    with open(_ruta_v, 'rb') as _fv:
+                        _fn_v = (
+                            f"cotizacion_{quote.get('quote_number', quote_id)}.png"
+                            if _total_v == 1
+                            else f"cotizacion_{quote.get('quote_number', quote_id)}_p{_iv}.png"
+                        )
+                        st.download_button(
+                            label=f"⬇️ Descargar Pág. {_iv}" if _total_v > 1 else "⬇️ Descargar PNG",
+                            data=_fv,
+                            file_name=_fn_v,
+                            mime="image/png",
+                            use_container_width=True,
+                            key=f"dl_visor_png_{quote_id}_p{_iv}"
+                        )
+                    if _iv < _total_v:
+                        st.markdown("---")
+
+            st.markdown("---")
+            _cv1, _cv2, _cv3 = st.columns([1, 2, 1])
+            with _cv2:
+                if st.button("✖ CERRAR VISOR PNG", use_container_width=True,
+                             type="secondary", key=f"cerrar_visor_png_{quote_id}"):
+                    st.session_state[_ver_png_key] = False
+                    st.rerun()
+        else:
+            st.warning("⚠️ No hay PNG generado para esta cotización. Usa el botón GENERAR PNG primero.")
+    # ── FIN VISOR PNG ─────────────────────────────────────────────────────────
 
 
 # ─────────────────────────────────────────────────────────────────────────────
