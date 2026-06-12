@@ -1768,7 +1768,12 @@ def render_analyst_panel():
     # Fila 1: Descripción y N° Parte
     item_col1, item_col2 = st.columns(2)
     with item_col1:
-        item_descripcion = st.text_input("Descripción del Repuesto", value=default_descripcion, key=f"item_descripcion_{reset_key}", placeholder="Ej: Bomba de gasolina", on_change=_autosave_draft)
+        item_descripcion = st.text_input("Descripción del Repuesto", value=default_descripcion, key=f"item_descripcion_{reset_key}", placeholder="Ej: Bomba de gasolina", on_change=_autosave_draft, max_chars=50)
+        _desc_len = len(item_descripcion)
+        if _desc_len > 45:
+            st.warning(f"⚠️ Descripción muy larga: {_desc_len}/50 caracteres. Máximo permitido: 50.")
+        elif _desc_len > 35:
+            st.caption(f"📝 {_desc_len}/50 caracteres")
     with item_col2:
         item_parte = st.text_input("N° de Parte", value=default_parte, key=f"item_parte_{reset_key}", placeholder="Ej: 12345-ABC", on_change=_autosave_draft)
     

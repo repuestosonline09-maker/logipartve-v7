@@ -378,10 +378,14 @@ def _build_items_table(st, items_slice, item_offset=0):
         precio_total   = item.get('precio_bs', 0)
         precio_unitario = precio_total / cantidad if cantidad > 0 else 0
         descripcion    = item.get('descripcion', '') or item.get('descripcion_repuesto', '')
+        # Red de seguridad: truncar a 50 caracteres para proteger el diseño
+        descripcion = str(descripcion)
+        if len(descripcion) > 50:
+            descripcion = descripcion[:47] + '...'
 
         items_data.append([
             Paragraph(str(idx), st['normal']),
-            Paragraph(str(descripcion), st['normal']),
+            Paragraph(descripcion, st['normal']),
             Paragraph(str(item.get('parte', '')), st['normal']),
             Paragraph(str(item.get('marca', '')), st['normal']),
             Paragraph(str(item.get('garantia', '')), st['normal']),
