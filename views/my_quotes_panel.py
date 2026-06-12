@@ -1438,24 +1438,31 @@ def _enviar_orden_aprobada(quote_id: int):
         output_dir   = os.path.join(tempfile.gettempdir(), 'logipartve_docs')
         os.makedirs(output_dir, exist_ok=True)
 
-        # ── Generar PNG de la cotización ──────────────────────────────────────
-        datos_adaptados = _adaptar_quote_para_generadores(qd)
-        png_cot_path    = os.path.join(output_dir, f"cot_{quote_number}.png")
+        # ── Generar PNG de la cotización (soporta multi-página) ──────────────
+        datos_adaptados  = _adaptar_quote_para_generadores(qd)
+        png_cot_path_base = os.path.join(output_dir, f"cot_{quote_number}.png")
+        rutas_cot_png    = []   # lista de rutas de todas las páginas
         try:
-            gen = PNGQuoteGenerator()
-            gen.generate_quote_png_from_data(datos_adaptados, png_cot_path)
-            # Actualizar ruta en BD
-            _conn = DBManager.get_connection()
-            _cur  = _conn.cursor()
-            if DBManager.USE_POSTGRES:
-                _cur.execute("UPDATE quotes SET jpeg_path = %s WHERE id = %s",
-                             (png_cot_path, quote_id))
-            else:
-                _cur.execute("UPDATE quotes SET jpeg_path = ? WHERE id = ?",
-                             (png_cot_path, quote_id))
-            _conn.commit()
-            _cur.close()
-            _conn.close()
+            gen        = PNGQuoteGenerator()
+            _result_cot = gen.generate_quote_png_from_data(datos_adaptados, png_cot_path_base)
+            if _result_cot is None:
+                return False, "Error generando PNG de cotización: el generador devolvió None"
+            # Normalizar a lista
+            rutas_cot_png = [_result_cot] if isinstance(_result_cot, str) else list(_result_cot)
+            # Guardar primera ruta en BD (compatibilidad con campo jpeg_path)
+            _primera_cot = rutas_cot_png[0] if rutas_cot_png else None
+            if _primera_cot:
+                _conn = DBManager.get_connection()
+                _cur  = _conn.cursor()
+                if DBManager.USE_POSTGRES:
+                    _cur.execute("UPDATE quotes SET jpeg_path = %s WHERE id = %s",
+                                 (_primera_cot, quote_id))
+                else:
+                    _cur.execute("UPDATE quotes SET jpeg_path = ? WHERE id = ?",
+                                 (_primera_cot, quote_id))
+                _conn.commit()
+                _cur.close()
+                _conn.close()
         except Exception as e:
             return False, f"Error generando PNG de cotización: {e}"
 
@@ -1545,17 +1552,30 @@ def _enviar_orden_aprobada(quote_id: int):
 
         # ── Preparar adjuntos ─────────────────────────────────────────────────
         adjuntos = []
-        for path_file, nombre_file in [
-            (png_cot_path,    f"cotizacion_{quote_number}.png"),
-            (png_cuadro_path, f"cuadro_costos_{quote_number}.png"),
-        ]:
-            if os.path.exists(path_file):
-                with open(path_file, 'rb') as f:
+
+        # Adjuntar todas las páginas del PNG de cotización
+        total_pags_cot = len(rutas_cot_png)
+        for _pi, _ruta_cot in enumerate(rutas_cot_png, 1):
+            if os.path.exists(_ruta_cot):
+                if total_pags_cot == 1:
+                    _nombre_cot = f"cotizacion_{quote_number}.png"
+                else:
+                    _nombre_cot = f"cotizacion_{quote_number}_p{_pi}.png"
+                with open(_ruta_cot, 'rb') as f:
                     adjuntos.append({
-                        "filename": nombre_file,
+                        "filename": _nombre_cot,
                         "content":  base64.b64encode(f.read()).decode(),
                         "type":     "image/png",
                     })
+
+        # Adjuntar PNG del cuadro de costos
+        if os.path.exists(png_cuadro_path):
+            with open(png_cuadro_path, 'rb') as f:
+                adjuntos.append({
+                    "filename": f"cuadro_costos_{quote_number}.png",
+                    "content":  base64.b64encode(f.read()).decode(),
+                    "type":     "image/png",
+                })
 
         # ── Enviar con Resend (sin CC para garantizar entrega) ───────────────
         resultado = EmailService.send_approval_email(
