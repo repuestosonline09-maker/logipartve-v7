@@ -1008,19 +1008,30 @@ def render_analyst_panel():
                             'total_bs':     st.session_state.get('_saved_total_bs', 0),
                             'terminos_condiciones': config.get('terms_conditions', ''),
                         }
-                        _now_b = now_caracas_naive()
-                        _out_dir_b = f'/home/ubuntu/cotizaciones_guardadas/{_now_b.strftime("%Y")}/{_now_b.strftime("%m")}'
+                        import tempfile as _tmpmod_b
+                        _out_dir_b = os.path.join(_tmpmod_b.gettempdir(), 'logipartve_docs')
                         os.makedirs(_out_dir_b, exist_ok=True)
                         _png_fn_b = f"cotizacion_{st.session_state.saved_quote_number}.png"
-                        _png_path_b = f"{_out_dir_b}/{_png_fn_b}"
+                        _png_path_b = os.path.join(_out_dir_b, _png_fn_b)
                         from services.document_generation.png_generator import PNGQuoteGenerator as _PNGGen_b
                         _png_gen_b = _PNGGen_b()
-                        if _png_gen_b.generate_quote_png_from_data(_qdata_b, _png_path_b):
-                            with open(_png_path_b, 'rb') as _f:
-                                st.download_button("🖼️ Descargar PNG", data=_f, file_name=_png_fn_b, mime="image/png", use_container_width=True)
-                            st.success("✅ PNG generado")
-                        else:
+                        _result_b = _png_gen_b.generate_quote_png_from_data(_qdata_b, _png_path_b)
+                        if _result_b is None:
                             st.error("❌ Error al generar PNG")
+                        else:
+                            _rutas_b = [_result_b] if isinstance(_result_b, str) else _result_b
+                            if len(_rutas_b) == 1 and os.path.exists(_rutas_b[0]):
+                                with open(_rutas_b[0], 'rb') as _f:
+                                    st.download_button("🖼️ Descargar PNG", data=_f, file_name=_png_fn_b, mime="image/png", use_container_width=True)
+                                st.success("✅ PNG generado")
+                            elif len(_rutas_b) > 1:
+                                for _pi_b, _ruta_b in enumerate(_rutas_b, 1):
+                                    _fn_b_pi = f"cotizacion_{st.session_state.saved_quote_number}_p{_pi_b}.png"
+                                    with open(_ruta_b, 'rb') as _f:
+                                        st.download_button(f"🖼️ PNG Pág. {_pi_b}", data=_f, file_name=_fn_b_pi, mime="image/png", use_container_width=True, key=f"dl_blind_png_p{_pi_b}")
+                                st.success(f"✅ PNG generado ({len(_rutas_b)} páginas)")
+                            else:
+                                st.error("❌ Error al generar PNG")
                     except Exception as _e:
                         st.error(f"❌ Error: {str(_e)}")
 
@@ -3338,54 +3349,70 @@ Cash | Zelle | Binance | Depósito Bancario Cta Divisas 🤝"""
                             'terminos_condiciones': config.get('terms_conditions', 'Términos y condiciones estándar.')
                         }
                         
-                        # Generar PNG en carpeta permanente
-                        # Crear estructura de carpetas: /home/ubuntu/cotizaciones_guardadas/YYYY/MM/
-                        now = now_caracas_naive()
-                        year = now.strftime("%Y")
-                        month = now.strftime("%m")
+                        # Generar PNG en directorio temporal (compatible con Streamlit Cloud)
+                        import tempfile as _tmpmod
+                        _tmp_dir_png = os.path.join(_tmpmod.gettempdir(), 'logipartve_docs')
+                        os.makedirs(_tmp_dir_png, exist_ok=True)
                         
-                        output_dir = f'/home/ubuntu/cotizaciones_guardadas/{year}/{month}'
-                        os.makedirs(output_dir, exist_ok=True)
-                        
-                        # Ruta completa del archivo PNG
+                        # Ruta base del archivo PNG
                         png_filename = f"cotizacion_{st.session_state.saved_quote_number}.png"
-                        png_path = f"{output_dir}/{png_filename}"
+                        png_path = os.path.join(_tmp_dir_png, png_filename)
                         
                         png_gen = PNGQuoteGenerator()
                         result = png_gen.generate_quote_png_from_data(quote_data, png_path)
                         
-                        if result:
-                            # Actualizar ruta del PNG en la base de datos
-                            if st.session_state.get('saved_quote_id'):
-                                conn = DBManager.get_connection()
-                                cursor = conn.cursor()
-                                is_postgres = DBManager.USE_POSTGRES
-                                
-                                if is_postgres:
-                                    cursor.execute("""
-                                        UPDATE quotes SET jpeg_path = %s WHERE id = %s
-                                    """, (png_path, st.session_state.saved_quote_id))
-                                else:
-                                    cursor.execute("""
-                                        UPDATE quotes SET jpeg_path = ? WHERE id = ?
-                                    """, (png_path, st.session_state.saved_quote_id))
-                                
-                                conn.commit()
-                                cursor.close()
-                                conn.close()
-                            
-                            # Ofrecer descarga
-                            with open(png_path, 'rb') as f:
-                                st.download_button(
-                                    label="🖼️ Descargar PNG",
-                                    data=f,
-                                    file_name=png_filename,
-                                    mime="image/png",
-                                    use_container_width=True
-                                )
-                            st.success(f"✅ PNG generado y guardado en: {png_path}")
-                        else:
+                        # result puede ser str (1 pág), list[str] (multi-pág) o None
+                        if result is None:
                             st.error("❌ Error al generar PNG")
+                        else:
+                            # Normalizar a lista
+                            _rutas_png = [result] if isinstance(result, str) else result
+                            _primera_ruta = _rutas_png[0] if _rutas_png else None
+                            
+                            if _primera_ruta and os.path.exists(_primera_ruta):
+                                # Guardar primera ruta en BD (compatibilidad)
+                                if st.session_state.get('saved_quote_id'):
+                                    conn = DBManager.get_connection()
+                                    cursor = conn.cursor()
+                                    is_postgres = DBManager.USE_POSTGRES
+                                    if is_postgres:
+                                        cursor.execute(
+                                            "UPDATE quotes SET jpeg_path = %s WHERE id = %s",
+                                            (_primera_ruta, st.session_state.saved_quote_id))
+                                    else:
+                                        cursor.execute(
+                                            "UPDATE quotes SET jpeg_path = ? WHERE id = ?",
+                                            (_primera_ruta, st.session_state.saved_quote_id))
+                                    conn.commit()
+                                    cursor.close()
+                                    conn.close()
+                                
+                                # Ofrecer descarga(s)
+                                if len(_rutas_png) == 1:
+                                    with open(_rutas_png[0], 'rb') as f:
+                                        st.download_button(
+                                            label="🖼️ Descargar PNG",
+                                            data=f,
+                                            file_name=png_filename,
+                                            mime="image/png",
+                                            use_container_width=True
+                                        )
+                                    st.success("✅ PNG generado correctamente.")
+                                else:
+                                    for _pi, _ruta_pi in enumerate(_rutas_png, 1):
+                                        _fn_pi = f"cotizacion_{st.session_state.saved_quote_number}_p{_pi}.png"
+                                        with open(_ruta_pi, 'rb') as f:
+                                            st.download_button(
+                                                label=f"🖼️ Descargar PNG — Pág. {_pi}",
+                                                data=f,
+                                                file_name=_fn_pi,
+                                                mime="image/png",
+                                                use_container_width=True,
+                                                key=f"dl_png_p{_pi}"
+                                            )
+                                    st.success(f"✅ PNG generado ({len(_rutas_png)} páginas). Descarga cada página.")
+                            else:
+                                st.error("❌ Error al generar PNG")
                     except Exception as e:
                         st.error(f"❌ Error: {str(e)}")
                 else:
