@@ -424,8 +424,8 @@ def render_my_quotes_panel():
         _show_delete_confirmation(st.session_state['mq_delete_id'])
 
     # ── BLOQUE 7B: FLUJO REENVIAR ORDEN APROBADA ───────────────────
-    if st.session_state.get('mq_reenviar_id') == quote_id:
-        _show_reenviar_orden(quote_id)
+    if st.session_state.get('mq_reenviar_id'):
+        _show_reenviar_orden(st.session_state['mq_reenviar_id'])
 
     # ── BLOQUE 7: FLUJO ORDEN APROBADA (FASE 5) ────────────────────
     if st.session_state.get('mq_aprobar_id'):
