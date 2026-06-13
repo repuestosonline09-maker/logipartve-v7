@@ -55,6 +55,62 @@ def _limpiar_todo():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# HELPER: DETECTAR TODAS LAS PÁGINAS PNG DE UNA COTIZACIÓN
+# ─────────────────────────────────────────────────────────────────────────────
+def _detectar_rutas_png(jpeg_path: str) -> list:
+    """
+    Dado el jpeg_path guardado en BD, devuelve la lista COMPLETA de rutas PNG
+    de todas las páginas de la cotización.
+
+    El generador PNG puede guardar archivos de dos formas:
+      - 1 página:  base.png          (jpeg_path apunta a base.png)
+      - N páginas: base_p1.png, base_p2.png, ...  (jpeg_path apunta a base_p1.png)
+
+    Esta función detecta ambos casos correctamente.
+    """
+    if not jpeg_path or not os.path.exists(jpeg_path):
+        return []
+
+    base, ext = os.path.splitext(jpeg_path)
+    if not ext:
+        ext = '.png'
+
+    # Caso A: jpeg_path termina en _p1 → multi-página guardada con sufijos
+    # Ej: /tmp/cotizacion_2026-60559-O_p1.png
+    if base.endswith('_p1'):
+        raiz = base[:-3]  # quitar '_p1'
+        rutas = []
+        pg = 1
+        while True:
+            ruta = f"{raiz}_p{pg}{ext}"
+            if os.path.exists(ruta):
+                rutas.append(ruta)
+                pg += 1
+            else:
+                break
+        if rutas:
+            return rutas
+
+    # Caso B: jpeg_path es el archivo base (1 página o multi-página antigua)
+    # Buscar si existen _p1, _p2, ... adicionales
+    rutas = [jpeg_path]
+    pg = 2
+    while True:
+        ruta_extra = f"{base}_p{pg}{ext}"
+        if os.path.exists(ruta_extra):
+            rutas.append(ruta_extra)
+            pg += 1
+        else:
+            break
+    # Verificar si _p1 existe y reemplaza al base
+    ruta_p1 = f"{base}_p1{ext}"
+    if os.path.exists(ruta_p1) and ruta_p1 not in rutas:
+        rutas = [ruta_p1] + rutas[1:]
+
+    return rutas
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # ADAPTADOR: BD → PDF/PNG generator
 # ─────────────────────────────────────────────────────────────────────────────
 def _adaptar_quote_para_generadores(qd: dict) -> dict:
@@ -641,28 +697,12 @@ def _show_acciones(quote_id: int):
                          type="secondary", key=f"acc_gen_pdf_{quote_id}"):
                 _regenerar_pdf(quote_id)
 
-    # ── DESCARGAR / VER PNG (soporta multi-página) ─────────────────────────────────────────────────
+    # ── VER PNG (soporta multi-página) ───────────────────────────────────────────────────────────────
     with a4:
-        png_path_base = str(quote.get('jpeg_path') or '')
-        if png_path_base and os.path.exists(png_path_base):
-            # Detectar páginas adicionales (_p2, _p3, ...)
-            _base_sin_ext, _ext = os.path.splitext(png_path_base)
-            _rutas_png = [png_path_base]
-            _pg = 2
-            while True:
-                _ruta_extra = f"{_base_sin_ext}_p{_pg}{_ext}"
-                if os.path.exists(_ruta_extra):
-                    _rutas_png.append(_ruta_extra)
-                    _pg += 1
-                else:
-                    break
-            # También detectar si la primera página fue guardada con sufijo _p1
-            _ruta_p1 = f"{_base_sin_ext}_p1{_ext}"
-            if os.path.exists(_ruta_p1) and _ruta_p1 not in _rutas_png:
-                _rutas_png = [_ruta_p1] + _rutas_png[1:]
-
-            _total_pags = len(_rutas_png)
-            # Botón VER PNG (activa/desactiva el visor)
+        _jpeg_path_a4 = str(quote.get('jpeg_path') or '')
+        _rutas_a4 = _detectar_rutas_png(_jpeg_path_a4)
+        if _rutas_a4:
+            _total_pags_a4 = len(_rutas_a4)
             _ver_key = f'mq_ver_png_{quote_id}'
             _ver_activo = st.session_state.get(_ver_key, False)
             _lbl_ver = "🔒 CERRAR PNG" if _ver_activo else "👁️ VER PNG"
@@ -670,8 +710,8 @@ def _show_acciones(quote_id: int):
                          type="secondary", key=f"acc_ver_png_{quote_id}"):
                 st.session_state[_ver_key] = not _ver_activo
                 st.rerun()
-            if _total_pags > 1:
-                st.caption(f"📄 {_total_pags} páginas")
+            if _total_pags_a4 > 1:
+                st.caption(f"📄 {_total_pags_a4} páginas")
         else:
             if st.button("🖼️ GENERAR PNG", use_container_width=True,
                          type="secondary", key=f"acc_gen_png_{quote_id}"):
@@ -930,37 +970,26 @@ def _show_acciones(quote_id: int):
     # ── VISOR PNG DE COTIZACIÓN (multi-página) ────────────────────────────────
     _ver_png_key = f'mq_ver_png_{quote_id}'
     if st.session_state.get(_ver_png_key, False):
-        png_path_base_v = str(quote.get('jpeg_path') or '')
-        if png_path_base_v and os.path.exists(png_path_base_v):
-            _base_v, _ext_v = os.path.splitext(png_path_base_v)
-            _rutas_v = [png_path_base_v]
-            _pg_v = 2
-            while True:
-                _extra_v = f"{_base_v}_p{_pg_v}{_ext_v}"
-                if os.path.exists(_extra_v):
-                    _rutas_v.append(_extra_v)
-                    _pg_v += 1
-                else:
-                    break
-            _ruta_p1_v = f"{_base_v}_p1{_ext_v}"
-            if os.path.exists(_ruta_p1_v) and _ruta_p1_v not in _rutas_v:
-                _rutas_v = [_ruta_p1_v] + _rutas_v[1:]
+        _jpeg_path_v = str(quote.get('jpeg_path') or '')
+        _rutas_v = _detectar_rutas_png(_jpeg_path_v)
 
+        if _rutas_v:
             _total_v = len(_rutas_v)
+            _qnum_v  = quote.get('quote_number', str(quote_id))
             st.markdown("---")
-            st.markdown(f"### 🖼️ Vista Previa PNG — {quote.get('quote_number', '')} ({_total_v} página{'s' if _total_v > 1 else ''})")
+            st.markdown(f"### 🖼️ Vista Previa PNG — {_qnum_v} ({_total_v} página{'s' if _total_v > 1 else ''})")
 
             for _iv, _ruta_v in enumerate(_rutas_v, 1):
                 if os.path.exists(_ruta_v):
                     if _total_v > 1:
                         st.markdown(f"**Página {_iv} de {_total_v}**")
                     st.image(_ruta_v, use_container_width=True)
+                    _fn_v = (
+                        f"cotizacion_{_qnum_v}.png"
+                        if _total_v == 1
+                        else f"cotizacion_{_qnum_v}_p{_iv}.png"
+                    )
                     with open(_ruta_v, 'rb') as _fv:
-                        _fn_v = (
-                            f"cotizacion_{quote.get('quote_number', quote_id)}.png"
-                            if _total_v == 1
-                            else f"cotizacion_{quote.get('quote_number', quote_id)}_p{_iv}.png"
-                        )
                         st.download_button(
                             label=f"⬇️ Descargar Pág. {_iv}" if _total_v > 1 else "⬇️ Descargar PNG",
                             data=_fv,
@@ -980,7 +1009,7 @@ def _show_acciones(quote_id: int):
                     st.session_state[_ver_png_key] = False
                     st.rerun()
         else:
-            st.warning("⚠️ No hay PNG generado para esta cotización. Usa el botón GENERAR PNG primero.")
+            st.warning("⚠️ No hay PNG generado. Usa el botón GENERAR PNG primero.")
     # ── FIN VISOR PNG ─────────────────────────────────────────────────────────
 
 
