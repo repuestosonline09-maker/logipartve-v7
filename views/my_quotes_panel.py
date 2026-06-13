@@ -306,9 +306,13 @@ def render_my_quotes_panel():
     st.title("📋 MIS COTIZACIONES")
     st.markdown("---")
 
-    # ── MENSAJE DE ÉXITO PERSISTENTE (se muestra tras eliminar o actualizar) ──────────────
+    # ── MENSAJES PERSISTENTES (se muestran tras operaciones con rerun) ──────────────
     if st.session_state.get('mq_delete_success_msg'):
         st.success(st.session_state.pop('mq_delete_success_msg'))
+    if st.session_state.get('mq_reenviar_success_msg'):
+        st.success(st.session_state.pop('mq_reenviar_success_msg'))
+    if st.session_state.get('mq_reenviar_error_msg'):
+        st.error(st.session_state.pop('mq_reenviar_error_msg'))
 
     # ── AUTO-APERTURA TRAS EDICIÓN ────────────────────────────────────────────────────
     # Si el analista acaba de guardar una edición, analyst_panel deja los flags
@@ -1528,9 +1532,10 @@ def _show_reenviar_orden(quote_id: int):
                 exito, mensaje = _enviar_orden_aprobada(quote_id)
             st.session_state.pop('mq_reenviar_id', None)
             if exito:
-                st.success(f"✅ {mensaje}")
+                # Guardar mensaje en session_state para mostrarlo DESPUÉS del rerun
+                st.session_state['mq_reenviar_success_msg'] = f"✅ {mensaje}"
             else:
-                st.error(f"❌ {mensaje}")
+                st.session_state['mq_reenviar_error_msg'] = f"❌ {mensaje}"
             st.rerun()
     with col_no:
         if st.button("❌ Cancelar", type="secondary",
