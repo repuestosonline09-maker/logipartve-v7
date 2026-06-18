@@ -1146,6 +1146,184 @@ def show_reports_and_stats():
     else:
         st.info("No hay actividad reciente")
     
+    st.markdown("---")
+
+    # ── SECCIÓN: UTILIDAD DE ÓRDENES APROBADAS ────────────────────────────────
+    st.subheader("💹 Utilidad de Órdenes Aprobadas")
+    st.caption(
+        "Suma de la utilidad generada (campo `utilidad_valor`) en todos los ítems "
+        "de cotizaciones con estado **Aprobada**. Filtrable por mes/año."
+    )
+
+    util_col1, util_col2, util_col3 = st.columns([2, 2, 1])
+    with util_col1:
+        util_mes = st.selectbox(
+            "Mes",
+            options=list(range(1, 13)),
+            index=5,  # Junio por defecto
+            format_func=lambda m: [
+                "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+                "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+            ][m - 1],
+            key="util_mes"
+        )
+    with util_col2:
+        util_anio = st.number_input(
+            "Año",
+            min_value=2024,
+            max_value=2030,
+            value=2026,
+            step=1,
+            key="util_anio"
+        )
+    with util_col3:
+        st.markdown("<br>", unsafe_allow_html=True)
+        calcular_util = st.button("🔍 Calcular", key="btn_calcular_util", use_container_width=True)
+
+    if calcular_util or st.session_state.get('_util_calculado'):
+        st.session_state['_util_calculado'] = True
+        try:
+            conn = DBManager.get_connection()
+            cursor = conn.cursor()
+            is_pg = DBManager.USE_POSTGRES
+
+            if is_pg:
+                cursor.execute("""
+                    SELECT
+                        q.quote_number,
+                        q.client_name,
+                        u.full_name                        AS analista,
+                        q.created_at,
+                        q.total_amount,
+                        COALESCE(SUM(qi.utilidad_valor * qi.quantity), 0) AS utilidad_total,
+                        COALESCE(SUM(qi.precio_usd    * qi.quantity), 0) AS venta_total_usd,
+                        COUNT(qi.id)                       AS num_items
+                    FROM quotes q
+                    JOIN users u ON q.analyst_id = u.id
+                    LEFT JOIN quote_items qi ON qi.quote_id = q.id
+                    WHERE q.status = 'approved'
+                      AND EXTRACT(MONTH FROM q.created_at) = %s
+                      AND EXTRACT(YEAR  FROM q.created_at) = %s
+                    GROUP BY q.id, q.quote_number, q.client_name, u.full_name, q.created_at, q.total_amount
+                    ORDER BY q.created_at DESC
+                """, (util_mes, util_anio))
+            else:
+                cursor.execute("""
+                    SELECT
+                        q.quote_number,
+                        q.client_name,
+                        u.full_name                        AS analista,
+                        q.created_at,
+                        q.total_amount,
+                        COALESCE(SUM(qi.utilidad_valor * qi.quantity), 0) AS utilidad_total,
+                        COALESCE(SUM(qi.precio_usd    * qi.quantity), 0) AS venta_total_usd,
+                        COUNT(qi.id)                       AS num_items
+                    FROM quotes q
+                    JOIN users u ON q.analyst_id = u.id
+                    LEFT JOIN quote_items qi ON qi.quote_id = q.id
+                    WHERE q.status = 'approved'
+                      AND CAST(strftime('%m', q.created_at) AS INTEGER) = ?
+                      AND CAST(strftime('%Y', q.created_at) AS INTEGER) = ?
+                    GROUP BY q.id, q.quote_number, q.client_name, u.full_name, q.created_at, q.total_amount
+                    ORDER BY q.created_at DESC
+                """, (util_mes, util_anio))
+
+            filas = [dict(r) for r in cursor.fetchall()]
+            cursor.close()
+            conn.close()
+
+            nombre_mes = [
+                "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+                "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+            ][util_mes - 1]
+
+            if not filas:
+                st.info(f"ℹ️ No hay órdenes aprobadas en {nombre_mes} {util_anio}.")
+            else:
+                total_utilidad   = sum(float(f.get('utilidad_total',   0) or 0) for f in filas)
+                total_venta      = sum(float(f.get('venta_total_usd',  0) or 0) for f in filas)
+                total_ordenes    = len(filas)
+                margen_pct       = (total_utilidad / total_venta * 100) if total_venta > 0 else 0
+
+                # ── Métricas de resumen ──────────────────────────────────────
+                st.markdown(f"##### Resumen — {nombre_mes} {util_anio}")
+                mc1, mc2, mc3, mc4 = st.columns(4)
+                with mc1:
+                    st.metric("✅ Órdenes Aprobadas", total_ordenes)
+                with mc2:
+                    st.metric("💹 Utilidad Total", f"${total_utilidad:,.2f}")
+                with mc3:
+                    st.metric("💰 Venta Total (USD)", f"${total_venta:,.2f}")
+                with mc4:
+                    st.metric("📊 Margen Promedio", f"{margen_pct:.2f}%")
+
+                st.markdown("---")
+
+                # ── Desglose por analista ────────────────────────────────────
+                st.markdown("##### Desglose por Analista")
+                from collections import defaultdict as _dd
+                por_analista = _dd(lambda: {'ordenes': 0, 'utilidad': 0.0, 'venta': 0.0})
+                for f in filas:
+                    a = f.get('analista', '—')
+                    por_analista[a]['ordenes']  += 1
+                    por_analista[a]['utilidad'] += float(f.get('utilidad_total',  0) or 0)
+                    por_analista[a]['venta']    += float(f.get('venta_total_usd', 0) or 0)
+
+                analista_rows = []
+                for nombre, vals in sorted(por_analista.items(), key=lambda x: -x[1]['utilidad']):
+                    pct = (vals['utilidad'] / vals['venta'] * 100) if vals['venta'] > 0 else 0
+                    analista_rows.append({
+                        'Analista':       nombre,
+                        'Órdenes':        vals['ordenes'],
+                        'Venta (USD)':    f"${vals['venta']:,.2f}",
+                        'Utilidad (USD)': f"${vals['utilidad']:,.2f}",
+                        'Margen %':       f"{pct:.2f}%",
+                    })
+                st.dataframe(
+                    pd.DataFrame(analista_rows),
+                    use_container_width=True,
+                    hide_index=True
+                )
+
+                st.markdown("---")
+
+                # ── Tabla detallada orden por orden ─────────────────────────
+                st.markdown("##### Detalle Orden por Orden")
+                detalle_rows = []
+                for f in filas:
+                    ts = f.get('created_at')
+                    if isinstance(ts, str):
+                        try:
+                            from datetime import datetime as _dt
+                            ts = _dt.fromisoformat(ts)
+                        except Exception:
+                            pass
+                    fecha_str = ts.strftime('%d/%m/%Y') if hasattr(ts, 'strftime') else str(ts)
+                    utilidad_f = float(f.get('utilidad_total',  0) or 0)
+                    venta_f    = float(f.get('venta_total_usd', 0) or 0)
+                    pct_f      = (utilidad_f / venta_f * 100) if venta_f > 0 else 0
+                    detalle_rows.append({
+                        'Fecha':          fecha_str,
+                        'Orden':          f.get('quote_number', '—'),
+                        'Cliente':        f.get('client_name',  '—'),
+                        'Analista':       f.get('analista',     '—'),
+                        'Ítems':          int(f.get('num_items', 0)),
+                        'Venta (USD)':    f"${venta_f:,.2f}",
+                        'Utilidad (USD)': f"${utilidad_f:,.2f}",
+                        'Margen %':       f"{pct_f:.2f}%",
+                    })
+                st.dataframe(
+                    pd.DataFrame(detalle_rows),
+                    use_container_width=True,
+                    hide_index=True,
+                    height=min(400, 40 + 35 * len(detalle_rows))
+                )
+
+        except Exception as e:
+            st.error(f"❌ Error al calcular utilidad: {e}")
+            import traceback
+            st.code(traceback.format_exc())
+
     st.markdown('</div>', unsafe_allow_html=True)
 
 
