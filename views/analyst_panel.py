@@ -1225,7 +1225,21 @@ def render_analyst_panel():
     default_ano       = st.session_state.cliente_datos.get('year', '')       if _usar_datos_guardados else ''
     default_vin       = st.session_state.cliente_datos.get('vin', '')        if _usar_datos_guardados else ''
     default_direccion = st.session_state.cliente_datos.get('direccion', '')  if _usar_datos_guardados else ''
-    default_ci_rif    = st.session_state.cliente_datos.get('cedula', '')     if _usar_datos_guardados else ''
+    # ── PARSEAR default_ci_rif: separar prefijo (V-/E-/J-) del número ─────────
+    _raw_ci = st.session_state.cliente_datos.get('cedula', '') if _usar_datos_guardados else ''
+    _PREFIJOS_DOC = ['V-', 'E-', 'J-']
+    _default_tipo_doc = ''
+    _default_num_doc  = ''
+    if _raw_ci:
+        for _pfx in _PREFIJOS_DOC:
+            if _raw_ci.upper().startswith(_pfx.upper()):
+                _default_tipo_doc = _pfx
+                _default_num_doc  = _raw_ci[len(_pfx):].replace('-', '').replace('.', '').strip()
+                break
+        if not _default_tipo_doc:
+            # Valor antiguo sin prefijo — dejarlo en el campo numérico para que el analista elija tipo
+            _default_num_doc = _raw_ci.replace('-', '').replace('.', '').strip()
+    default_ci_rif = _raw_ci  # mantener compatibilidad con referencias posteriores al valor compuesto
 
     # Si hay un cliente autocompletado pendiente, sobreescribir los defaults
     if st.session_state.get('ac_seleccionado'):
@@ -1233,7 +1247,19 @@ def render_analyst_panel():
         default_nombre    = _ac.get('nombre', default_nombre)
         default_telefono  = _ac.get('telefono', default_telefono)
         default_direccion = _ac.get('direccion', default_direccion)
-        default_ci_rif    = _ac.get('ci_rif', default_ci_rif)
+        _raw_ci_ac = _ac.get('ci_rif', default_ci_rif)
+        default_ci_rif = _raw_ci_ac
+        # Parsear prefijo del cliente autocompletado
+        _default_tipo_doc = ''
+        _default_num_doc  = ''
+        if _raw_ci_ac:
+            for _pfx in _PREFIJOS_DOC:
+                if _raw_ci_ac.upper().startswith(_pfx.upper()):
+                    _default_tipo_doc = _pfx
+                    _default_num_doc  = _raw_ci_ac[len(_pfx):].replace('-', '').replace('.', '').strip()
+                    break
+            if not _default_tipo_doc:
+                _default_num_doc = _raw_ci_ac.replace('-', '').replace('.', '').strip()
         # ── CORRECCIÓN ANTI-DUPLICADO FALSO POSITIVO ─────────────────────────
         # Guardar el ID del cliente seleccionado ANTES de borrar ac_seleccionado.
         # La validación anti-duplicado lo usará para excluir a este cliente
@@ -1540,17 +1566,94 @@ def render_analyst_panel():
     with col7:
         cliente_direccion = st.text_input("Dirección (opcional)", value=default_direccion, key=f"cliente_direccion_{reset_key}", on_change=_autosave_draft)
     with col8:
-        cliente_ci_rif = st.text_input("C.I. / RIF (opcional)", value=default_ci_rif, key=f"cliente_ci_rif_{reset_key}", on_change=_autosave_draft)
-        # ── VALIDACIÓN ANTI-DUPLICADO: CÉDULA/RIF ────────────────────────────────
-        _ci_actual = st.session_state.get(f'cliente_ci_rif_{reset_key}', '').strip()
+        # ───────────────────────────────────────────────────────────────────────────────
+        # BLOQUE: SELECTOR DE TIPO DE DOCUMENTO + CAMPO NUMÉRICO
+        # Requisito: V- (venezolano) / E- (extranjero) / J- (empresa/RIF)
+        # Solo números permitidos. Tipo obligatorio si se ingresa número.
+        # ───────────────────────────────────────────────────────────────────────────────
+        st.markdown("**C.I. / RIF**")
+        _doc_col1, _doc_col2 = st.columns([1, 3])
+
+        # Opciones del selector: primer elemento vacío para forzar selección
+        _OPCIONES_DOC = ['', 'V-', 'E-', 'J-']
+        _tipo_doc_idx = 0
+        if _default_tipo_doc in _OPCIONES_DOC:
+            _tipo_doc_idx = _OPCIONES_DOC.index(_default_tipo_doc)
+
+        with _doc_col1:
+            _tipo_doc_sel = st.selectbox(
+                "Tipo",
+                options=_OPCIONES_DOC,
+                index=_tipo_doc_idx,
+                key=f"cliente_tipo_doc_{reset_key}",
+                label_visibility="collapsed",
+                on_change=_autosave_draft
+            )
+        with _doc_col2:
+            _num_doc_val = st.text_input(
+                "Número",
+                value=_default_num_doc,
+                placeholder="Solo números, sin puntos ni guiones",
+                key=f"cliente_num_doc_{reset_key}",
+                label_visibility="collapsed",
+                on_change=_autosave_draft
+            )
+
+        # ── VALIDACIÓN DEL DOCUMENTO ────────────────────────────────────────────────
+        _tipo_doc_actual  = st.session_state.get(f'cliente_tipo_doc_{reset_key}', '').strip()
+        _num_doc_actual   = st.session_state.get(f'cliente_num_doc_{reset_key}', '').strip()
+        _error_doc        = False
+        _bloquear_doc     = False
+
+        if _num_doc_actual:
+            # Si escribió número pero no eligió tipo → bloquear
+            if not _tipo_doc_actual:
+                st.markdown(
+                    "<div style='background:#ffebee;border-left:4px solid #c62828;"
+                    "padding:8px 12px;border-radius:6px;margin:4px 0;font-size:0.88em;'>"
+                    "<b>🚫 Debes seleccionar el tipo de documento (V- / E- / J-)</b>"
+                    "</div>",
+                    unsafe_allow_html=True
+                )
+                _bloquear_doc = True
+                _error_doc    = True
+            # Si el número contiene caracteres no numéricos → bloquear
+            elif not _num_doc_actual.isdigit():
+                st.markdown(
+                    "<div style='background:#ffebee;border-left:4px solid #c62828;"
+                    "padding:8px 12px;border-radius:6px;margin:4px 0;font-size:0.88em;'>"
+                    "<b>🚫 El número de documento solo puede contener dígitos (sin puntos, guiones ni letras)</b>"
+                    "</div>",
+                    unsafe_allow_html=True
+                )
+                _bloquear_doc = True
+                _error_doc    = True
+            else:
+                # Mostrar vista previa del documento compuesto
+                st.caption(f"✅ Documento: **{_tipo_doc_actual}{_num_doc_actual}**")
+
+        # Componer el valor final del documento (lo que se guarda en BD)
+        if _tipo_doc_actual and _num_doc_actual and _num_doc_actual.isdigit():
+            cliente_ci_rif = f"{_tipo_doc_actual}{_num_doc_actual}"
+        else:
+            # Si no hay tipo o hay error, guardar vacío para no contaminar la BD
+            cliente_ci_rif = ''
+
+        # Guardar en session_state con la clave que usa el autosave
+        st.session_state[f'cliente_ci_rif_{reset_key}'] = cliente_ci_rif
+        st.session_state['_bloquear_por_doc_formato'] = _bloquear_doc
+
+        # ── VALIDACIÓN ANTI-DUPLICADO: CÉDULA/RIF ────────────────────────────────────────
+        _ci_actual  = cliente_ci_rif
         _ci_dup_key = f'dup_ci_resultado_{reset_key}'
-        if len(_ci_actual) >= 5 and _ci_actual != st.session_state.get(f'_last_ci_check_{reset_key}', ''):
+        if len(_ci_actual) >= 5 and not _error_doc and _ci_actual != st.session_state.get(f'_last_ci_check_{reset_key}', ''):
             st.session_state[f'_last_ci_check_{reset_key}'] = _ci_actual
             _dup_ci = buscar_por_telefono_o_cedula(ci_rif=_ci_actual)
-            # Excluir el cliente actualmente activo (mismo razonamiento que teléfono)
             _id_sel_ci = st.session_state.get('_cliente_activo_id')
             _dup_ci = [c for c in _dup_ci if c.get('id') != _id_sel_ci]
             st.session_state[_ci_dup_key] = _dup_ci
+        elif _error_doc:
+            st.session_state[_ci_dup_key] = []
         _dup_ci_result = st.session_state.get(_ci_dup_key, [])
         if _dup_ci_result:
             _dup_ci_cli = _dup_ci_result[0]
@@ -2934,16 +3037,20 @@ Cash | Zelle | Binance | Depósito Bancario Cta Divisas 🤝"""
                     return True
                 _copy_sin_cambios = _items_son_iguales(_original_snap, _current_items)
 
-            # Determinar si hay bloqueo por cliente duplicado (teléfono o cédula)
-            _bloquear_dup_tel = st.session_state.get('_bloquear_por_dup_tel', False)
-            _bloquear_dup_ci  = st.session_state.get('_bloquear_por_dup_ci',  False)
-            _bloquear_por_dup = _bloquear_dup_tel or _bloquear_dup_ci
+            # Determinar si hay bloqueo por cliente duplicado (teléfono o cédula) o formato de documento
+            _bloquear_dup_tel  = st.session_state.get('_bloquear_por_dup_tel',       False)
+            _bloquear_dup_ci   = st.session_state.get('_bloquear_por_dup_ci',        False)
+            _bloquear_doc_fmt  = st.session_state.get('_bloquear_por_doc_formato',   False)
+            _bloquear_por_dup  = _bloquear_dup_tel or _bloquear_dup_ci
             # Determinar label y estado del botón (UN SOLO render con una sola key)
             if _btn_disabled:
                 _guardar_label    = "✅ COTIZACIÓN GUARDADA" if _ya_guardada else "⏳ Guardando..."
                 _guardar_disabled = True
             elif _copy_sin_cambios:
                 _guardar_label    = "📋 COPIA SIN CAMBIOS — Modifica al menos un ítem"
+                _guardar_disabled = True
+            elif _bloquear_doc_fmt:
+                _guardar_label    = "🚫 DOCUMENTO INVÁLIDO — Corrige el formato del C.I./RIF antes de guardar"
                 _guardar_disabled = True
             elif _bloquear_por_dup:
                 _guardar_label    = "🚫 CLIENTE DUPLICADO — Resuelve el conflicto antes de guardar"
