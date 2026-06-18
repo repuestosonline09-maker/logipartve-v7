@@ -100,6 +100,25 @@ def show_login():
                 else:
                     result = AuthManager.login(username, password)
                     if result["success"]:
+                        # CORRECCIÓN DEFINITIVA: escribir el token en localStorage
+                        # ANTES del st.rerun(). El flujo anterior guardaba el token
+                        # en session_state['_pending_token_save'] y lo escribia en
+                        # el SIGUIENTE rerun via inject_token_writer_if_pending().
+                        # Pero st.rerun() borra session_state, así que el token
+                        # nunca llegaba a localStorage y Julia era expulsada en
+                        # cada reinicio del servidor.
+                        try:
+                            from services.cookie_session import _inject_token_writer, _generate_token
+                            token_str = _generate_token(
+                                result['user']['id'],
+                                result['user']['username']
+                            )
+                            _inject_token_writer(token_str)
+                            # Limpiar el pendiente para que inject_token_writer_if_pending
+                            # no lo vuelva a escribir en el siguiente rerun
+                            st.session_state.pop('_pending_token_save', None)
+                        except Exception as _te:
+                            print(f"[Login] Error escribiendo token en localStorage: {_te}")
                         st.success(result["message"])
                         st.rerun()
                     else:

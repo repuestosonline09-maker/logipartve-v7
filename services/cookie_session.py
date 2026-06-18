@@ -255,10 +255,12 @@ def restore_session_from_cookie() -> bool:
         st.session_state.full_name  = user["full_name"]
 
         # Renovar el token si está próximo a expirar
+        # CORRECCIÓN: Escribir el token renovado directamente en localStorage
+        # (no via _pending_token_save que se pierde en el siguiente rerun)
         hours_left = SESSION_HOURS - token_info["elapsed_hours"]
         if hours_left < RENEW_THRESHOLD:
             new_token = _generate_token(user["id"], user["username"])
-            st.session_state['_pending_token_save'] = new_token
+            _inject_token_writer(new_token)  # Escribir inmediatamente
             print(f"[SessionToken] Token renovado para: {user['username']} (quedaban {hours_left:.1f}h)")
         else:
             print(f"[SessionToken] Sesión restaurada para: {user['username']} ({hours_left:.1f}h restantes)")
