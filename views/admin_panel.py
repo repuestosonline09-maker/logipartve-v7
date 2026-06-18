@@ -1187,46 +1187,52 @@ def show_reports_and_stats():
             cursor = conn.cursor()
             is_pg = DBManager.USE_POSTGRES
 
-            # NOTA IMPORTANTE: precio_usd y utilidad_valor en quote_items ya son TOTALES
-            # (incluyen la cantidad). NO multiplicar por quantity para evitar duplicar.
-            # La fuente de verdad para venta_total_usd es q.total_amount (campo de quotes).
+            # NOTA IMPORTANTE:
+            # 1. precio_usd y utilidad_valor en quote_items ya son TOTALES (incluyen cantidad).
+            #    NO multiplicar por quantity.
+            # 2. Filtrar por updated_at (fecha de aprobación), NO por created_at (fecha de creación).
+            #    Una orden creada en mayo pero aprobada en junio debe aparecer en junio.
             if is_pg:
                 cursor.execute("""
                     SELECT
                         q.quote_number,
                         q.client_name,
-                        u.full_name                        AS analista,
+                        u.full_name                         AS analista,
                         q.created_at,
-                        COALESCE(q.total_amount, 0)        AS venta_total_usd,
+                        q.updated_at                        AS fecha_aprobacion,
+                        COALESCE(q.total_amount, 0)         AS venta_total_usd,
                         COALESCE(SUM(qi.utilidad_valor), 0) AS utilidad_total,
-                        COUNT(qi.id)                       AS num_items
+                        COUNT(qi.id)                        AS num_items
                     FROM quotes q
                     JOIN users u ON q.analyst_id = u.id
                     LEFT JOIN quote_items qi ON qi.quote_id = q.id
                     WHERE q.status = 'approved'
-                      AND EXTRACT(MONTH FROM q.created_at) = %s
-                      AND EXTRACT(YEAR  FROM q.created_at) = %s
-                    GROUP BY q.id, q.quote_number, q.client_name, u.full_name, q.created_at, q.total_amount
-                    ORDER BY q.created_at DESC
+                      AND EXTRACT(MONTH FROM q.updated_at) = %s
+                      AND EXTRACT(YEAR  FROM q.updated_at) = %s
+                    GROUP BY q.id, q.quote_number, q.client_name, u.full_name,
+                             q.created_at, q.updated_at, q.total_amount
+                    ORDER BY q.updated_at DESC
                 """, (util_mes, util_anio))
             else:
                 cursor.execute("""
                     SELECT
                         q.quote_number,
                         q.client_name,
-                        u.full_name                        AS analista,
+                        u.full_name                         AS analista,
                         q.created_at,
-                        COALESCE(q.total_amount, 0)        AS venta_total_usd,
+                        q.updated_at                        AS fecha_aprobacion,
+                        COALESCE(q.total_amount, 0)         AS venta_total_usd,
                         COALESCE(SUM(qi.utilidad_valor), 0) AS utilidad_total,
-                        COUNT(qi.id)                       AS num_items
+                        COUNT(qi.id)                        AS num_items
                     FROM quotes q
                     JOIN users u ON q.analyst_id = u.id
                     LEFT JOIN quote_items qi ON qi.quote_id = q.id
                     WHERE q.status = 'approved'
-                      AND CAST(strftime('%m', q.created_at) AS INTEGER) = ?
-                      AND CAST(strftime('%Y', q.created_at) AS INTEGER) = ?
-                    GROUP BY q.id, q.quote_number, q.client_name, u.full_name, q.created_at, q.total_amount
-                    ORDER BY q.created_at DESC
+                      AND CAST(strftime('%m', q.updated_at) AS INTEGER) = ?
+                      AND CAST(strftime('%Y', q.updated_at) AS INTEGER) = ?
+                    GROUP BY q.id, q.quote_number, q.client_name, u.full_name,
+                             q.created_at, q.updated_at, q.total_amount
+                    ORDER BY q.updated_at DESC
                 """, (util_mes, util_anio))
 
             filas = [dict(r) for r in cursor.fetchall()]
@@ -1292,7 +1298,8 @@ def show_reports_and_stats():
                 st.markdown("##### Detalle Orden por Orden")
                 detalle_rows = []
                 for f in filas:
-                    ts = f.get('created_at')
+                    # Mostrar fecha de aprobación (updated_at), no de creación
+                    ts = f.get('fecha_aprobacion') or f.get('created_at')
                     if isinstance(ts, str):
                         try:
                             from datetime import datetime as _dt
@@ -1304,14 +1311,14 @@ def show_reports_and_stats():
                     venta_f    = float(f.get('venta_total_usd', 0) or 0)
                     pct_f      = (utilidad_f / venta_f * 100) if venta_f > 0 else 0
                     detalle_rows.append({
-                        'Fecha':          fecha_str,
-                        'Orden':          f.get('quote_number', '—'),
-                        'Cliente':        f.get('client_name',  '—'),
-                        'Analista':       f.get('analista',     '—'),
-                        'Ítems':          int(f.get('num_items', 0)),
-                        'Venta (USD)':    f"${venta_f:,.2f}",
-                        'Utilidad (USD)': f"${utilidad_f:,.2f}",
-                        'Margen %':       f"{pct_f:.2f}%",
+                        'Fecha Aprobación': fecha_str,
+                        'Orden':             f.get('quote_number', '—'),
+                        'Cliente':           f.get('client_name',  '—'),
+                        'Analista':          f.get('analista',     '—'),
+                        'Ítems':             int(f.get('num_items', 0)),
+                        'Venta (USD)':       f"${venta_f:,.2f}",
+                        'Utilidad (USD)':    f"${utilidad_f:,.2f}",
+                        'Margen %':          f"{pct_f:.2f}%",
                     })
                 st.dataframe(
                     pd.DataFrame(detalle_rows),
