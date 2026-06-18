@@ -165,8 +165,13 @@ def main():
 
     if not AuthManager.is_logged_in():
         restored = restore_session_from_cookie()
-        if restored:
-            st.rerun()  # hotfix: forzar segundo rerun para completar restauración de sesión
+        # CORRECCIÓN: NO hacer st.rerun() aquí.
+        # restore_session_from_cookie() ya escribe en session_state directamente.
+        # El st.rerun() previo destruia el session_state recién restaurado
+        # porque Streamlit borra session_state al inicio de cada rerun
+        # cuando el WebSocket se reconecta tras un reinicio del servidor.
+        # En su lugar, simplemente continuamos: si 'restored' es True,
+        # is_logged_in() ya devolverá True en la siguiente línea.
 
     if not AuthManager.is_logged_in():
         # Sin sesión válida: mostrar pantalla de login.

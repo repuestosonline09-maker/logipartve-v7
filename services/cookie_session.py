@@ -219,7 +219,10 @@ def restore_session_from_cookie() -> bool:
 
         if not token:
             # No hay token en la URL: inyectar el lector de localStorage
-            # para que en el próximo rerun el token esté disponible
+            # CORRECCIÓN: Limpiar la bandera _token_reader_injected antes de inyectar
+            # para que si el servidor se reinició (session_state limpio), el lector
+            # se inyecte correctamente en cada recarga de página.
+            st.session_state.pop('_token_reader_injected', None)
             _inject_token_reader()
             return False
 
@@ -233,12 +236,15 @@ def restore_session_from_cookie() -> bool:
                 del st.query_params[TOKEN_PARAM]
             except Exception:
                 pass
+            # Limpiar bandera para permitir nuevo intento de login
+            st.session_state.pop('_token_reader_injected', None)
             return False
 
         # Buscar el usuario en la BD
         user = DBManager.get_user_by_username(token_info["username"])
         if not user:
             _inject_token_cleaner()
+            st.session_state.pop('_token_reader_injected', None)
             return False
 
         # Restaurar sesión en memoria
@@ -267,6 +273,8 @@ def restore_session_from_cookie() -> bool:
 
     except Exception as e:
         print(f"[SessionToken] No se pudo restaurar sesión: {e}")
+        # Limpiar bandera para permitir reintento en el próximo ciclo
+        st.session_state.pop('_token_reader_injected', None)
         return False
 
 
