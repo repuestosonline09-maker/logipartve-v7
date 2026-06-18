@@ -1187,6 +1187,9 @@ def show_reports_and_stats():
             cursor = conn.cursor()
             is_pg = DBManager.USE_POSTGRES
 
+            # NOTA IMPORTANTE: precio_usd y utilidad_valor en quote_items ya son TOTALES
+            # (incluyen la cantidad). NO multiplicar por quantity para evitar duplicar.
+            # La fuente de verdad para venta_total_usd es q.total_amount (campo de quotes).
             if is_pg:
                 cursor.execute("""
                     SELECT
@@ -1194,9 +1197,8 @@ def show_reports_and_stats():
                         q.client_name,
                         u.full_name                        AS analista,
                         q.created_at,
-                        q.total_amount,
-                        COALESCE(SUM(qi.utilidad_valor * qi.quantity), 0) AS utilidad_total,
-                        COALESCE(SUM(qi.precio_usd    * qi.quantity), 0) AS venta_total_usd,
+                        COALESCE(q.total_amount, 0)        AS venta_total_usd,
+                        COALESCE(SUM(qi.utilidad_valor), 0) AS utilidad_total,
                         COUNT(qi.id)                       AS num_items
                     FROM quotes q
                     JOIN users u ON q.analyst_id = u.id
@@ -1214,9 +1216,8 @@ def show_reports_and_stats():
                         q.client_name,
                         u.full_name                        AS analista,
                         q.created_at,
-                        q.total_amount,
-                        COALESCE(SUM(qi.utilidad_valor * qi.quantity), 0) AS utilidad_total,
-                        COALESCE(SUM(qi.precio_usd    * qi.quantity), 0) AS venta_total_usd,
+                        COALESCE(q.total_amount, 0)        AS venta_total_usd,
+                        COALESCE(SUM(qi.utilidad_valor), 0) AS utilidad_total,
                         COUNT(qi.id)                       AS num_items
                     FROM quotes q
                     JOIN users u ON q.analyst_id = u.id
