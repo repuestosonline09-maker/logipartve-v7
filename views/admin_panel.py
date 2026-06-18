@@ -69,7 +69,7 @@ def show_admin_panel():
     st.title("🔧 Panel de Administración")
     
     # Tabs para organizar las secciones
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
         "👤 Mi Perfil",
         "👥 Gestión de Usuarios",
         "⚙️ Configuración del Sistema",
@@ -77,7 +77,8 @@ def show_admin_panel():
         "📧 Configuración de Correos",
         "👨‍💼 Clientes",
         "🔍 Auditoría",
-        "⛔ Anulaciones"
+        "⛔ Anulaciones",
+        "🔐 Logs de Sesión"
     ])
 
     # TAB 1: MI PERFIL
@@ -111,6 +112,10 @@ def show_admin_panel():
     # TAB 8: ANULACIONES
     with tab8:
         show_cancellations_panel()
+
+    # TAB 9: LOGS DE SESIÓN
+    with tab9:
+        show_session_logs_panel()
 
 
 def show_my_profile():
@@ -2077,3 +2082,209 @@ def show_cancellations_panel():
                                     st.rerun()
                                 except Exception as e:
                                     st.error(f"❌ Error al reactivar: {e}")
+
+
+# ==================== LOGS DE SESIÓN (TAB 9) ====================
+
+def show_session_logs_panel():
+    """
+    Panel de logs de sesión — muestra eventos de login/logout por usuario.
+    Permite diagnosticar cierres de sesión inesperados.
+    """
+    import pandas as _pd
+    from datetime import datetime, timedelta, timezone
+
+    st.markdown("### 🔐 Logs de Sesión — Login / Logout")
+    st.caption(
+        "Muestra todos los eventos de inicio y cierre de sesión registrados. "
+        "Útil para diagnosticar cierres inesperados de sesión de los analistas."
+    )
+    st.markdown("---")
+
+    # ── Filtros ──────────────────────────────────────────────────────────────
+    col_usr, col_hrs, col_btn = st.columns([2, 2, 1])
+    with col_usr:
+        filtro_usuario = st.text_input(
+            "Filtrar por usuario",
+            value="",
+            placeholder="Ej: Julia, admin...",
+            key="sl_filtro_usuario"
+        )
+    with col_hrs:
+        horas_atras = st.selectbox(
+            "Período",
+            options=[6, 12, 24, 48, 72, 168],
+            index=2,
+            format_func=lambda h: f"Últimas {h}h" if h < 168 else "Última semana",
+            key="sl_horas"
+        )
+    with col_btn:
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("🔄 Actualizar", key="sl_refresh", use_container_width=True):
+            st.rerun()
+
+    # ── Consultar logs ────────────────────────────────────────────────────────
+    try:
+        conn = DBManager.get_connection()
+        cursor = conn.cursor()
+        is_pg = DBManager.USE_POSTGRES
+
+        if is_pg:
+            cursor.execute("""
+                SELECT
+                    a.id,
+                    a.action,
+                    a.details,
+                    a.timestamp,
+                    u.full_name,
+                    u.username,
+                    u.role
+                FROM activity_logs a
+                JOIN users u ON a.user_id = u.id
+                WHERE a.action IN ('login', 'logout')
+                  AND a.timestamp >= NOW() - INTERVAL '%s hours'
+                ORDER BY a.timestamp DESC
+                LIMIT 500
+            """, (horas_atras,))
+        else:
+            desde = (datetime.utcnow() - timedelta(hours=horas_atras)).strftime('%Y-%m-%d %H:%M:%S')
+            cursor.execute("""
+                SELECT
+                    a.id,
+                    a.action,
+                    a.details,
+                    a.timestamp,
+                    u.full_name,
+                    u.username,
+                    u.role
+                FROM activity_logs a
+                JOIN users u ON a.user_id = u.id
+                WHERE a.action IN ('login', 'logout')
+                  AND a.timestamp >= ?
+                ORDER BY a.timestamp DESC
+                LIMIT 500
+            """, (desde,))
+
+        rows = [dict(r) for r in cursor.fetchall()]
+        cursor.close()
+        conn.close()
+
+    except Exception as e:
+        st.error(f"❌ Error al consultar logs: {e}")
+        return
+
+    # ── Filtrar por usuario si se especificó ─────────────────────────────────
+    if filtro_usuario.strip():
+        q = filtro_usuario.strip().lower()
+        rows = [r for r in rows if q in r.get('full_name', '').lower()
+                                or q in r.get('username', '').lower()]
+
+    if not rows:
+        st.info("ℹ️ No hay eventos de sesión en el período seleccionado.")
+        return
+
+    # ── Resumen por usuario ───────────────────────────────────────────────────
+    st.markdown(f"**{len(rows)} evento(s) encontrados:**")
+
+    from collections import defaultdict as _dd
+    resumen = _dd(lambda: {'login': 0, 'logout': 0})
+    for r in rows:
+        resumen[r['full_name']][r['action']] += 1
+
+    cols_res = st.columns(min(len(resumen), 4))
+    for idx, (nombre, cnts) in enumerate(resumen.items()):
+        with cols_res[idx % 4]:
+            st.metric(
+                label=nombre,
+                value=f"▶ {cnts['login']} / ◼ {cnts['logout']}",
+                help="Logins / Logouts en el período"
+            )
+
+    st.markdown("---")
+
+    # ── Tabla detallada ───────────────────────────────────────────────────────
+    tabla = []
+    for r in rows:
+        ts = r.get('timestamp')
+        if isinstance(ts, str):
+            try:
+                ts = datetime.fromisoformat(ts)
+            except Exception:
+                pass
+        ts_str = ts.strftime('%d/%m/%Y %H:%M:%S') if hasattr(ts, 'strftime') else str(ts)
+
+        accion = r.get('action', '')
+        icono = "▶️ LOGIN" if accion == 'login' else "◼️ LOGOUT"
+
+        tabla.append({
+            'Fecha/Hora (UTC)': ts_str,
+            'Usuario': r.get('full_name', '—'),
+            'Username': r.get('username', '—'),
+            'Rol': r.get('role', '—'),
+            'Evento': icono,
+            'Detalle': (r.get('details') or '—')[:120],
+        })
+
+    df = _pd.DataFrame(tabla)
+    st.dataframe(df, use_container_width=True, hide_index=True, height=500)
+
+    # ── Análisis de sesiones cortas (posibles expulsiones) ────────────────────
+    st.markdown("---")
+    st.markdown("#### 🚨 Sesiones Sospechosamente Cortas (< 5 minutos)")
+    st.caption(
+        "Si un usuario aparece con múltiples logins seguidos sin logout, "
+        "o con sesiones de menos de 5 minutos, indica cierres inesperados."
+    )
+
+    # Agrupar por usuario y detectar pares login→logout muy cortos
+    from collections import defaultdict as _dd2
+    eventos_por_usuario = _dd2(list)
+    for r in rows:
+        ts = r.get('timestamp')
+        if isinstance(ts, str):
+            try:
+                ts = datetime.fromisoformat(ts)
+            except Exception:
+                pass
+        eventos_por_usuario[r['full_name']].append({
+            'action': r.get('action'),
+            'ts': ts
+        })
+
+    alertas = []
+    for nombre, evts in eventos_por_usuario.items():
+        evts_sorted = sorted(evts, key=lambda x: x['ts'] if hasattr(x['ts'], 'strftime') else datetime.min)
+        login_ts = None
+        for ev in evts_sorted:
+            if ev['action'] == 'login':
+                login_ts = ev['ts']
+            elif ev['action'] == 'logout' and login_ts is not None:
+                try:
+                    duracion = (ev['ts'] - login_ts).total_seconds() / 60
+                    if duracion < 5:
+                        alertas.append({
+                            'Usuario': nombre,
+                            'Login': login_ts.strftime('%d/%m %H:%M:%S') if hasattr(login_ts, 'strftime') else str(login_ts),
+                            'Logout': ev['ts'].strftime('%d/%m %H:%M:%S') if hasattr(ev['ts'], 'strftime') else str(ev['ts']),
+                            'Duración (min)': f"{duracion:.1f}",
+                        })
+                except Exception:
+                    pass
+                login_ts = None
+
+        # Detectar logins sin logout (sesión activa o expulsión sin registro)
+        logins_sin_logout = sum(1 for ev in evts_sorted if ev['action'] == 'login')
+        logouts = sum(1 for ev in evts_sorted if ev['action'] == 'logout')
+        if logins_sin_logout > logouts + 1:
+            alertas.append({
+                'Usuario': nombre,
+                'Login': '—',
+                'Logout': '—',
+                'Duración (min)': f"⚠️ {logins_sin_logout} logins, solo {logouts} logouts — posibles expulsiones sin registro",
+            })
+
+    if alertas:
+        df_alertas = _pd.DataFrame(alertas)
+        st.dataframe(df_alertas, use_container_width=True, hide_index=True)
+    else:
+        st.success("✅ No se detectaron sesiones sospechosamente cortas en el período.")
