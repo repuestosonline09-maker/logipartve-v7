@@ -1064,7 +1064,92 @@ def render_analyst_panel():
                 except Exception as _e:
                     st.error(f"❌ Error al crear nueva cotización: {str(_e)}")
 
-        # ── Botones de mensajes USD y BCV (fila 2 del panel de blindaje) ─────────
+        # ── Botón PRECIO OPTIMIZADO (fila 2 del panel de blindaje) ──────────────
+        _btn_po_b = st.button(
+            "💵 PRECIO OPTIMIZADO",
+            use_container_width=True,
+            type="secondary",
+            key="btn_precio_opt_blindaje",
+            help="Genera cotización con precios en USD (sin diferencial) para clientes que pagan en divisas"
+        )
+        if _btn_po_b:
+            if st.session_state.get('saved_quote_number'):
+                try:
+                    clean_text = _clean_text_gen
+                    _cli_po = st.session_state.get('cliente_datos', {})
+                    _items_po = st.session_state.get('cotizacion_items', [])
+                    _usd_abono_po   = st.session_state.get('_saved_usd_abono', 0)
+                    _usd_entrega_po = st.session_state.get('_saved_usd_entrega', 0)
+                    _total_usd_po   = st.session_state.get('_saved_total_usd', 0)
+                    _quote_data_po = {
+                        'quote_number':      st.session_state.saved_quote_number,
+                        'analyst_name':      st.session_state.get('full_name', full_name),
+                        'client': {
+                            'nombre':    clean_text(_cli_po.get('nombre', '')),
+                            'telefono':  clean_text(_cli_po.get('telefono', '')),
+                            'email':     clean_text(_cli_po.get('email', '')),
+                            'vehiculo':  clean_text(_cli_po.get('vehiculo', '')),
+                            'motor':     clean_text(_cli_po.get('cilindrada', '')),
+                            'año':      clean_text(str(_cli_po.get('ano', ''))),
+                            'vin':       clean_text(_cli_po.get('vin', '')),
+                            'direccion': clean_text(_cli_po.get('direccion', '')),
+                            'ci_rif':    clean_text(_cli_po.get('ci_rif', '')),
+                        },
+                        'items':             _items_po,
+                        'total_usd_divisas': _total_usd_po,
+                        'usd_abono':         _usd_abono_po,
+                        'usd_entrega':       _usd_entrega_po,
+                        'sub_total':         st.session_state.get('_saved_sub_total', 0),
+                        'iva_total':         st.session_state.get('_saved_iva_total', 0),
+                        'total_a_pagar':     st.session_state.get('_saved_total_a_pagar', 0),
+                        'abona_ya':          st.session_state.get('_saved_abona_ya', 0),
+                        'y_en_entrega':      st.session_state.get('_saved_y_en_entrega', 0),
+                        'total_usd':         st.session_state.get('_saved_total_usd', 0),
+                        'total_bs':          st.session_state.get('_saved_total_bs', 0),
+                        'terminos_condiciones': config.get('terms_conditions', 'Términos y condiciones estándar.'),
+                    }
+                    import tempfile as _tmpmod_po
+                    _tmp_dir_po  = os.path.join(_tmpmod_po.gettempdir(), 'logipartve_docs')
+                    os.makedirs(_tmp_dir_po, exist_ok=True)
+                    _png_fn_po   = f"cotizacion_{st.session_state.saved_quote_number}_divisas.png"
+                    _png_path_po = os.path.join(_tmp_dir_po, _png_fn_po)
+                    from services.document_generation.png_generator import PNGQuoteGenerator as _PNGGenPO
+                    _png_gen_po = _PNGGenPO()
+                    _result_po  = _png_gen_po.generate_quote_png_divisas(_quote_data_po, _png_path_po)
+                    if _result_po is None:
+                        st.error("❌ Error al generar PNG Precio Optimizado")
+                    else:
+                        _rutas_po = [_result_po] if isinstance(_result_po, str) else _result_po
+                        if len(_rutas_po) == 1:
+                            with open(_rutas_po[0], 'rb') as _f:
+                                st.download_button(
+                                    label="💵 Descargar PNG Precio Optimizado",
+                                    data=_f,
+                                    file_name=_png_fn_po,
+                                    mime="image/png",
+                                    use_container_width=True,
+                                    key="dl_png_po_blindaje"
+                                )
+                            st.success("✅ PNG Precio Optimizado generado correctamente.")
+                        else:
+                            for _pi_po, _ruta_pi_po in enumerate(_rutas_po, 1):
+                                _fn_pi_po = f"cotizacion_{st.session_state.saved_quote_number}_divisas_p{_pi_po}.png"
+                                with open(_ruta_pi_po, 'rb') as _f:
+                                    st.download_button(
+                                        label=f"💵 Descargar Precio Optimizado — Pág. {_pi_po}",
+                                        data=_f,
+                                        file_name=_fn_pi_po,
+                                        mime="image/png",
+                                        use_container_width=True,
+                                        key=f"dl_png_po_blindaje_p{_pi_po}"
+                                    )
+                            st.success(f"✅ PNG Precio Optimizado generado ({len(_rutas_po)} páginas).")
+                except Exception as _e_po:
+                    st.error(f"❌ Error al generar Precio Optimizado: {str(_e_po)}")
+            else:
+                st.warning("⚠️ Primero debe guardar la cotización")
+
+                # ── Botones de mensajes USD y BCV (fila 2 del panel de blindaje) ─────────
         _saved_total_usd  = st.session_state.get('_saved_total_usd', 0)
         _saved_usd_abono  = st.session_state.get('_saved_usd_abono', 0)
         _saved_usd_entrega = st.session_state.get('_saved_usd_entrega', 0)
