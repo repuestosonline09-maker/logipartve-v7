@@ -3004,7 +3004,7 @@ Cash | Zelle | Binance | Depósito Bancario Cta Divisas 🤝"""
         # ── FIN POP-UP MENSAJE BCV ─────────────────────────────────────────────────
         
         # Botones de generación
-        gen_col1, gen_col2, gen_col3, gen_col4 = st.columns(4)
+        gen_col1, gen_col2, gen_col3 = st.columns(3)
         with gen_col1:
             # Cambiar botón según modo
             button_label = "🔄 ACTUALIZAR COTIZACIÓN" if editing_mode else "💾 GUARDAR COTIZACIÓN"
@@ -3530,9 +3530,9 @@ Cash | Zelle | Binance | Depósito Bancario Cta Divisas 🤝"""
                 else:
                     st.warning("⚠️ Primero debe guardar la cotización")
 
-        with gen_col4:
-            # Botón PRECIO OPTIMIZADO (cotización en divisas USD sin diferencial)
-            if st.session_state.get('cotizacion_guardada', False) and st.button(
+        # ── FILA PRECIO OPTIMIZADO (fila independiente, 100% ancho, responsivo) ─────────────
+        if st.session_state.get('cotizacion_guardada', False):
+            if st.button(
                 "💵 PRECIO OPTIMIZADO",
                 use_container_width=True,
                 type="secondary",
@@ -3545,46 +3545,42 @@ Cash | Zelle | Binance | Depósito Bancario Cta Divisas 🤝"""
                         cliente = st.session_state.get('cliente_datos', {})
 
                         # Recuperar valores USD guardados en session_state al guardar la cotización
-                        _usd_abono_div    = st.session_state.get('_saved_usd_abono', usd_abono)
-                        _usd_entrega_div  = st.session_state.get('_saved_usd_entrega', usd_entrega)
-                        _total_usd_div    = st.session_state.get('_saved_total_usd', total_usd_divisas)
+                        _usd_abono_div   = st.session_state.get('_saved_usd_abono', usd_abono)
+                        _usd_entrega_div = st.session_state.get('_saved_usd_entrega', usd_entrega)
+                        _total_usd_div   = st.session_state.get('_saved_total_usd', total_usd_divisas)
 
                         quote_data_div = {
                             'quote_number': st.session_state.saved_quote_number,
                             'analyst_name': st.session_state.full_name,
                             'client': {
-                                'nombre': clean_text(cliente.get('nombre', '')),
-                                'telefono': clean_text(cliente.get('telefono', '')),
-                                'email': clean_text(cliente.get('email', '')),
-                                'vehiculo': clean_text(cliente.get('vehiculo', '')),
-                                'motor': clean_text(cliente.get('cilindrada', '')),
-                                'año': clean_text(cliente.get('ano', '')),
-                                'vin': clean_text(cliente.get('vin', '')),
+                                'nombre':    clean_text(cliente.get('nombre', '')),
+                                'telefono':  clean_text(cliente.get('telefono', '')),
+                                'email':     clean_text(cliente.get('email', '')),
+                                'vehiculo':  clean_text(cliente.get('vehiculo', '')),
+                                'motor':     clean_text(cliente.get('cilindrada', '')),
+                                'año':      clean_text(cliente.get('ano', '')),
+                                'vin':       clean_text(cliente.get('vin', '')),
                                 'direccion': clean_text(cliente.get('direccion', '')),
-                                'ci_rif': clean_text(cliente.get('ci_rif', ''))
+                                'ci_rif':    clean_text(cliente.get('ci_rif', ''))
                             },
                             'items': items,
-                            # Totales en USD para modo divisas
                             'total_usd_divisas': _total_usd_div,
-                            'usd_abono': _usd_abono_div,
-                            'usd_entrega': _usd_entrega_div,
-                            # Campos estándar (no se usan en modo divisas pero se incluyen por compatibilidad)
-                            'sub_total': sub_total,
-                            'iva_total': iva_total,
-                            'total_a_pagar': total_a_pagar,
-                            'abona_ya': abona_ya,
-                            'y_en_entrega': y_en_entrega,
-                            'total_usd': total_cotizacion_usd,
-                            'total_bs': total_cotizacion_bs,
+                            'usd_abono':         _usd_abono_div,
+                            'usd_entrega':       _usd_entrega_div,
+                            'sub_total':         sub_total,
+                            'iva_total':         iva_total,
+                            'total_a_pagar':     total_a_pagar,
+                            'abona_ya':          abona_ya,
+                            'y_en_entrega':      y_en_entrega,
+                            'total_usd':         total_cotizacion_usd,
+                            'total_bs':          total_cotizacion_bs,
                             'terminos_condiciones': config.get('terms_conditions', 'Términos y condiciones estándar.')
                         }
 
-                        # Generar PNG en modo divisas
                         import tempfile as _tmpmod_div
-                        _tmp_dir_div = os.path.join(_tmpmod_div.gettempdir(), 'logipartve_docs')
+                        _tmp_dir_div  = os.path.join(_tmpmod_div.gettempdir(), 'logipartve_docs')
                         os.makedirs(_tmp_dir_div, exist_ok=True)
-
-                        _png_fn_div  = f"cotizacion_{st.session_state.saved_quote_number}_divisas.png"
+                        _png_fn_div   = f"cotizacion_{st.session_state.saved_quote_number}_divisas.png"
                         _png_path_div = os.path.join(_tmp_dir_div, _png_fn_div)
 
                         from services.document_generation.png_generator import PNGQuoteGenerator as _PNGGenDiv
@@ -3605,13 +3601,13 @@ Cash | Zelle | Binance | Depósito Bancario Cta Divisas 🤝"""
                                         use_container_width=True,
                                         key="dl_png_divisas"
                                     )
-                                st.success("✅ PNG Precio Optimizado generado.")
+                                st.success("✅ PNG Precio Optimizado generado correctamente.")
                             else:
                                 for _pi_d, _ruta_pi_d in enumerate(_rutas_div, 1):
                                     _fn_pi_d = f"cotizacion_{st.session_state.saved_quote_number}_divisas_p{_pi_d}.png"
                                     with open(_ruta_pi_d, 'rb') as _f:
                                         st.download_button(
-                                            label=f"💵 Descargar PNG Precio Optimizado — Pág. {_pi_d}",
+                                            label=f"💵 Descargar Precio Optimizado — Pág. {_pi_d}",
                                             data=_f,
                                             file_name=_fn_pi_d,
                                             mime="image/png",
@@ -3620,7 +3616,7 @@ Cash | Zelle | Binance | Depósito Bancario Cta Divisas 🤝"""
                                         )
                                 st.success(f"✅ PNG Precio Optimizado generado ({len(_rutas_div)} páginas).")
                     except Exception as e:
-                        st.error(f"❌ Error: {str(e)}")
+                        st.error(f"❌ Error al generar Precio Optimizado: {str(e)}")
                 else:
                     st.warning("⚠️ Primero debe guardar la cotización")
 
