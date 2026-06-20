@@ -235,14 +235,22 @@ def _adaptar_quote_para_generadores(qd: dict) -> dict:
     y_en_entrega  = total_a_pagar - abona_ya
 
     # Totales en USD para modo Precio Optimizado (divisas)
-    # usd_abono = suma de costos USD sin envío, redondeado al múltiplo de 5 hacia arriba
-    total_usd_sin_envio = sum(
-        float(it.get('precio_usd', 0) or 0) - float(it.get('costo_envio', 0) or 0)
-        for it in items_adaptados
-    )
+    # Fórmula aprobada (igual que el mensaje WhatsApp):
+    # Abono = FOB + Handling + Manejo + Impuesto + Utilidad  (SIN envío, SIN TAX)
+    # Total = redondeado al ×5 hacia arriba
+    # Entrega = Total − Abono
     import math as _math
-    usd_abono   = _math.ceil(total_usd_sin_envio / 5) * 5 if total_usd_sin_envio > 0 else 0.0
-    usd_entrega = max(0.0, round(total_usd - usd_abono, 2))
+    _usd_abono_raw = 0.0
+    for _it_opt in items_adaptados:
+        _fob_opt   = float(_it_opt.get('fob_total', 0) or 0)
+        _hand_opt  = float(_it_opt.get('costo_handling', 0) or 0)
+        _man_opt   = float(_it_opt.get('costo_manejo', 0) or 0)
+        _imp_opt   = float(_it_opt.get('costo_impuesto', 0) or 0)
+        _util_opt  = float(_it_opt.get('utilidad_valor', 0) or 0)
+        _usd_abono_raw += _fob_opt + _hand_opt + _man_opt + _imp_opt + _util_opt
+    total_usd_redondeado = _math.ceil(total_usd / 5) * 5 if total_usd > 0 else 0.0
+    usd_abono   = _math.ceil(_usd_abono_raw / 5) * 5 if _usd_abono_raw > 0 else 0.0
+    usd_entrega = max(0.0, round(total_usd_redondeado - usd_abono, 2))
 
     # Fecha en formato que espera el PDF
     try:
