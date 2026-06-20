@@ -234,6 +234,16 @@ def _adaptar_quote_para_generadores(qd: dict) -> dict:
     total_a_pagar = sub_total + iva_total
     y_en_entrega  = total_a_pagar - abona_ya
 
+    # Totales en USD para modo Precio Optimizado (divisas)
+    # usd_abono = suma de costos USD sin envío, redondeado al múltiplo de 5 hacia arriba
+    total_usd_sin_envio = sum(
+        float(it.get('precio_usd', 0) or 0) - float(it.get('costo_envio', 0) or 0)
+        for it in items_adaptados
+    )
+    import math as _math
+    usd_abono   = _math.ceil(total_usd_sin_envio / 5) * 5 if total_usd_sin_envio > 0 else 0.0
+    usd_entrega = max(0.0, round(total_usd - usd_abono, 2))
+
     # Fecha en formato que espera el PDF
     try:
         fecha_str = datetime.fromisoformat(
@@ -285,6 +295,9 @@ def _adaptar_quote_para_generadores(qd: dict) -> dict:
         'y_en_entrega':        y_en_entrega,
         'total_usd':           total_usd,
         'total_bs':            total_bs,
+        'total_usd_divisas':   total_usd,
+        'usd_abono':           usd_abono,
+        'usd_entrega':         usd_entrega,
         'terminos_condiciones': terminos,
     }
 
@@ -772,6 +785,64 @@ def _show_acciones(quote_id: int):
                 st.session_state[f'mq_reenviar_id'] = quote_id
                 st.rerun()
             st.caption("Reenviar correo")
+
+    # ── PRECIO OPTIMIZADO (fila independiente, 100% ancho, responsivo) ──────────────
+    st.markdown("---")
+    if st.button(
+        "💵 PRECIO OPTIMIZADO",
+        use_container_width=True,
+        type="secondary",
+        key=f"acc_precio_opt_{quote_id}",
+        help="Genera cotización con precios en USD (sin diferencial) para clientes que pagan en divisas"
+    ):
+        try:
+            from services.document_generation.png_generator import PNGQuoteGenerator as _PNGGenOpt
+            qd_opt = DBManager.get_quote_full_details(quote_id)
+            if not qd_opt:
+                st.error("❌ No se pudo cargar la cotización")
+            else:
+                datos_opt = _adaptar_quote_para_generadores(qd_opt)
+                quote_number_opt = qd_opt.get('quote_number', str(quote_id))
+                import tempfile as _tmp_opt
+                _dir_opt  = os.path.join(_tmp_opt.gettempdir(), 'logipartve_docs')
+                os.makedirs(_dir_opt, exist_ok=True)
+                _fn_opt   = f"cotizacion_{quote_number_opt}_divisas.png"
+                _path_opt = os.path.join(_dir_opt, _fn_opt)
+                with st.spinner("⏳ Generando PNG Precio Optimizado..."):
+                    _gen_opt    = _PNGGenOpt()
+                    _result_opt = _gen_opt.generate_quote_png_divisas(datos_opt, _path_opt)
+                if _result_opt is None:
+                    st.error("❌ Error al generar PNG Precio Optimizado")
+                else:
+                    _rutas_opt = [_result_opt] if isinstance(_result_opt, str) else _result_opt
+                    if len(_rutas_opt) == 1:
+                        with open(_rutas_opt[0], 'rb') as _fopt:
+                            st.download_button(
+                                label="⬇️ Descargar PNG Precio Optimizado",
+                                data=_fopt,
+                                file_name=_fn_opt,
+                                mime="image/png",
+                                use_container_width=True,
+                                key=f"dl_opt_{quote_id}"
+                            )
+                        st.success("✅ PNG Precio Optimizado generado correctamente.")
+                    else:
+                        for _pi_o, _ruta_pi_o in enumerate(_rutas_opt, 1):
+                            _fn_pi_o = f"cotizacion_{quote_number_opt}_divisas_p{_pi_o}.png"
+                            with open(_ruta_pi_o, 'rb') as _fopt:
+                                st.download_button(
+                                    label=f"⬇️ Descargar Precio Optimizado — Pág. {_pi_o}",
+                                    data=_fopt,
+                                    file_name=_fn_pi_o,
+                                    mime="image/png",
+                                    use_container_width=True,
+                                    key=f"dl_opt_{quote_id}_p{_pi_o}"
+                                )
+                        st.success(f"✅ PNG Precio Optimizado generado ({len(_rutas_opt)} páginas).")
+        except Exception as e:
+            import traceback
+            st.error(f"❌ Error al generar Precio Optimizado: {str(e)}")
+            st.code(traceback.format_exc())
 
     # ── BOTONES MENSAJES USD y BCV ────────────────────────────────────────────
     st.markdown("---")
