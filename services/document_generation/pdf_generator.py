@@ -262,7 +262,7 @@ def _build_header_block(st, logos):
     return header_completo
 
 
-def _build_info_doc(st, datos_cotizacion):
+def _build_info_doc(st, datos_cotizacion, modo_divisas=False):
     """Construye la barra de información del documento (N° cotización, fecha, asesor)."""
     COLOR_AZUL_AVIACION = colors.HexColor('#003D82')
     COLOR_GRIS_CLARO    = colors.HexColor('#E8E8E8')
@@ -288,22 +288,55 @@ def _build_info_doc(st, datos_cotizacion):
 
     asesor = datos_cotizacion.get('asesor_ventas') or datos_cotizacion.get('analyst_name', 'N/A')
 
-    info_doc_data = [[
-        Paragraph(f"<b><font color='red'>COTIZACIÓN Nº:</font></b> {presupuesto}", st['normal']),
-        Paragraph(f"<b>FECHA:</b> {fecha}", st['normal']),
-        Paragraph(f"<b>ASESOR DE VENTAS:</b> {asesor}", st['normal']),
-    ]]
-    tabla = Table(info_doc_data, colWidths=[3.16 * inch, 3.16 * inch, 3.16 * inch])
-    tabla.setStyle(TableStyle([
-        ('BOX', (0, 0), (-1, -1), 2, COLOR_AZUL_AVIACION),
-        ('INNERGRID', (0, 0), (-1, -1), 1, COLOR_GRIS_CLARO),
-        ('BACKGROUND', (0, 0), (-1, -1), COLOR_GRIS_CLARO),
-        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('TOPPADDING', (0, 0), (-1, -1), 4),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-        ('LEFTPADDING', (0, 0), (-1, -1), 10),
-    ]))
+    if modo_divisas:
+        # En modo divisas: la tercera celda muestra la etiqueta PRECIO OPTIMIZADO
+        COLOR_VERDE_OPT = colors.HexColor('#006400')  # verde oscuro discreto
+        st_opt = ParagraphStyle(
+            'PrecioOpt', parent=st['normal'],
+            fontSize=8, textColor=COLOR_VERDE_OPT,
+            fontName='Helvetica-Bold', alignment=TA_CENTER
+        )
+        info_doc_data = [[
+            Paragraph(f"<b><font color='red'>COTIZACIÓN Nº:</font></b> {presupuesto}", st['normal']),
+            Paragraph(f"<b>FECHA:</b> {fecha}", st['normal']),
+            Paragraph(f"<b>ASESOR DE VENTAS:</b> {asesor}", st['normal']),
+        ],
+        [
+            Paragraph("", st['normal']),
+            Paragraph("", st['normal']),
+            Paragraph("<b>★ PRECIO OPTIMIZADO ★</b>", st_opt),
+        ]]
+        tabla = Table(info_doc_data, colWidths=[3.16 * inch, 3.16 * inch, 3.16 * inch])
+        tabla.setStyle(TableStyle([
+            ('BOX', (0, 0), (-1, -1), 2, COLOR_AZUL_AVIACION),
+            ('INNERGRID', (0, 0), (-1, -1), 1, COLOR_GRIS_CLARO),
+            ('BACKGROUND', (0, 0), (-1, -1), COLOR_GRIS_CLARO),
+            ('BACKGROUND', (2, 1), (2, 1), colors.HexColor('#E8F5E9')),  # fondo verde muy claro
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('ALIGN', (2, 1), (2, 1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ('LEFTPADDING', (0, 0), (-1, -1), 10),
+            ('SPAN', (0, 1), (1, 1)),  # las dos primeras celdas de la fila 2 se fusionan (vacías)
+        ]))
+    else:
+        info_doc_data = [[
+            Paragraph(f"<b><font color='red'>COTIZACIÓN Nº:</font></b> {presupuesto}", st['normal']),
+            Paragraph(f"<b>FECHA:</b> {fecha}", st['normal']),
+            Paragraph(f"<b>ASESOR DE VENTAS:</b> {asesor}", st['normal']),
+        ]]
+        tabla = Table(info_doc_data, colWidths=[3.16 * inch, 3.16 * inch, 3.16 * inch])
+        tabla.setStyle(TableStyle([
+            ('BOX', (0, 0), (-1, -1), 2, COLOR_AZUL_AVIACION),
+            ('INNERGRID', (0, 0), (-1, -1), 1, COLOR_GRIS_CLARO),
+            ('BACKGROUND', (0, 0), (-1, -1), COLOR_GRIS_CLARO),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ('LEFTPADDING', (0, 0), (-1, -1), 10),
+        ]))
     return tabla
 
 
@@ -357,13 +390,14 @@ def _build_cliente_block(st, datos_cotizacion):
     return tabla
 
 
-def _build_items_table(st, items_slice, item_offset=0):
+def _build_items_table(st, items_slice, item_offset=0, modo_divisas=False):
     """
     Construye la tabla de ítems para una página.
 
     Args:
         items_slice: Lista de ítems a mostrar en esta página (máx. 5).
         item_offset: Número del primer ítem de esta página (para numeración global).
+        modo_divisas: Si True, usa precio_usd (sin diferencial) en lugar de precio_bs.
     """
     COLOR_AZUL_AOP   = colors.HexColor('#2c7ebe')
     COLOR_GRIS_CLARO = colors.HexColor('#E8E8E8')
@@ -375,8 +409,14 @@ def _build_items_table(st, items_slice, item_offset=0):
 
     for idx, item in enumerate(items_slice, item_offset + 1):
         cantidad       = item.get('cantidad', 1)
-        precio_total   = item.get('precio_bs', 0)
-        precio_unitario = precio_total / cantidad if cantidad > 0 else 0
+        if modo_divisas:
+            # Precio en USD sin diferencial (precio optimizado)
+            # precio_usd ya es el total del ítem (incluye cantidad)
+            precio_total    = float(item.get('precio_usd', 0) or item.get('precio_usd_total', 0) or 0)
+            precio_unitario = precio_total / cantidad if cantidad > 0 else 0
+        else:
+            precio_total    = item.get('precio_bs', 0)
+            precio_unitario = precio_total / cantidad if cantidad > 0 else 0
         descripcion    = item.get('descripcion', '') or item.get('descripcion_repuesto', '')
         # Red de seguridad: truncar a 50 caracteres para proteger el diseño
         descripcion = str(descripcion)
@@ -501,16 +541,24 @@ def _build_continua_block(st, pagina_siguiente):
     return tabla
 
 
-def _build_totales_block(st, datos_cotizacion):
+def _build_totales_block(st, datos_cotizacion, modo_divisas=False):
     """Construye el bloque de Términos + Financial Summary (solo en la última página)."""
     COLOR_AZUL_AVIACION = colors.HexColor('#003D82')
     COLOR_GRIS_CLARO    = colors.HexColor('#E8E8E8')
 
-    sub_total  = datos_cotizacion.get('sub_total', 0)
-    iva        = datos_cotizacion.get('iva_total', 0)
-    total      = datos_cotizacion.get('total_a_pagar', 0)
-    abona_ya   = datos_cotizacion.get('abona_ya', 0)
-    en_entrega = datos_cotizacion.get('y_en_entrega', 0)
+    if modo_divisas:
+        # Totales en USD sin diferencial
+        sub_total  = datos_cotizacion.get('total_usd_divisas', datos_cotizacion.get('sub_total', 0))
+        iva        = 0  # En modo divisas no se aplica IVA
+        total      = sub_total
+        abona_ya   = datos_cotizacion.get('usd_abono', 0)
+        en_entrega = datos_cotizacion.get('usd_entrega', 0)
+    else:
+        sub_total  = datos_cotizacion.get('sub_total', 0)
+        iva        = datos_cotizacion.get('iva_total', 0)
+        total      = datos_cotizacion.get('total_a_pagar', 0)
+        abona_ya   = datos_cotizacion.get('abona_ya', 0)
+        en_entrega = datos_cotizacion.get('y_en_entrega', 0)
 
     terminos_raw  = datos_cotizacion.get('terminos_condiciones', 'Términos y condiciones estándar')
     terminos_html = terminos_raw.replace('\n', '<br/>')
@@ -537,13 +585,26 @@ def _build_totales_block(st, datos_cotizacion):
     ]))
 
     # Columna derecha: Financial Summary
-    resumen_data = [
-        [Paragraph("<b>SUBTOTAL ..................</b>", st_normal),  Paragraph(f"<b>${sub_total:.2f}</b>",  st_normal)],
-        [Paragraph("<b>IVA 16% ..................</b>", st_normal),   Paragraph(f"<b>${iva:.2f}</b>",        st_normal)],
-        [Paragraph("<b>TOTAL A PAGAR ........</b>", st_normal),      Paragraph(f"<b>${total:.2f}</b>",      st_normal)],
-        [Paragraph("<b>PUEDES ABONAR ........</b>", st_normal),      Paragraph(f"<b>${abona_ya:.2f}</b>",   st_normal)],
-        [Paragraph("<b>Y EN LA ENTREGA ......</b>", st_normal),      Paragraph(f"<b>${en_entrega:.2f}</b>", st_normal)],
-    ]
+    if modo_divisas:
+        # En modo divisas: sin fila de IVA, etiqueta TOTAL en verde
+        COLOR_VERDE_OPT = colors.HexColor('#006400')
+        st_opt = ParagraphStyle(
+            'PrecioOptTotal', parent=st_normal,
+            fontSize=8, textColor=COLOR_VERDE_OPT, fontName='Helvetica-Bold'
+        )
+        resumen_data = [
+            [Paragraph("<b>TOTAL USD ................</b>", st_normal),         Paragraph(f"<b>${total:.2f}</b>",      st_normal)],
+            [Paragraph("<b>PUEDES ABONAR ........</b>", st_normal),             Paragraph(f"<b>${abona_ya:.2f}</b>",   st_normal)],
+            [Paragraph("<b>Y EN LA ENTREGA ......</b>", st_normal),             Paragraph(f"<b>${en_entrega:.2f}</b>", st_normal)],
+        ]
+    else:
+        resumen_data = [
+            [Paragraph("<b>SUBTOTAL ..................</b>", st_normal),  Paragraph(f"<b>${sub_total:.2f}</b>",  st_normal)],
+            [Paragraph("<b>IVA 16% ..................</b>", st_normal),   Paragraph(f"<b>${iva:.2f}</b>",        st_normal)],
+            [Paragraph("<b>TOTAL A PAGAR ........</b>", st_normal),      Paragraph(f"<b>${total:.2f}</b>",      st_normal)],
+            [Paragraph("<b>PUEDES ABONAR ........</b>", st_normal),      Paragraph(f"<b>${abona_ya:.2f}</b>",   st_normal)],
+            [Paragraph("<b>Y EN LA ENTREGA ......</b>", st_normal),      Paragraph(f"<b>${en_entrega:.2f}</b>", st_normal)],
+        ]
     tabla_resumen = Table(resumen_data, colWidths=[4.68 * inch, 1.0 * inch])
     tabla_resumen.setStyle(TableStyle([
         ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
@@ -574,7 +635,7 @@ def _build_totales_block(st, datos_cotizacion):
 # FUNCIÓN PRINCIPAL
 # ─────────────────────────────────────────────────────────────────────────────
 def _generar_pagina_pdf(datos_cotizacion, items_slice, num_pagina, total_paginas,
-                        logos, st, output_path):
+                        logos, st, output_path, modo_divisas=False):
     """
     Genera un PDF de UNA SOLA PÁGINA con el contenido especificado.
     Cada página se genera de forma independiente para garantizar que
@@ -598,22 +659,22 @@ def _generar_pagina_pdf(datos_cotizacion, items_slice, num_pagina, total_paginas
     story.append(Spacer(1, 0.01 * inch))
 
     # ── INFO DOCUMENTO ───────────────────────────────────────────────────────
-    story.append(_build_info_doc(st, datos_cotizacion))
+    story.append(_build_info_doc(st, datos_cotizacion, modo_divisas=modo_divisas))
     story.append(Spacer(1, 0.08 * inch))
 
-    # ── DATOS DEL CLIENTE ────────────────────────────────────────────────────
+    # ── DATOS DEL CLIENTE ───────────────────────────────────────────────────────────────────
     story.append(Paragraph("▼ DATOS DEL CLIENTE", st['seccion']))
     story.append(_build_cliente_block(st, datos_cotizacion))
     story.append(Spacer(1, 0.05 * inch))
 
-    # ── TABLA DE ÍTEMS ───────────────────────────────────────────────────────
+    # ── TABLA DE ÍTEMS ──────────────────────────────────────────────────────────────────────
     item_offset = (num_pagina - 1) * ITEMS_POR_PAGINA
-    story.append(_build_items_table(st, items_slice, item_offset))
+    story.append(_build_items_table(st, items_slice, item_offset, modo_divisas=modo_divisas))
     story.append(Spacer(1, 0.08 * inch))
 
-    # ── TOTALES o NOTA DE CONTINUACIÓN ──────────────────────────────────────
+    # ── TOTALES o NOTA DE CONTINUACIÓN ────────────────────────────────────────────────────────────
     if es_ultima:
-        story.append(_build_totales_block(st, datos_cotizacion))
+        story.append(_build_totales_block(st, datos_cotizacion, modo_divisas=modo_divisas))
     else:
         story.append(_build_continua_block(st, num_pagina + 1))
 
@@ -633,7 +694,7 @@ def _generar_pagina_pdf(datos_cotizacion, items_slice, num_pagina, total_paginas
     return output_path
 
 
-def generar_pdf_cotizacion(datos_cotizacion, output_path):
+def generar_pdf_cotizacion(datos_cotizacion, output_path, modo_divisas=False):
     """
     Genera un PDF multi-página con el diseño International Freight.
 
@@ -677,7 +738,7 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
         # ── Caso simple: una sola página (comportamiento original) ────────────
         return _generar_pagina_pdf(
             datos_cotizacion, paginas[0], 1, 1,
-            logos, st, output_path
+            logos, st, output_path, modo_divisas=modo_divisas
         )
 
     # ── Caso multi-página: generar cada hoja por separado y fusionar ──────────
@@ -694,7 +755,7 @@ def generar_pdf_cotizacion(datos_cotizacion, output_path):
             # Generar la página individual
             _generar_pagina_pdf(
                 datos_cotizacion, items_slice, num_pagina, total_paginas,
-                logos, st, tmp_path
+                logos, st, tmp_path, modo_divisas=modo_divisas
             )
 
             # Agregar la página al writer
@@ -726,7 +787,7 @@ class PDFQuoteGenerator:
     @staticmethod
     def generate(datos_cotizacion, output_path):
         """
-        Genera un PDF de cotización.
+        Genera un PDF de cotización (modo BCV estándar).
 
         Args:
             datos_cotizacion: Diccionario con los datos de la cotización.
@@ -735,4 +796,21 @@ class PDFQuoteGenerator:
         Returns:
             str: Ruta del archivo PDF generado.
         """
-        return generar_pdf_cotizacion(datos_cotizacion, output_path)
+        return generar_pdf_cotizacion(datos_cotizacion, output_path, modo_divisas=False)
+
+    @staticmethod
+    def generate_divisas(datos_cotizacion, output_path):
+        """
+        Genera un PDF de cotización en modo PRECIO OPTIMIZADO (divisas USD).
+        Los precios por ítem y totales se muestran en USD sin diferencial.
+        Incluye etiqueta discreta '★ PRECIO OPTIMIZADO ★' en la barra de info.
+
+        Args:
+            datos_cotizacion: Diccionario con los datos de la cotización.
+                              Debe incluir 'usd_abono', 'usd_entrega' y 'total_usd_divisas'.
+            output_path: Ruta donde se guardará el PDF.
+
+        Returns:
+            str: Ruta del archivo PDF generado.
+        """
+        return generar_pdf_cotizacion(datos_cotizacion, output_path, modo_divisas=True)

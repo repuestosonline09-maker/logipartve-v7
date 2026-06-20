@@ -106,3 +106,43 @@ class PNGQuoteGenerator:
         except Exception as e:
             print(f"Error generando PNG desde datos: {e}")
             return None
+
+    def generate_quote_png_divisas(self, quote_data, output_path):
+        """
+        Genera PNG(s) en modo PRECIO OPTIMIZADO (divisas USD).
+        Los precios por ítem y totales se muestran en USD sin diferencial.
+        Incluye etiqueta discreta '★ PRECIO OPTIMIZADO ★'.
+
+        Args:
+            quote_data:  Diccionario con datos de la cotización.
+                         Debe incluir 'usd_abono', 'usd_entrega' y 'total_usd_divisas'.
+            output_path: Ruta base donde guardar el/los PNG(s).
+                         Ej.: /tmp/logipartve_docs/cotizacion_2026-12345-J_divisas.png
+
+        Returns:
+            str | list[str] | None: igual que generate_quote_png().
+        """
+        try:
+            from .pdf_generator import PDFQuoteGenerator
+            import tempfile
+
+            with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp_pdf:
+                tmp_pdf_path = tmp_pdf.name
+
+            pdf_path = PDFQuoteGenerator.generate_divisas(quote_data, tmp_pdf_path)
+
+            if not pdf_path:
+                return None
+
+            result = self.generate_quote_png(pdf_path, output_path)
+
+            try:
+                os.unlink(tmp_pdf_path)
+            except Exception:
+                pass
+
+            return result
+
+        except Exception as e:
+            print(f"Error generando PNG divisas: {e}")
+            return None
