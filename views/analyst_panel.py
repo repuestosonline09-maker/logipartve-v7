@@ -3532,13 +3532,15 @@ Cash | Zelle | Binance | Depósito Bancario Cta Divisas 🤝"""
 
         # ── FILA PRECIO OPTIMIZADO (fila independiente, 100% ancho, responsivo) ─────────────
         if st.session_state.get('cotizacion_guardada', False):
-            if st.button(
+            st.markdown("")
+            _btn_div = st.button(
                 "💵 PRECIO OPTIMIZADO",
                 use_container_width=True,
                 type="secondary",
                 key="btn_generar_divisas",
                 help="Genera cotización con precios en USD (sin diferencial) para clientes que pagan en divisas"
-            ):
+            )
+            if _btn_div:
                 if st.session_state.get('saved_quote_number'):
                     try:
                         clean_text = _clean_text_gen
