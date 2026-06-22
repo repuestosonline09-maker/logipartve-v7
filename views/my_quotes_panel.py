@@ -303,7 +303,10 @@ def _adaptar_quote_para_generadores(qd: dict) -> dict:
         'y_en_entrega':        y_en_entrega,
         'total_usd':           total_usd,
         'total_bs':            total_bs,
-        'total_usd_divisas':   total_usd,
+        # CORRECCIÓN (orden 2026-30367-A): usar total_usd_redondeado (múltiplo de 5
+        # hacia arriba) para que el PDF modo divisas y el cuadro de costos muestren
+        # el mismo valor que el mensaje USD. total_usd es el valor crudo sin redondear.
+        'total_usd_divisas':   total_usd_redondeado,
         'usd_abono':           usd_abono,
         'usd_entrega':         usd_entrega,
         'terminos_condiciones': terminos,

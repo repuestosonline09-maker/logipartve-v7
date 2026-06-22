@@ -176,10 +176,15 @@ def generar_cuadro_costos_png(quote_data: dict, items: list, output_path: str) -
 
         # ── Calcular TOTAL COMPRA ─────────────────────────────────────────────
         # Suma de: FOB Total + Handling + Manejo + Impuesto + Utilidad + Envío + TAX
-        # (para TODOS los ítems)
-        total_compra = 0.0
+        # (para TODOS los ítems), redondeado al múltiplo de 5 hacia arriba.
+        # CORRECCIÓN (orden 2026-30367-A): el sistema aplica math.ceil(x/5)*5 en
+        # analyst_panel, my_quotes_panel y mensajes USD. El cuadro de costos debe
+        # mostrar el mismo valor para ser consistente.
+        # Ejemplo: $240.75 → $245.00  |  $200.00 → $200.00
+        import math as _math_cc
+        _total_compra_raw = 0.0
         for item in items:
-            total_compra += (
+            _total_compra_raw += (
                 float(item.get('fob_total',       0) or 0) +
                 float(item.get('costo_handling',  0) or 0) +
                 float(item.get('costo_manejo',    0) or 0) +
@@ -188,6 +193,8 @@ def generar_cuadro_costos_png(quote_data: dict, items: list, output_path: str) -
                 float(item.get('costo_envio',     0) or 0) +
                 float(item.get('costo_tax',       0) or 0)
             )
+        # Redondear al múltiplo de 5 más cercano hacia arriba (igual que el resto del sistema)
+        total_compra = _math_cc.ceil(_total_compra_raw / 5) * 5 if _total_compra_raw > 0 else 0.0
 
         # ── Ancho total de la imagen ─────────────────────────────────────────
         TABLA_W  = COL0_W + COL_ITEM_W * n_items

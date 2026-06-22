@@ -2907,9 +2907,12 @@ def render_analyst_panel():
         y_en_entrega = total_a_pagar - abona_ya
         
         # Y en la Entrega USD = Total USD - USD Abono (equivale a Envío + TAX de todos los ítems)
-        # REDONDEO USD: usd_abono se redondea al múltiplo de 5 hacia arriba
-        # usd_entrega se recalcula como diferencia para que la suma siempre cuadre exactamente
+        # REDONDEO USD: TANTO total_usd_divisas COMO usd_abono se redondean al múltiplo de 5
+        # hacia arriba para que sean consistentes con el cuadro de costos, el PDF divisas
+        # y el mensaje WhatsApp. usd_entrega = diferencia para que la suma cuadre exactamente.
+        # CORRECCIÓN (orden 2026-30367-A): antes solo se redondeaba usd_abono, no el total.
         import math as _math
+        total_usd_divisas = _math.ceil(total_usd_divisas / 5) * 5 if total_usd_divisas > 0 else 0.0
         usd_abono = _math.ceil(usd_abono / 5) * 5
         usd_entrega = total_usd_divisas - usd_abono
         # Si usd_entrega quedó negativo (caso extremo: abono > total), ajustar
