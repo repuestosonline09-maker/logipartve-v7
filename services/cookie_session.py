@@ -1,28 +1,24 @@
 # services/cookie_session.py
-# Persistencia de sesión — SOLUCIÓN DEFINITIVA v5 (localStorage JS)
+# Persistencia de sesión — SOLUCIÓN DEFINITIVA v6 (localStorage JS + query_params doble-capa)
 #
-# ─── HISTORIA DE PROBLEMAS ────────────────────────────────────────────────────
-# v1: st.markdown() para inyectar JS → scripts NO se ejecutan en Streamlit
-# v2: CookieController mal implementado → en el primer rerun devuelve {}
-# v3: components.html() + postMessage → iframe sandboxed, no puede navegar
-# v4: CookieController correcto → impredecible: necesita 1-3 reruns, causa
-#     pantalla en blanco cuando no hay cookie que leer
+# ─── HISTORIAL DE CORRECCIONES ───────────────────────────────────────────────
+# v5: localStorage JS + query_params → funciona pero el iframe de height=0
+#     puede no ejecutarse antes del st.rerun() en algunos navegadores/móviles,
+#     dejando localStorage vacío y expulsando al analista en cada reinicio.
 #
-# ─── SOLUCIÓN DEFINITIVA v5 ───────────────────────────────────────────────────
-# Usar localStorage del navegador + st.query_params para pasar el token al
-# servidor en el MISMO rerun, sin necesidad de reruns adicionales.
+# v6 (CORRECCIÓN DEFINITIVA): Triple capa de persistencia
+#   1. Al hacer login: guardar token en st.query_params ANTES del st.rerun()
+#      → el token viaja en la URL del rerun, sin depender del iframe
+#   2. Al mismo tiempo: inyectar JS para guardar en localStorage
+#      → para futuros reinicios del servidor
+#   3. Al restaurar sesión: leer primero query_params, luego localStorage
+#      → si query_params tiene el token, restaurar inmediatamente sin esperar JS
 #
-# FLUJO DE LOGIN:
-#   1. Usuario hace login → save_session_token() guarda el token en session_state
-#   2. Un componente JS inyectado en la página guarda el token en localStorage
-#   3. En cada recarga, el JS lee localStorage y lo pone en ?_lp_token=XXX
-#   4. restore_session_from_token() lee st.query_params['_lp_token'] y restaura
+# CORRECCIÓN ADICIONAL: SESSION_HOURS aumentado a 24h (de 12h)
+#   → Julia trabaja más de 12h y el token expiraba durante su jornada
 #
-# VENTAJAS vs CookieController:
-#   - Sin reruns adicionales: el token llega en el mismo rerun via query_params
-#   - Sin pantalla en blanco: si no hay token, muestra login inmediatamente
-#   - Sin dependencia de librería externa frágil
-#   - Funciona siempre que Railway reinicie el contenedor
+# CORRECCIÓN ADICIONAL: RENEW_THRESHOLD aumentado a 4h (de 2h)
+#   → Renovar el token con más margen para evitar expiraciones en jornadas largas
 #
 # ─── SEGURIDAD ────────────────────────────────────────────────────────────────
 # El token es un JWT firmado con SECRET_KEY. Sin la clave, no se puede forjar.
@@ -39,8 +35,8 @@ from datetime import datetime, timedelta
 
 # ── Configuración ────────────────────────────────────────────────────────────
 SECRET_KEY      = os.environ.get("SECRET_KEY", "logipartve_secret_2026_railway")
-SESSION_HOURS   = 12   # Duración total del token (horas)
-RENEW_THRESHOLD = 2    # Si quedan menos de estas horas, renovar el token
+SESSION_HOURS   = 24   # v6: aumentado de 12h a 24h para jornadas largas
+RENEW_THRESHOLD = 4    # v6: aumentado de 2h a 4h para renovar con más margen
 TOKEN_PARAM     = "_lp_token"  # Nombre del query param usado para pasar el token
 
 # ── Helpers de token ─────────────────────────────────────────────────────────
@@ -175,12 +171,22 @@ def save_session_cookie(user_id: int, username: str, role: str, full_name: str):
     Guarda la sesión en localStorage del navegador.
     Se llama al hacer login exitoso.
     Mantiene el nombre 'save_session_cookie' para compatibilidad con el resto del código.
+    
+    v6: También guarda el token en st.query_params para que el rerun lo lea
+    directamente sin depender del iframe JS.
     """
     try:
         token = _generate_token(user_id, username)
-        # Guardar el token en session_state para que el JS lo pueda escribir
+        # CAPA 1: Guardar en query_params para que el rerun lo lea inmediatamente
+        # Esto es más confiable que el iframe porque viaja en la URL del rerun
+        try:
+            st.query_params[TOKEN_PARAM] = token
+        except Exception as _qp_err:
+            print(f"[SessionToken] No se pudo guardar en query_params: {_qp_err}")
+        # CAPA 2: Guardar en session_state para que inject_token_writer_if_pending
+        # lo escriba en localStorage en el siguiente render
         st.session_state['_pending_token_save'] = token
-        print(f"[SessionToken] Token generado para: {username}")
+        print(f"[SessionToken] Token generado para: {username} (24h, doble-capa)")
     except Exception as e:
         print(f"[SessionToken] Error generando token: {e}")
 
@@ -198,8 +204,11 @@ def inject_token_writer_if_pending():
 def restore_session_from_cookie() -> bool:
     """
     Intenta restaurar la sesión desde localStorage del navegador.
-    Lee el token desde st.query_params[TOKEN_PARAM] que fue puesto
-    por el componente JS en el rerun anterior.
+    
+    v6: Lee el token desde st.query_params[TOKEN_PARAM] que puede haber sido
+    puesto por:
+    1. save_session_cookie() directamente (login inmediato, capa 1)
+    2. El componente JS que lee localStorage (reinicios del servidor, capa 2)
     
     Mantiene el nombre 'restore_session_from_cookie' para compatibilidad.
     
@@ -214,7 +223,7 @@ def restore_session_from_cookie() -> bool:
     try:
         from database.db_manager import DBManager
 
-        # Leer el token desde query_params (puesto por el JS en el rerun anterior)
+        # Leer el token desde query_params
         token = st.query_params.get(TOKEN_PARAM, None)
 
         if not token:
@@ -238,6 +247,7 @@ def restore_session_from_cookie() -> bool:
                 pass
             # Limpiar bandera para permitir nuevo intento de login
             st.session_state.pop('_token_reader_injected', None)
+            print(f"[SessionToken] Token inválido o expirado — mostrando login")
             return False
 
         # Buscar el usuario en la BD
@@ -245,6 +255,7 @@ def restore_session_from_cookie() -> bool:
         if not user:
             _inject_token_cleaner()
             st.session_state.pop('_token_reader_injected', None)
+            print(f"[SessionToken] Usuario '{token_info['username']}' no encontrado en BD")
             return False
 
         # Restaurar sesión en memoria
@@ -255,14 +266,20 @@ def restore_session_from_cookie() -> bool:
         st.session_state.full_name  = user["full_name"]
 
         # Renovar el token si está próximo a expirar
-        # CORRECCIÓN: Escribir el token renovado directamente en localStorage
-        # (no via _pending_token_save que se pierde en el siguiente rerun)
         hours_left = SESSION_HOURS - token_info["elapsed_hours"]
         if hours_left < RENEW_THRESHOLD:
             new_token = _generate_token(user["id"], user["username"])
-            _inject_token_writer(new_token)  # Escribir inmediatamente
+            # Guardar en query_params Y en localStorage
+            try:
+                st.query_params[TOKEN_PARAM] = new_token
+            except Exception:
+                pass
+            _inject_token_writer(new_token)
             print(f"[SessionToken] Token renovado para: {user['username']} (quedaban {hours_left:.1f}h)")
         else:
+            # Aunque no se renueve, refrescar localStorage con el token actual
+            # para garantizar que esté guardado (por si el login anterior falló al guardarlo)
+            _inject_token_writer(token)
             print(f"[SessionToken] Sesión restaurada para: {user['username']} ({hours_left:.1f}h restantes)")
 
         # Limpiar el query param de la URL (ya no es necesario)

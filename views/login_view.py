@@ -100,25 +100,31 @@ def show_login():
                 else:
                     result = AuthManager.login(username, password)
                     if result["success"]:
-                        # CORRECCIÓN DEFINITIVA: escribir el token en localStorage
-                        # ANTES del st.rerun(). El flujo anterior guardaba el token
-                        # en session_state['_pending_token_save'] y lo escribia en
-                        # el SIGUIENTE rerun via inject_token_writer_if_pending().
-                        # Pero st.rerun() borra session_state, así que el token
-                        # nunca llegaba a localStorage y Julia era expulsada en
-                        # cada reinicio del servidor.
+                        # CORRECCIÓN v6: Triple capa de persistencia del token
+                        # Capa 1: query_params → viaja en la URL del rerun (más confiable)
+                        # Capa 2: localStorage via iframe JS → para reinicios del servidor
+                        # Capa 3: session_state → para el rerun inmediato
                         try:
-                            from services.cookie_session import _inject_token_writer, _generate_token
+                            from services.cookie_session import _inject_token_writer, _generate_token, TOKEN_PARAM
                             token_str = _generate_token(
                                 result['user']['id'],
                                 result['user']['username']
                             )
+                            # CAPA 1: Guardar en query_params ANTES del rerun
+                            # El rerun llevará el token en la URL → restore_session_from_cookie
+                            # lo leerá inmediatamente sin depender del iframe
+                            try:
+                                st.query_params[TOKEN_PARAM] = token_str
+                            except Exception as _qp_err:
+                                print(f"[Login] query_params error: {_qp_err}")
+                            # CAPA 2: Inyectar JS para guardar en localStorage
+                            # (para futuros reinicios del servidor)
                             _inject_token_writer(token_str)
                             # Limpiar el pendiente para que inject_token_writer_if_pending
                             # no lo vuelva a escribir en el siguiente rerun
                             st.session_state.pop('_pending_token_save', None)
                         except Exception as _te:
-                            print(f"[Login] Error escribiendo token en localStorage: {_te}")
+                            print(f"[Login] Error escribiendo token: {_te}")
                         st.success(result["message"])
                         st.rerun()
                     else:
