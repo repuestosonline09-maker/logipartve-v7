@@ -647,6 +647,15 @@ def render_analyst_panel():
         
         # Marcar como cargado
         st.session_state.editing_data_loaded = True
+        # CORRECCIÓN BUG NOMBRE CLIENTE (orden 60587 y similares):
+        # Incrementar cliente_reset_counter para forzar re-render de los widgets
+        # de cliente con los datos de la cotización a editar.
+        # Sin esto, Streamlit reutiliza el widget con la key anterior (que tiene el
+        # nombre viejo cacheado en su estado interno) e ignora el value=default_nombre.
+        # El analista escribe el nombre nuevo, pero en el siguiente rerun Streamlit
+        # restaura el valor del widget desde su estado interno → el nombre no cambia.
+        # Mismo patrón que copying_mode (línea 737) que sí funciona correctamente.
+        st.session_state.cliente_reset_counter = st.session_state.get('cliente_reset_counter', 0) + 1
         st.rerun()
 
     # ── MODO COPIA: pre-cargar datos de la orden original (solo la primera vez) ──

@@ -1602,6 +1602,12 @@ def show_clientes_management():
     # Inicializar estado de edición
     if 'admin_cli_editando' not in st.session_state:
         st.session_state.admin_cli_editando = None
+    # CORRECCIÓN BUG NOMBRE CLIENTE: versión del formulario de edición.
+    # Cada vez que se activa el modo edición para un cliente, se incrementa
+    # este contador para que los keys de los text_input sean únicos y Streamlit
+    # no reutilice el widget con el valor viejo cacheado en su estado interno.
+    if 'admin_cli_edit_version' not in st.session_state:
+        st.session_state.admin_cli_edit_version = 0
 
     for cliente in todos:
         cid = cliente['id']
@@ -1613,25 +1619,27 @@ def show_clientes_management():
         ):
             if st.session_state.admin_cli_editando == cid:
                 # ── MODO EDICIÓN ──────────────────────────────────────────────
+                # Usar versión en el key para forzar re-render con los datos actuales
+                _ev = st.session_state.admin_cli_edit_version
                 st.markdown("**✏️ Editando cliente:**")
                 col_e1, col_e2 = st.columns(2)
                 with col_e1:
                     nuevo_nombre = st.text_input(
                         "Nombre completo", value=cliente['nombre'],
-                        key=f"cli_edit_nombre_{cid}"
+                        key=f"cli_edit_nombre_{cid}_v{_ev}"
                     )
                     nuevo_tel = st.text_input(
                         "Teléfono", value=cliente['telefono'],
-                        key=f"cli_edit_tel_{cid}"
+                        key=f"cli_edit_tel_{cid}_v{_ev}"
                     )
                 with col_e2:
                     nuevo_ci = st.text_input(
                         "C.I. / RIF", value=cliente['ci_rif'],
-                        key=f"cli_edit_ci_{cid}"
+                        key=f"cli_edit_ci_{cid}_v{_ev}"
                     )
                     nueva_dir = st.text_input(
                         "Dirección", value=cliente['direccion'],
-                        key=f"cli_edit_dir_{cid}"
+                        key=f"cli_edit_dir_{cid}_v{_ev}"
                     )
 
                 btn_g1, btn_g2 = st.columns(2)
@@ -1677,6 +1685,9 @@ def show_clientes_management():
                     if st.button("✏️ EDITAR", use_container_width=True,
                                  key=f"cli_editar_{cid}"):
                         st.session_state.admin_cli_editando = cid
+                        # Incrementar versión para forzar re-render de los widgets
+                        # con los datos actuales del cliente (fix bug nombre no cambia)
+                        st.session_state.admin_cli_edit_version = st.session_state.get('admin_cli_edit_version', 0) + 1
                         st.rerun()
                 with btn_a2:
                     # Confirmación de eliminación en dos pasos
