@@ -1244,35 +1244,79 @@ def _show_cuadro_costos(quote_id: int):
         st.warning("⚠️ Esta cotización no tiene ítems registrados")
         return
 
-    try:
-        from database.config_helpers import ConfigHelpers
-        dif_pct = ConfigHelpers.get_diferencial()
-    except Exception:
-        dif_pct = 45.0
-
+    # ── Construir items_para_cuadro usando los valores guardados en BD ────────
+    # PRINCIPIO: La BD es la fuente de verdad. Los campos calculados por el
+    # analista (utilidad_valor, fob_total, precio_usd, precio_bs, diferencial_*,
+    # iva_*) se leen directamente de la BD. Solo se recalculan como fallback
+    # para cotizaciones antiguas que no tengan esos campos guardados.
+    # Esto garantiza que el Cuadro de Costos muestre exactamente los mismos
+    # valores que el analista calculó y el cliente aprobó. Crítico para la
+    # integración con el Administrativo.
+    import math as _math_cuadro
     items_para_cuadro = []
     for item in items_raw:
+        # ── Campos base (siempre presentes en BD) ──────────────────────────
         cantidad  = int(item.get('quantity', 1) or 1)
         costo_fob = float(item.get('unit_cost', 0) or 0)
-        fob_total = costo_fob * cantidad
+        imp_pct   = float(item.get('tax_percentage', 0) or 0)
+        factor_ut = float(item.get('profit_factor', 1.0) or 1.0)
         handling  = float(item.get('international_handling', 0) or 0)
         manejo    = float(item.get('national_handling', 0) or 0)
         envio     = float(item.get('shipping_cost', 0) or 0)
-        imp_pct   = float(item.get('tax_percentage', 0) or 0)
-        factor_ut = float(item.get('profit_factor', 1.0) or 1.0)
 
-        imp_int    = fob_total * (imp_pct / 100)
-        # FÓRMULA CORRECTA: Utilidad = (FOB_Total × Factor) − FOB_Total
-        # El factor se aplica solo sobre el costo FOB, igual que en analyst_panel
-        utilidad   = (fob_total * factor_ut) - fob_total
-        base_tax   = fob_total + handling + manejo + imp_int + utilidad + envio
-        tax_pct    = 7.0
-        costo_tax  = base_tax * (tax_pct / 100)
-        precio_usd = float(item.get('total_cost', 0) or 0)
-        if precio_usd == 0:
-            precio_usd = base_tax + costo_tax
-        dif_val    = precio_usd * (dif_pct / 100)
-        precio_bs  = precio_usd + dif_val
+        # ── Campos calculados: leer de BD (fuente de verdad) ───────────────
+        # Si el campo está guardado (> 0), usarlo directamente.
+        # Si no está (cotización antigua), recalcular como fallback.
+        fob_total_bd = float(item.get('fob_total', 0) or 0)
+        fob_total    = fob_total_bd if fob_total_bd > 0 else costo_fob * cantidad
+
+        utilidad_bd  = float(item.get('utilidad_valor', 0) or 0)
+        utilidad     = utilidad_bd if utilidad_bd > 0 else (fob_total * factor_ut) - fob_total
+
+        imp_int_bd   = fob_total * (imp_pct / 100)   # siempre recalcular (es simple y exacto)
+        imp_int      = imp_int_bd
+
+        # costo_tax: leer de BD si existe, sino recalcular
+        # base_tax = fob + handling + manejo + impuesto + utilidad + envio
+        base_tax     = fob_total + handling + manejo + imp_int + utilidad + envio
+        tax_pct      = 7.0
+        costo_tax    = base_tax * (tax_pct / 100)    # recalcular (no se guarda en BD)
+
+        # precio_usd: campo guardado en BD = precio_usd_total_redondeado (múltiplo de 5)
+        # Es la fuente de verdad: el precio que el cliente aprobó.
+        precio_usd_bd = float(item.get('precio_usd', 0) or 0)
+        if precio_usd_bd == 0:
+            # Fallback: total_cost (campo alternativo en BD)
+            precio_usd_bd = float(item.get('total_cost', 0) or 0)
+        if precio_usd_bd == 0:
+            # Fallback final: recalcular y redondear al múltiplo de 5
+            precio_usd_bd = _math_cuadro.ceil((base_tax + costo_tax) / 5) * 5
+        precio_usd = precio_usd_bd
+
+        # precio_bs: leer de BD (guardado por el analista con diferencial exacto)
+        precio_bs_bd  = float(item.get('precio_bs', 0) or 0)
+        dif_pct_bd    = float(item.get('diferencial_porcentaje', 0) or 0)
+        dif_val_bd    = float(item.get('diferencial_valor', 0) or 0)
+        if precio_bs_bd > 0:
+            precio_bs = precio_bs_bd
+            dif_val   = dif_val_bd if dif_val_bd > 0 else precio_bs_bd - precio_usd
+            dif_pct   = dif_pct_bd if dif_pct_bd > 0 else (
+                round((dif_val / precio_usd * 100), 2) if precio_usd > 0 else 45.0
+            )
+        else:
+            # Fallback para cotizaciones antiguas sin precio_bs guardado
+            try:
+                from database.config_helpers import ConfigHelpers
+                dif_pct = ConfigHelpers.get_diferencial()
+            except Exception:
+                dif_pct = 45.0
+            dif_val   = precio_usd * (dif_pct / 100)
+            precio_bs = precio_usd + dif_val
+
+        # IVA: leer de BD
+        aplicar_iva  = bool(item.get('aplicar_iva', False))
+        iva_pct      = float(item.get('iva_porcentaje', 16.0) or 16.0)
+        iva_val      = float(item.get('iva_valor', 0) or 0)
 
         items_para_cuadro.append({
             'descripcion':            item.get('description', 'Ítem'),
@@ -1291,11 +1335,11 @@ def _show_cuadro_costos(quote_id: int):
             'tax_porcentaje':         tax_pct,
             'diferencial_valor':      dif_val,
             'diferencial_porcentaje': dif_pct,
-            'precio_usd':             precio_usd,
-            'precio_bs':              precio_bs,
-            'iva_porcentaje':         16.0,
-            'iva_valor':              0.0,
-            'aplicar_iva':            False,
+            'precio_usd':             precio_usd,   # ← fuente de verdad (múltiplo de 5)
+            'precio_bs':              precio_bs,    # ← guardado por el analista
+            'aplicar_iva':            aplicar_iva,
+            'iva_porcentaje':         iva_pct,
+            'iva_valor':              iva_val,
         })
 
     png_path = st.session_state.get('cuadro_costos_png_path')

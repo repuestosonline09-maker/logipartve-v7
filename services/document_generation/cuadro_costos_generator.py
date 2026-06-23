@@ -175,25 +175,35 @@ def generar_cuadro_costos_png(quote_data: dict, items: list, output_path: str) -
         N_FILAS = len(CONCEPTOS)
 
         # ── Calcular TOTAL COMPRA ─────────────────────────────────────────────
-        # Suma de: FOB Total + Handling + Manejo + Impuesto + Utilidad + Envío + TAX
-        # (para TODOS los ítems), redondeado al múltiplo de 5 hacia arriba.
-        # CORRECCIÓN (orden 2026-30367-A): el sistema aplica math.ceil(x/5)*5 en
-        # analyst_panel, my_quotes_panel y mensajes USD. El cuadro de costos debe
-        # mostrar el mismo valor para ser consistente.
-        # Ejemplo: $240.75 → $245.00  |  $200.00 → $200.00
+        # CORRECCIÓN (orden 2026-70865-D): usar el campo 'precio_usd' (total_cost guardado
+        # en BD) como fuente de verdad, en lugar de recalcular sumando los componentes
+        # individuales. Esto garantiza que el Cuadro de Costos muestre exactamente el mismo
+        # valor que el Mensaje USD y el PNG Precio Optimizado, que también usan total_cost.
+        #
+        # ANTES: suma fob+handling+manejo+impuesto+utilidad+envio+tax → podía diferir
+        #        del total_cost guardado por diferencias de redondeo en componentes.
+        # AHORA: suma directa de precio_usd (= total_cost ya redondeado al ×5 en BD)
+        #        → siempre igual al precio que el cliente aprobó.
         import math as _math_cc
         _total_compra_raw = 0.0
         for item in items:
-            _total_compra_raw += (
-                float(item.get('fob_total',       0) or 0) +
-                float(item.get('costo_handling',  0) or 0) +
-                float(item.get('costo_manejo',    0) or 0) +
-                float(item.get('costo_impuesto',  0) or 0) +
-                float(item.get('utilidad_valor',  0) or 0) +
-                float(item.get('costo_envio',     0) or 0) +
-                float(item.get('costo_tax',       0) or 0)
-            )
-        # Redondear al múltiplo de 5 más cercano hacia arriba (igual que el resto del sistema)
+            # precio_usd es el campo que guarda analyst_panel al crear el ítem:
+            # precio_usd_total_redondeado = ceil(fob+handling+...+tax / 5) * 5
+            # Es la fuente de verdad: el precio que se le cotizó al cliente.
+            _pv = float(item.get('precio_usd', 0) or 0)
+            if _pv == 0:
+                # Fallback para ítems antiguos sin precio_usd: recalcular desde componentes
+                _pv = (
+                    float(item.get('fob_total',       0) or 0) +
+                    float(item.get('costo_handling',  0) or 0) +
+                    float(item.get('costo_manejo',    0) or 0) +
+                    float(item.get('costo_impuesto',  0) or 0) +
+                    float(item.get('utilidad_valor',  0) or 0) +
+                    float(item.get('costo_envio',     0) or 0) +
+                    float(item.get('costo_tax',       0) or 0)
+                )
+            _total_compra_raw += _pv
+        # Redondear al múltiplo de 5 (precio_usd ya viene redondeado, pero por si acaso)
         total_compra = _math_cc.ceil(_total_compra_raw / 5) * 5 if _total_compra_raw > 0 else 0.0
 
         # ── Ancho total de la imagen ─────────────────────────────────────────
