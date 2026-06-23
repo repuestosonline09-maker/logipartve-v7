@@ -1283,12 +1283,18 @@ def _show_cuadro_costos(quote_id: int):
         costo_tax    = base_tax * (tax_pct / 100)    # recalcular (no se guarda en BD)
 
         # precio_usd: campo guardado en BD = precio_usd_total_redondeado (múltiplo de 5)
-        # Es la fuente de verdad: el precio que el cliente aprobó.
-        precio_usd_bd = float(item.get('precio_usd', 0) or 0)
-        if precio_usd_bd == 0:
-            # Fallback: total_cost (campo alternativo en BD)
-            precio_usd_bd = float(item.get('total_cost', 0) or 0)
-        if precio_usd_bd == 0:
+        # REGLA: precio_usd y total_cost deben ser idénticos (ver db_manager.py).
+        # Si difieren por el bug histórico, usar el MAYOR de los dos:
+        # total_cost es el precio que el cliente aprobó (fuente de verdad definitiva).
+        _pv1 = float(item.get('precio_usd',  0) or 0)
+        _pv2 = float(item.get('total_cost',  0) or 0)
+        if _pv1 > 0 and _pv2 > 0:
+            precio_usd_bd = max(_pv1, _pv2)   # usar el mayor (el que el cliente aprobó)
+        elif _pv2 > 0:
+            precio_usd_bd = _pv2              # solo total_cost disponible
+        elif _pv1 > 0:
+            precio_usd_bd = _pv1              # solo precio_usd disponible
+        else:
             # Fallback final: recalcular y redondear al múltiplo de 5
             precio_usd_bd = _math_cuadro.ceil((base_tax + costo_tax) / 5) * 5
         precio_usd = precio_usd_bd
