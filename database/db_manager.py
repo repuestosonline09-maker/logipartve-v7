@@ -758,6 +758,43 @@ class DBManager:
             except Exception:
                 pass
 
+        # ── Migración de datos: sincronizar precio_usd con total_cost ──────────────
+        # REGLA: precio_usd y total_cost deben ser siempre idénticos en BD.
+        # Corrige registros donde divergieron por el bug del guardado anterior.
+        # Prioridad: precio_usd > total_cost (precio_usd es el múltiplo de 5 redondeado)
+        # Si precio_usd=0 y total_cost>0, usar total_cost como fuente.
+        # Si precio_usd>0 y total_cost=0, usar precio_usd como fuente.
+        # Si ambos >0 y difieren, usar total_cost (es el que el cliente aprobó históricamente).
+        try:
+            if is_postgres:
+                cursor.execute("""
+                    UPDATE quote_items
+                    SET precio_usd = total_cost
+                    WHERE total_cost > 0
+                      AND (precio_usd = 0 OR precio_usd != total_cost)
+                """)
+                rows_fixed = cursor.rowcount
+                if rows_fixed > 0:
+                    conn.commit()
+                    print(f'✅ Migración datos: {rows_fixed} ítems sincronizados precio_usd=total_cost')
+            else:
+                cursor.execute("""
+                    UPDATE quote_items
+                    SET precio_usd = total_cost
+                    WHERE total_cost > 0
+                      AND (precio_usd = 0 OR precio_usd != total_cost)
+                """)
+                rows_fixed = cursor.rowcount
+                if rows_fixed > 0:
+                    conn.commit()
+                    print(f'✅ Migración datos: {rows_fixed} ítems sincronizados precio_usd=total_cost')
+        except Exception as e:
+            print(f'⚠️ Migración sincronización precio_usd/total_cost: {e}')
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+
         # Crear usuario admin por defecto si no existe
         cursor.execute("SELECT COUNT(*) FROM users WHERE username = 'admin'")
         result = cursor.fetchone()
@@ -2040,23 +2077,33 @@ class DBManager:
                 costo_fob = item.get('costo_fob', 0.0)
                 unit_cost = costo_fob if costo_fob > 0 else (item.get('precio_unitario', 0.0) or item.get('unit_cost', 0.0))
                 
-                # total_cost es el precio final en USD
-                precio_usd = item.get('precio_usd', 0.0) or item.get('precio_unitario', 0.0)
-                total_cost = precio_usd if precio_usd > 0 else (item.get('precio_bs', 0.0) or item.get('total_cost', 0.0))
-                
+                # ── Precio final en USD: fuente de verdad ─────────────────────────────
+                # precio_usd_item = precio_usd_total_redondeado (múltiplo de 5)
+                # calculado por el analista en el formulario.
+                # REGLA: total_cost y precio_usd SIEMPRE deben ser idénticos en BD.
+                # Ambos representan el precio final que el cliente aprueba.
+                precio_usd_item = float(
+                    item.get('precio_usd', 0.0) or
+                    item.get('costo_total', 0.0) or
+                    item.get('total_cost', 0.0) or
+                    0.0
+                )
+                # total_cost = precio_usd_item (siempre iguales — sin excepción)
+                total_cost = precio_usd_item
+
                 envio_tipo = item.get('envio_tipo', '')
                 origen = item.get('origen', '')
                 fabricacion = item.get('fabricacion', '')
                 tiempo_entrega = item.get('tiempo_entrega', '')
                 page_url = item.get('page_url', '') or item.get('link', '')
-                
+
                 # Obtener costos internos
                 costo_handling = item.get('costo_handling', 0.0)
                 costo_manejo = item.get('costo_manejo', 0.0)
                 costo_envio = item.get('costo_envio', 0.0)
                 impuesto_porcentaje = item.get('impuesto_porcentaje', 0.0)
                 factor_utilidad = item.get('factor_utilidad', 1.0)
-                
+
                 # Campos IVA
                 aplicar_iva = bool(item.get('aplicar_iva', False))
                 iva_porcentaje = float(item.get('iva_porcentaje', 0.0) or 0.0)
@@ -2068,7 +2115,6 @@ class DBManager:
                 diferencial_pct_item = float(item.get('diferencial_porcentaje', 0.0) or 0.0)
                 diferencial_val_item = float(item.get('diferencial_valor', 0.0) or 0.0)
                 fob_total_item       = float(item.get('fob_total', 0.0) or 0.0)
-                precio_usd_item      = float(item.get('precio_usd', 0.0) or item.get('costo_total', 0.0) or total_cost or 0.0)
                 precio_bs_item       = float(item.get('precio_bs', 0.0) or item.get('costo_total_bs', 0.0) or 0.0)
 
                 if is_postgres:
